@@ -1,0 +1,185 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* 시스템 관리 폼 공용 input 스타일 (.input) */
+@layer components {
+  .input {
+    @apply w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500;
+  }
+}
+
+/* 전역 form element 색상 — 시스템 dark mode 가 form 만 검정으로 만드는 함정 차단.
+   모든 input/select/textarea 가 흰 배경 + 검은 글씨로 강제 (의도 적용 시 컴포넌트별 override). */
+@layer base {
+  input,
+  select,
+  textarea {
+    background-color: #ffffff;
+    color: #111827; /* gray-900 */
+  }
+  input::placeholder,
+  textarea::placeholder {
+    color: #9ca3af; /* gray-400 */
+  }
+  /* Date / time / file input 의 native control 도 light scheme 강제 */
+  input[type='date'],
+  input[type='datetime-local'],
+  input[type='time'],
+  input[type='month'],
+  input[type='week'] {
+    color-scheme: light;
+  }
+}
+
+:root {
+  font-family: Inter, system-ui, Avenir, Helvetica, Arial, sans-serif;
+  line-height: 1.5;
+  font-weight: 400;
+
+  /* 색을 지정하지 않은 텍스트의 전역 기본값. 과거 Vite 템플릿 잔재로 흰색이라
+     흰 배경(bg-gray-50)에서 글씨가 안 보이던 문제 → gray-900 으로 어둡게 통일.
+     의도된 흰 글씨는 컴포넌트가 text-white 로 명시하므로 영향 없음. */
+  color-scheme: light;
+  color: #111827; /* gray-900 */
+  background-color: #f9fafb; /* gray-50 */
+
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+body {
+  margin: 0;
+  display: flex;
+  place-items: center;
+  min-width: 320px;
+  /* 100vh 는 iOS Safari 에서 주소창이 **접힌 상태 높이**로 고정돼, 주소창이 펼쳐지면 화면
+     아래가 잘리고 스크롤이 튄다. dvh 는 툴바 접힘/펼침에 따라 실제 보이는 높이를 따라간다.
+     dvh 미지원 브라우저는 위 100vh 선언을 그대로 쓴다(순서 = 폴백). */
+  min-height: 100vh;
+  min-height: 100dvh;
+}
+
+#root {
+  width: 100%;
+
+  /* 가로 모드에서 노치가 먹는 좌/우 폭을 **앱 전체**에 한 번만 확보한다.
+     페이지 루트마다 `px-safe` 를 붙이면 그 요소들이 이미 쓰는 `px-4 sm:px-6 lg:px-8` 을
+     덮어 좌우 여백이 통째로 사라진다(유틸리티끼리 같은 속성 경쟁). 그래서 패딩을 쓰지 않는
+     `#root` 에 건다 — Layout 을 거치지 않는 로그인·회원가입·결제실패 등 6개 화면까지 함께 덮인다.
+     세로(top/bottom)를 여기 걸지 않는 이유: 자식이 `min-h-screen`(100dvh)이라 #root 패딩이
+     그대로 더해져 **인셋 높이만큼 항상 스크롤이 생긴다**. 세로는 헤더·푸터·토스트가 각자 처리한다. */
+  padding-left: env(safe-area-inset-left, 0px);
+  padding-right: env(safe-area-inset-right, 0px);
+}
+
+@keyframes slide-in {
+  from {
+    transform: translateX(100%);
+    opacity: 0;
+  }
+  to {
+    transform: translateX(0);
+    opacity: 1;
+  }
+}
+
+.animate-slide-in {
+  animation: slide-in 0.3s ease-out;
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   모바일(하이브리드) 기반 — 웹과 홈화면 설치 앱(PWA standalone)에서 같은 코드가
+   같은 화면을 내도록 맞추는 전역 규칙. 개별 페이지 레이아웃은 Tailwind 반응형
+   유틸리티가 담당하고, 여기에는 "브라우저가 마음대로 하는 것"만 통제한다.
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+html {
+  /* iOS 는 세로→가로 회전 시 본문 글자를 임의 배율로 키운다(text autosizing).
+     레이아웃 계산이 어긋나 가로 넘침의 원인이 되므로 끈다. 사용자의 손가락
+     확대(pinch-zoom)는 그대로 살아 있다 — 접근성상 막지 않는다. */
+  -webkit-text-size-adjust: 100%;
+}
+
+/* 터치 하이라이트 — 기본값(반투명 검정 사각형)은 둥근 버튼 밖으로 삐져나와
+   지저분하다. hover 가 없는 터치 환경에서 "눌렸다"는 피드백은 필요하므로
+   투명하게 지우지 않고 브랜드 색(blue-600)의 옅은 값으로 바꾼다. */
+a,
+button,
+[role='button'],
+input,
+select,
+textarea,
+label {
+  -webkit-tap-highlight-color: rgba(37, 99, 235, 0.15);
+}
+
+/* ── safe-area ──────────────────────────────────────────────────────────────
+   index.html 이 `viewport-fit=cover` + `apple-mobile-web-app-status-bar-style:
+   black-translucent` 를 선언하므로, 설치형(standalone)에서는 문서가 상태바·노치·
+   홈 인디케이터 **아래까지** 깔린다. 그 영역을 피하는 건 전적으로 CSS 몫이다.
+   env() 는 미지원 브라우저(데스크톱 포함)에서 두 번째 인자 0px 로 평가되므로
+   웹에서는 아무 영향이 없다. */
+.pt-safe {
+  padding-top: env(safe-area-inset-top, 0px);
+}
+.pb-safe {
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+}
+/* 화면 우상단에 고정되는 토스트 앵커 — `top-4 right-4`(1rem) 를 인셋만큼 밀어낸다.
+   Tailwind 의 `top-4`/`right-4` 를 그대로 두면 설치형에서 토스트가 상태바 아래로 들어가고,
+   가로 모드에서는 노치에 물린다. 두 값을 한 클래스에 묶어 어긋날 여지를 없앤다. */
+.toast-anchor {
+  top: calc(1rem + env(safe-area-inset-top, 0px));
+  right: calc(1rem + env(safe-area-inset-right, 0px));
+}
+
+/* ── 터치 히트 영역 확장 ─────────────────────────────────────────────────────
+   아이콘 버튼처럼 시각적으로 작아야 하는 컨트롤은 손가락으로 누르기 어렵다
+   (실측: /order 의 "장바구니 담기" 버튼 30×30px — Apple HIG 권장 44pt 미만).
+   버튼 자체를 키우면 데스크톱 레이아웃까지 바뀌므로, **마우스가 없는 환경에서만**
+   보이지 않는 판을 덧대 눌리는 영역만 44×44 로 넓힌다. 시각적 크기는 그대로다.
+   `pointer: coarse` = 정밀 포인팅 장치가 없는 입력(터치) — 데스크톱은 해당 없음. */
+@media (pointer: coarse) {
+  .tap-target {
+    position: relative;
+  }
+  .tap-target::after {
+    content: '';
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    width: 44px;
+    height: 44px;
+    transform: translate(-50%, -50%);
+  }
+}
+
+/* ── 하단 고정 배너가 떠 있는 동안 화면 아래를 비워 둔다 ──────────────────────
+   설치 배너(InstallPrompt)는 `fixed` 라 문서 흐름 밖에 있고, 그대로 두면 화면 하단의
+   버튼 위에 그냥 얹힌다. 실제로 로그인 화면의 데모 버튼을 덮어 **클릭이 통째로 막혔다**
+   (e2e mobile-safari 6건 실패, 가로막은 요소로 이 배너가 지목됨).
+   배너가 뜬 동안에만 "화면 한 장"의 높이를 배너 높이만큼 줄여, 콘텐츠가 배너 위로
+   올라오게 한다. `min-h-screen` 은 이 앱이 전면 높이를 표현하는 유일한 관용구라
+   (tailwind.config 에서 100dvh 로 일원화) 한 규칙으로 전 화면에 걸린다. */
+body.pwa-banner-open .min-h-screen {
+  min-height: calc(100dvh - 7rem);
+}
+
+/* ── iOS 입력 자동 확대 차단 ─────────────────────────────────────────────────
+   iOS Safari 는 글자 크기가 16px 미만인 입력에 포커스하면 페이지를 강제로
+   확대하고, 포커스를 잃어도 **원래 배율로 돌아오지 않는다**. 이 앱은 폼 입력이
+   text-sm(14px)·text-xs(12px) 라 거의 모든 입력에서 발생한다.
+   maximum-scale=1 로 막는 흔한 방법은 사용자 확대까지 죽여 접근성을 해치므로,
+   좁은 화면에서만 입력 글자를 16px 로 올려 확대 조건 자체를 없앤다.
+   `:not()` 두 개로 특이도를 (0,2,1) 까지 올려 Tailwind 의 `.text-sm`(0,1,0) 을
+   이긴다 — 체크박스·라디오는 글자가 없고 크기만 바뀌므로 제외한다. */
+@media (max-width: 640px) {
+  input:not([type='checkbox']):not([type='radio']),
+  select,
+  textarea {
+    font-size: 16px;
+  }
+}

@@ -1,0 +1,419 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>이커머스 플랫폼 개발 로드맵</title>
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;600;700;800;900&display=swap');
+
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: 'Noto Sans KR', sans-serif;
+      background: #0D0D0D;
+      min-height: 100vh;
+      color: #F0F0F0;
+      padding: 32px 20px;
+    }
+
+    /* ── Header ── */
+    .header { text-align: center; margin-bottom: 40px; }
+    .header .sub {
+      color: #888; font-size: 13px; letter-spacing: 4px;
+      text-transform: uppercase; margin-bottom: 8px;
+    }
+    .header h1 {
+      font-size: clamp(26px, 5vw, 46px); font-weight: 900;
+      background: linear-gradient(90deg, #FF6B35, #5B4FE9, #00B894);
+      -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+      background-clip: text; margin-bottom: 20px;
+    }
+
+    /* ── Total Progress ── */
+    .total-progress { max-width: 400px; margin: 0 auto; }
+    .progress-label { display: flex; justify-content: space-between; font-size: 13px; color: #aaa; margin-bottom: 6px; }
+    .progress-track { background: #222; border-radius: 99px; height: 10px; overflow: hidden; }
+    .progress-fill {
+      height: 100%; border-radius: 99px;
+      background: linear-gradient(90deg, #FF6B35, #5B4FE9, #00B894);
+      transition: width 0.5s ease;
+    }
+    .progress-pct { color: #5B4FE9; font-weight: 700; font-size: 15px; text-align: center; margin-top: 8px; }
+
+    /* ── Month Tabs ── */
+    .tabs { display: flex; gap: 12px; justify-content: center; margin-bottom: 32px; flex-wrap: wrap; }
+    .tab-btn {
+      display: flex; align-items: center; gap: 10px;
+      border-radius: 16px; padding: 12px 22px;
+      cursor: pointer; font-weight: 700; font-size: 15px;
+      border: 1.5px solid transparent;
+      transition: all 0.3s; background: #1A1A1A;
+    }
+    .tab-btn .tab-icon { font-size: 20px; }
+    .tab-btn .tab-label { text-align: left; }
+    .tab-btn .tab-label span { display: block; font-size: 11px; opacity: .8; font-weight: 400; }
+    .tab-badge {
+      border-radius: 99px; padding: 2px 8px;
+      font-size: 12px; font-weight: 800;
+    }
+
+    /* ── Card ── */
+    .card {
+      max-width: 800px; margin: 0 auto;
+      background: #141414; border-radius: 24px;
+      overflow: hidden; border: 1px solid transparent;
+      display: none;
+    }
+    .card.active { display: block; }
+
+    .card-header {
+      padding: 28px 32px;
+      display: flex; align-items: center;
+      justify-content: space-between; flex-wrap: wrap; gap: 16px;
+    }
+    .card-header .meta { font-size: 13px; opacity: .8; letter-spacing: 2px; }
+    .card-header h2 { font-size: 26px; font-weight: 800; margin-top: 4px; }
+    .card-pct-box {
+      background: rgba(255,255,255,.2);
+      border-radius: 16px; padding: 12px 20px;
+      text-align: center; backdrop-filter: blur(10px);
+    }
+    .card-pct-box .big { font-size: 30px; font-weight: 900; }
+    .card-pct-box .lbl { font-size: 11px; opacity: .85; }
+
+    .card-body { padding: 24px 32px; }
+
+    /* ── Phase ── */
+    .phase { margin-bottom: 28px; }
+    .phase-head { display: flex; align-items: center; gap: 12px; margin-bottom: 16px; }
+    .week-tag {
+      border-radius: 8px; padding: 4px 12px;
+      font-size: 12px; font-weight: 700; white-space: nowrap;
+    }
+    .phase-title { font-size: 17px; font-weight: 700; }
+
+    /* ── Task ── */
+    .task-list { display: flex; flex-direction: column; gap: 10px; }
+    .task-item {
+      display: flex; align-items: center; gap: 14px;
+      background: #1E1E1E; border: 1px solid #2A2A2A;
+      border-radius: 12px; padding: 14px 18px;
+      cursor: pointer; transition: all 0.25s;
+    }
+    .task-item:hover { background: #222; }
+    .task-item.done { background: transparent; }
+    .checkbox {
+      width: 22px; height: 22px; border-radius: 6px;
+      border: 2px solid #444; background: transparent;
+      display: flex; align-items: center; justify-content: center;
+      flex-shrink: 0; transition: all 0.2s; font-size: 13px; color: #fff;
+    }
+    .task-label { font-size: 14px; color: #E0E0E0; line-height: 1.5; transition: all 0.2s; }
+    .task-item.done .task-label { color: #aaa; text-decoration: line-through; }
+
+    /* ── Milestone ── */
+    .milestone {
+      border-radius: 14px; padding: 16px 20px;
+      display: flex; align-items: center; gap: 12px; margin-top: 8px;
+    }
+    .milestone-icon { font-size: 22px; }
+    .milestone-tag { font-size: 11px; font-weight: 700; letter-spacing: 1px; }
+    .milestone-text { font-size: 15px; font-weight: 600; color: #F0F0F0; margin-top: 3px; }
+
+    /* ── Timeline Bar ── */
+    .timeline { max-width: 800px; margin: 32px auto 0; display: flex; gap: 8px; }
+    .timeline-item { flex: 1; }
+    .timeline-track { height: 6px; border-radius: 99px; background: #222; overflow: hidden; }
+    .timeline-fill { height: 100%; border-radius: 99px; transition: width 0.5s ease; }
+    .timeline-lbl { text-align: center; font-size: 11px; color: #666; margin-top: 6px; }
+
+    .hint { text-align: center; color: #555; font-size: 12px; margin-top: 24px; }
+
+    @media (max-width: 500px) {
+      .card-header, .card-body { padding: 20px 18px; }
+      .tabs { gap: 8px; }
+      .tab-btn { padding: 10px 14px; font-size: 13px; }
+    }
+  </style>
+</head>
+<body>
+
+<div class="header">
+  <p class="sub">3-Month Development Plan</p>
+  <h1>이커머스 플랫폼 로드맵</h1>
+  <div class="total-progress">
+    <div class="progress-label">
+      <span>전체 진행률</span>
+      <span id="total-label">0 / 24 완료</span>
+    </div>
+    <div class="progress-track">
+      <div class="progress-fill" id="total-bar" style="width:0%"></div>
+    </div>
+    <p class="progress-pct" id="total-pct">0%</p>
+  </div>
+</div>
+
+<!-- Tabs -->
+<div class="tabs" id="tabs"></div>
+
+<!-- Cards -->
+<div id="cards"></div>
+
+<!-- Timeline -->
+<div class="timeline" id="timeline"></div>
+<p class="hint">✅ 각 태스크를 클릭하면 완료 처리됩니다</p>
+
+<script>
+const months = [
+  {
+    month: 1, title: "기반 구축", subtitle: "Foundation", icon: "🏗️",
+    color: "#FF6B35", grad: "linear-gradient(135deg,#FF6B35,#FF9A76)",
+    milestone: "핵심 API & 인증 시스템 완성",
+    phases: [
+      { week: "Week 1–2", title: "설계 & 환경 세팅", tasks: [
+        "기술 스택 확정 (프레임워크, DB, 클라우드)",
+        "개발 환경 구성 (Git, CI/CD, 로컬 환경)",
+        "와이어프레임 & UI/UX 기획",
+        "데이터베이스 스키마 설계 (상품, 회원, 주문)"
+      ]},
+      { week: "Week 3–4", title: "핵심 백엔드 개발", tasks: [
+        "회원가입 / 로그인 / 인증 시스템 (JWT/OAuth)",
+        "상품 등록 · 조회 · 수정 · 삭제 API",
+        "카테고리 & 태그 시스템 구축",
+        "이미지 업로드 (S3 or CDN 연동)"
+      ]}
+    ]
+  },
+  {
+    month: 2, title: "핵심 기능 개발", subtitle: "Core Features", icon: "⚙️",
+    color: "#5B4FE9", grad: "linear-gradient(135deg,#5B4FE9,#9B8FF5)",
+    milestone: "구매 가능한 쇼핑몰 프로토타입 완성",
+    phases: [
+      { week: "Week 5–6", title: "쇼핑 & 결제 시스템", tasks: [
+        "장바구니 기능 (추가/삭제/수량 변경)",
+        "결제 게이트웨이 연동 (토스페이먼츠 / Stripe)",
+        "주문 생성 & 주문 상태 관리",
+        "재고 관리 시스템"
+      ]},
+      { week: "Week 7–8", title: "프론트엔드 UI 개발", tasks: [
+        "메인 페이지 & 상품 목록 페이지",
+        "상품 상세 페이지 & 검색 기능",
+        "장바구니 & 결제 플로우 UI",
+        "마이페이지 & 주문 내역"
+      ]}
+    ]
+  },
+  {
+    month: 3, title: "고도화 & 런칭", subtitle: "Polish & Launch", icon: "🚀",
+    color: "#00B894", grad: "linear-gradient(135deg,#00B894,#55EFC4)",
+    milestone: "프로덕션 런칭 완료 🎉",
+    phases: [
+      { week: "Week 9–10", title: "관리자 & 부가 기능", tasks: [
+        "관리자 대시보드 (주문/상품/회원 관리)",
+        "리뷰 & 평점 시스템",
+        "쿠폰 & 할인 시스템",
+        "알림 시스템 (이메일/SMS)"
+      ]},
+      { week: "Week 11–12", title: "테스트 & 배포", tasks: [
+        "QA 테스트 & 버그 수정",
+        "성능 최적화 (캐싱, 이미지 최적화)",
+        "보안 점검 (XSS, SQL 인젝션 등)",
+        "프로덕션 배포 & 모니터링 설정"
+      ]}
+    ]
+  }
+];
+
+// State: taskId -> boolean
+const state = {};
+let activeMonth = 0;
+
+// Build task IDs
+months.forEach((m, mi) =>
+  m.phases.forEach((p, pi) =>
+    p.tasks.forEach((_, ti) => { state[`${mi}-${pi}-${ti}`] = false; })
+  )
+);
+
+function getProgress(mi) {
+  const m = months[mi];
+  const ids = m.phases.flatMap((p, pi) => p.tasks.map((_, ti) => `${mi}-${pi}-${ti}`));
+  const done = ids.filter(id => state[id]).length;
+  return { done, total: ids.length, pct: Math.round(done / ids.length * 100) };
+}
+
+function getTotalProgress() {
+  const allIds = Object.keys(state);
+  const done = allIds.filter(id => state[id]).length;
+  return { done, total: allIds.length, pct: Math.round(done / allIds.length * 100) };
+}
+
+function updateTotal() {
+  const { done, total, pct } = getTotalProgress();
+  document.getElementById('total-label').textContent = `${done} / ${total} 완료`;
+  document.getElementById('total-bar').style.width = pct + '%';
+  document.getElementById('total-pct').textContent = pct + '%';
+}
+
+function updateTabs() {
+  months.forEach((m, mi) => {
+    const { pct } = getProgress(mi);
+    const badge = document.getElementById(`badge-${mi}`);
+    const btn = document.getElementById(`tab-${mi}`);
+    if (!badge) return;
+    badge.textContent = pct + '%';
+    if (mi === activeMonth) {
+      btn.style.background = m.grad;
+      btn.style.color = '#fff';
+      btn.style.borderColor = 'transparent';
+      btn.style.boxShadow = `0 8px 30px ${m.color}50`;
+      badge.style.background = 'rgba(255,255,255,0.2)';
+      badge.style.color = '#fff';
+    } else {
+      btn.style.background = '#1A1A1A';
+      btn.style.color = m.color;
+      btn.style.borderColor = m.color + '40';
+      btn.style.boxShadow = 'none';
+      badge.style.background = m.color + '20';
+      badge.style.color = m.color;
+    }
+  });
+}
+
+function updateCards() {
+  months.forEach((m, mi) => {
+    const card = document.getElementById(`card-${mi}`);
+    card.classList.toggle('active', mi === activeMonth);
+    const { pct } = getProgress(mi);
+    document.getElementById(`card-pct-${mi}`).textContent = pct + '%';
+  });
+}
+
+function updateTimeline() {
+  months.forEach((m, mi) => {
+    const { pct } = getProgress(mi);
+    document.getElementById(`tl-fill-${mi}`).style.width = pct + '%';
+  });
+}
+
+function updateTask(id) {
+  const item = document.getElementById(`task-${id}`);
+  const cb = document.getElementById(`cb-${id}`);
+  const m = months[parseInt(id.split('-')[0])];
+  if (state[id]) {
+    item.classList.add('done');
+    item.style.background = m.color + '12';
+    item.style.borderColor = m.color + '50';
+    cb.style.background = m.color;
+    cb.style.borderColor = m.color;
+    cb.textContent = '✓';
+  } else {
+    item.classList.remove('done');
+    item.style.background = '#1E1E1E';
+    item.style.borderColor = '#2A2A2A';
+    cb.style.background = 'transparent';
+    cb.style.borderColor = '#444';
+    cb.textContent = '';
+  }
+}
+
+function toggleTask(id) {
+  state[id] = !state[id];
+  updateTask(id);
+  updateTotal();
+  updateTabs();
+  updateCards();
+  updateTimeline();
+}
+
+// Render Tabs
+const tabsEl = document.getElementById('tabs');
+months.forEach((m, mi) => {
+  const btn = document.createElement('button');
+  btn.className = 'tab-btn';
+  btn.id = `tab-${mi}`;
+  btn.innerHTML = `
+    <span class="tab-icon">${m.icon}</span>
+    <div class="tab-label">Month ${m.month}<span>${m.title}</span></div>
+    <div class="tab-badge" id="badge-${mi}">0%</div>
+  `;
+  btn.onclick = () => { activeMonth = mi; updateTabs(); updateCards(); };
+  tabsEl.appendChild(btn);
+});
+
+// Render Cards
+const cardsEl = document.getElementById('cards');
+months.forEach((m, mi) => {
+  const card = document.createElement('div');
+  card.className = 'card';
+  card.id = `card-${mi}`;
+  card.style.borderColor = m.color + '30';
+  card.style.boxShadow = `0 0 60px ${m.color}15`;
+
+  const phasesHTML = m.phases.map((p, pi) => `
+    <div class="phase">
+      <div class="phase-head">
+        <div class="week-tag" style="background:${m.color}20;border:1.5px solid ${m.color}50;color:${m.color}">${p.week}</div>
+        <div class="phase-title">${p.title}</div>
+      </div>
+      <div class="task-list">
+        ${p.tasks.map((t, ti) => {
+          const id = `${mi}-${pi}-${ti}`;
+          return `
+          <div class="task-item" id="task-${id}" onclick="toggleTask('${id}')">
+            <div class="checkbox" id="cb-${id}"></div>
+            <span class="task-label">${t}</span>
+          </div>`;
+        }).join('')}
+      </div>
+    </div>
+  `).join('');
+
+  card.innerHTML = `
+    <div class="card-header" style="background:${m.grad}">
+      <div>
+        <p class="meta">MONTH ${m.month} · ${m.subtitle}</p>
+        <h2>${m.icon} ${m.title}</h2>
+      </div>
+      <div class="card-pct-box">
+        <div class="big" id="card-pct-${mi}">0%</div>
+        <div class="lbl">진행률</div>
+      </div>
+    </div>
+    <div class="card-body">
+      ${phasesHTML}
+      <div class="milestone" style="background:${m.color}15;border:1.5px solid ${m.color}40">
+        <span class="milestone-icon">🎯</span>
+        <div>
+          <p class="milestone-tag" style="color:${m.color}">MONTH ${m.month} MILESTONE</p>
+          <p class="milestone-text">${m.milestone}</p>
+        </div>
+      </div>
+    </div>
+  `;
+  cardsEl.appendChild(card);
+});
+
+// Render Timeline
+const tlEl = document.getElementById('timeline');
+months.forEach((m, mi) => {
+  const item = document.createElement('div');
+  item.className = 'timeline-item';
+  item.innerHTML = `
+    <div class="timeline-track">
+      <div class="timeline-fill" id="tl-fill-${mi}" style="width:0%;background:${m.grad}"></div>
+    </div>
+    <div class="timeline-lbl">M${m.month} ${m.title}</div>
+  `;
+  tlEl.appendChild(item);
+});
+
+// Initial render
+updateTotal();
+updateTabs();
+updateCards();
+updateTimeline();
+</script>
+</body>
+</html>

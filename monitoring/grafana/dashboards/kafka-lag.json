@@ -1,0 +1,201 @@
+{
+  "annotations": { "list": [] },
+  "editable": true,
+  "fiscalYearStartMonth": 0,
+  "graphTooltip": 1,
+  "id": null,
+  "title": "Lemuel — Kafka Consumer Lag (kafka-exporter)",
+  "uid": "lemuel-kafka-lag",
+  "tags": ["lemuel", "kafka", "redpanda", "lag"],
+  "timezone": "browser",
+  "schemaVersion": 39,
+  "version": 1,
+  "refresh": "10s",
+  "time": { "from": "now-30m", "to": "now" },
+  "templating": {
+    "list": [
+      {
+        "name": "consumergroup",
+        "type": "query",
+        "datasource": "Prometheus",
+        "query": "label_values(kafka_consumergroup_lag, consumergroup)",
+        "refresh": 2,
+        "includeAll": true,
+        "multi": true,
+        "allValue": ".*",
+        "current": { "text": "All", "value": "$__all" },
+        "label": "Consumer Group"
+      },
+      {
+        "name": "topic",
+        "type": "query",
+        "datasource": "Prometheus",
+        "query": "label_values(kafka_consumergroup_lag{consumergroup=~\"$consumergroup\"}, topic)",
+        "refresh": 2,
+        "includeAll": true,
+        "multi": true,
+        "allValue": ".*",
+        "current": { "text": "All", "value": "$__all" },
+        "label": "Topic"
+      }
+    ]
+  },
+  "panels": [
+    {
+      "id": 1,
+      "type": "row",
+      "title": "컨슈머 Lag (브로커 관점)",
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 0 },
+      "collapsed": false
+    },
+    {
+      "id": 2,
+      "type": "timeseries",
+      "title": "컨슈머 그룹별 총 Lag — 우상향 = 컨슈머가 못 따라잡는 중",
+      "description": "그룹 단위 lag 합계. 부하 주면 올라가고, concurrency/partitions 늘리면 0으로 수렴해야 정상.",
+      "datasource": "Prometheus",
+      "gridPos": { "h": 9, "w": 16, "x": 0, "y": 1 },
+      "fieldConfig": { "defaults": { "unit": "short", "custom": { "drawStyle": "line", "fillOpacity": 10, "showPoints": "never" } }, "overrides": [] },
+      "options": { "legend": { "displayMode": "table", "placement": "right", "calcs": ["lastNotNull", "max"] }, "tooltip": { "mode": "multi", "sort": "desc" } },
+      "targets": [
+        {
+          "expr": "sum by (consumergroup) (kafka_consumergroup_lag{consumergroup=~\"$consumergroup\", topic=~\"$topic\"})",
+          "legendFormat": "{{consumergroup}}"
+        }
+      ]
+    },
+    {
+      "id": 3,
+      "type": "stat",
+      "title": "현재 총 Lag (전 그룹 합)",
+      "datasource": "Prometheus",
+      "gridPos": { "h": 9, "w": 8, "x": 16, "y": 1 },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "yellow", "value": 100 },
+              { "color": "red", "value": 1000 }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "colorMode": "background",
+        "graphMode": "area",
+        "justifyMode": "auto",
+        "orientation": "horizontal",
+        "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false },
+        "textMode": "auto"
+      },
+      "targets": [
+        {
+          "expr": "sum (kafka_consumergroup_lag{consumergroup=~\"$consumergroup\", topic=~\"$topic\"})",
+          "legendFormat": "total lag"
+        }
+      ]
+    },
+    {
+      "id": 4,
+      "type": "timeseries",
+      "title": "파티션별 Lag — 한 파티션만 높으면 파티션 키 쏠림 (concurrency 늘려도 안 풀림)",
+      "description": "lag 이 특정 partition 에만 쌓이면 키 설계 문제. 고르게 퍼지면 컨슈머 스케일로 해결 가능.",
+      "datasource": "Prometheus",
+      "gridPos": { "h": 9, "w": 24, "x": 0, "y": 10 },
+      "fieldConfig": { "defaults": { "unit": "short", "custom": { "drawStyle": "line", "fillOpacity": 10, "showPoints": "never" } }, "overrides": [] },
+      "options": { "legend": { "displayMode": "table", "placement": "right", "calcs": ["lastNotNull", "max"] }, "tooltip": { "mode": "multi", "sort": "desc" } },
+      "targets": [
+        {
+          "expr": "sum by (topic, partition) (kafka_consumergroup_lag{consumergroup=~\"$consumergroup\", topic=~\"$topic\"})",
+          "legendFormat": "{{topic}} / p{{partition}}"
+        }
+      ]
+    },
+    {
+      "id": 5,
+      "type": "row",
+      "title": "처리량 (생산 vs 소비)",
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 19 },
+      "collapsed": false
+    },
+    {
+      "id": 6,
+      "type": "timeseries",
+      "title": "토픽 생산 속도 (msg/s) — log-end-offset 증가율",
+      "description": "프로듀서가 초당 몇 건을 쌓는지. 소비 속도보다 크면 lag 누적.",
+      "datasource": "Prometheus",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 20 },
+      "fieldConfig": { "defaults": { "unit": "cps", "custom": { "drawStyle": "line", "fillOpacity": 10, "showPoints": "never" } }, "overrides": [] },
+      "options": { "legend": { "displayMode": "list", "placement": "bottom" }, "tooltip": { "mode": "multi", "sort": "desc" } },
+      "targets": [
+        {
+          "expr": "sum by (topic) (rate(kafka_topic_partition_current_offset{topic=~\"$topic\"}[1m]))",
+          "legendFormat": "{{topic}} produce"
+        }
+      ]
+    },
+    {
+      "id": 7,
+      "type": "timeseries",
+      "title": "컨슈머 그룹 소비 속도 (msg/s) — committed-offset 증가율",
+      "description": "컨슈머가 초당 몇 건을 커밋하는지. 생산 속도를 따라잡으면 lag 이 줄어듦.",
+      "datasource": "Prometheus",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 20 },
+      "fieldConfig": { "defaults": { "unit": "cps", "custom": { "drawStyle": "line", "fillOpacity": 10, "showPoints": "never" } }, "overrides": [] },
+      "options": { "legend": { "displayMode": "list", "placement": "bottom" }, "tooltip": { "mode": "multi", "sort": "desc" } },
+      "targets": [
+        {
+          "expr": "sum by (consumergroup) (rate(kafka_consumergroup_current_offset{consumergroup=~\"$consumergroup\", topic=~\"$topic\"}[1m]))",
+          "legendFormat": "{{consumergroup}} consume"
+        }
+      ]
+    },
+    {
+      "id": 8,
+      "type": "row",
+      "title": "클러스터 & 스냅샷",
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 28 },
+      "collapsed": false
+    },
+    {
+      "id": 9,
+      "type": "stat",
+      "title": "브로커 수 (UP)",
+      "datasource": "Prometheus",
+      "gridPos": { "h": 7, "w": 6, "x": 0, "y": 29 },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "thresholds": { "mode": "absolute", "steps": [ { "color": "red", "value": null }, { "color": "green", "value": 1 } ] }
+        },
+        "overrides": []
+      },
+      "options": { "colorMode": "background", "graphMode": "none", "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false }, "textMode": "auto" },
+      "targets": [ { "expr": "kafka_brokers", "legendFormat": "brokers" } ]
+    },
+    {
+      "id": 10,
+      "type": "table",
+      "title": "현재 Lag 스냅샷 — 그룹 / 토픽 / 파티션",
+      "description": "지금 이 순간 lag 이 큰 순서. 어느 파티션이 밀리는지 즉시 확인.",
+      "datasource": "Prometheus",
+      "gridPos": { "h": 7, "w": 18, "x": 6, "y": 29 },
+      "fieldConfig": { "defaults": { "custom": { "align": "auto" } }, "overrides": [] },
+      "options": { "showHeader": true, "sortBy": [ { "displayName": "Value", "desc": true } ] },
+      "targets": [
+        {
+          "expr": "sum by (consumergroup, topic, partition) (kafka_consumergroup_lag{consumergroup=~\"$consumergroup\", topic=~\"$topic\"})",
+          "format": "table",
+          "instant": true
+        }
+      ],
+      "transformations": [
+        { "id": "organize", "options": { "excludeByName": { "Time": true, "__name__": true, "job": true, "instance": true }, "renameByName": { "consumergroup": "Consumer Group", "topic": "Topic", "partition": "Partition", "Value": "Lag" } } }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,41 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <!-- 스캐폴딩 잔재였던 /vite.svg 는 실체가 없어 매 접속마다 404 였다 — PWA 아이콘을 그대로 쓴다. -->
+    <link rel="icon" type="image/png" href="/icon-192.png" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+    <title>Lemuel - Settlement System</title>
+    <!-- PWA -->
+    <link rel="manifest" href="/manifest.webmanifest" />
+    <meta name="theme-color" content="#0f172a" />
+    <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <meta name="apple-mobile-web-app-title" content="Settlement" />
+
+    <!-- iOS 실행 스플래시.
+         iOS 는 manifest 의 background_color/icons 로 스플래시를 만들어 주지 않는다. 아래 이미지가
+         없으면 설치형 실행 시 **흰 화면이 번쩍인 뒤** 앱이 뜬다 — iOS 에서 "웹 티"가 가장 크게
+         나는 지점이다. media 쿼리의 device-width/height/DPR 이 **정확히** 일치할 때만 채택되므로
+         기기별로 한 장씩 필요하다(세로 기준, 최근 아이폰 8종).
+         이미지는 `npm run pwa:assets`(frontend/scripts/gen-pwa-assets.mjs)로 브랜드 배경(#0f172a)
+         위에 로고를 렌더해 생성한다. 기기를 추가하려면 그 스크립트의 SPLASH 표에 넣고 다시 돌린 뒤
+         출력된 link 태그를 여기에 붙인다 — 표와 이 목록이 어긋나면 그 기기만 흰 화면이 된다. -->
+    <link rel="apple-touch-startup-image" media="(device-width: 375px) and (device-height: 667px) and (-webkit-device-pixel-ratio: 2) and (orientation: portrait)" href="/splash/iphone-750x1334.png" />
+    <link rel="apple-touch-startup-image" media="(device-width: 414px) and (device-height: 896px) and (-webkit-device-pixel-ratio: 2) and (orientation: portrait)" href="/splash/iphone-828x1792.png" />
+    <link rel="apple-touch-startup-image" media="(device-width: 375px) and (device-height: 812px) and (-webkit-device-pixel-ratio: 3) and (orientation: portrait)" href="/splash/iphone-1125x2436.png" />
+    <link rel="apple-touch-startup-image" media="(device-width: 390px) and (device-height: 844px) and (-webkit-device-pixel-ratio: 3) and (orientation: portrait)" href="/splash/iphone-1170x2532.png" />
+    <link rel="apple-touch-startup-image" media="(device-width: 393px) and (device-height: 852px) and (-webkit-device-pixel-ratio: 3) and (orientation: portrait)" href="/splash/iphone-1179x2556.png" />
+    <link rel="apple-touch-startup-image" media="(device-width: 414px) and (device-height: 896px) and (-webkit-device-pixel-ratio: 3) and (orientation: portrait)" href="/splash/iphone-1242x2688.png" />
+    <link rel="apple-touch-startup-image" media="(device-width: 428px) and (device-height: 926px) and (-webkit-device-pixel-ratio: 3) and (orientation: portrait)" href="/splash/iphone-1284x2778.png" />
+    <link rel="apple-touch-startup-image" media="(device-width: 430px) and (device-height: 932px) and (-webkit-device-pixel-ratio: 3) and (orientation: portrait)" href="/splash/iphone-1290x2796.png" />
+  </head>
+  <body>
+    <div id="root"></div>
+    <!-- 서비스워커 등록은 src/lib/serviceWorkerUpdate.ts 로 옮겼다(main.tsx 에서 호출).
+         새 버전이 대기 중이라는 사실을 화면(UpdatePrompt)에 전달해야 하는데, 인라인 스크립트에서는
+         앱 상태로 넘길 길이 없어서다. -->
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>

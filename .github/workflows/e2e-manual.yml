@@ -1,0 +1,89 @@
+name: e2e-manual
+
+# 운영 도메인 E2E 를 **수동으로** 돌린다.
+#
+# ci.yml 의 `production-revision-smoke` 는 `github.ref == 'refs/heads/main'` 조건이라
+# develop 에서는 구조적으로 돌지 않는다(운영 도메인을 때리는 잡이라 의도된 제약이다).
+# 그래서 develop 상태를 운영 대상으로 확인하려면 main 승격 외에 길이 없었다.
+#
+# 왜 ci.yml 에 workflow_dispatch 를 얹지 않았나:
+#   수동 실행에는 비교 기준(base ref)이 없어 `changes` 잡의 paths-filter 가 정상 판정을 못 한다.
+#   그 결과 5분짜리 E2E 하나를 보려고 백엔드 빌드·테스트 55~70분 체인이 통째로 돈다.
+#   이 워크플로는 E2E 만 떼어내 돌리므로 기존 게이트의 의미(develop 이 운영 도메인을 자동으로
+#   때리지 않는다)를 그대로 두면서 필요할 때만 사람이 눌러 확인할 수 있다.
+#
+# 주의: 대상은 **현재 배포된 운영 revision** 이다. 이 워크플로를 돌린 브랜치의 코드가 아니라,
+# jen.lemuel.co.kr 에 지금 떠 있는 것을 검증한다(ci.yml 의 같은 잡과 동일한 성격).
+
+on:
+  workflow_dispatch:
+    inputs:
+      base_url:
+        description: "E2E 대상 URL"
+        required: false
+        default: "https://jen.lemuel.co.kr"
+        type: string
+      projects:
+        description: "실행할 Playwright 프로젝트"
+        required: false
+        default: all
+        type: choice
+        options:
+          - all
+          - mobile-only
+          - chromium-only
+
+# 같은 브랜치에서 연속으로 누르면 앞 실행을 취소한다 — 수동 확인용이라 최신 것만 의미가 있다.
+concurrency:
+  group: e2e-manual-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  e2e:
+    name: Playwright E2E (manual)
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    env:
+      PLAYWRIGHT_BASE_URL: ${{ inputs.base_url }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Set up Node.js
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          # 단일 출처: 리포 루트 .nvmrc (node-version-gate 가 frontend/Dockerfile 과 major 일치 강제)
+          node-version-file: .nvmrc
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install dependencies
+        working-directory: frontend
+        # --ignore-scripts: 설치 단계에서 의존성의 lifecycle 스크립트를 실행하지 않는다
+        # (침해된 패키지가 러너 토큰에 닿는 공급망 경로 차단). 실측 확인 — 이 설치로도
+        # vite build·vitest 707건이 그대로 통과한다(esbuild 는 플랫폼 optional dep 로 해결).
+        run: npm ci --ignore-scripts
+
+      - name: Install Playwright browsers (chromium/firefox/webkit)
+        working-directory: frontend
+        run: npm run e2e:install
+
+      # ci.yml 쪽에는 ArgoCD reconciliation 대기(sleep 180)가 있지만 여기에는 없다.
+      # 그 대기는 "머지 직후 배포가 반영될 시간"을 위한 것이고, 수동 실행은 배포 직후가 아니라
+      # 사람이 원하는 시점에 도는 것이라 기다릴 이유가 없다.
+      - name: Run Playwright E2E
+        working-directory: frontend
+        run: |
+          case "${{ inputs.projects }}" in
+            mobile-only)   npm run e2e -- --project=mobile-chrome --project=mobile-safari ;;
+            chromium-only) npm run e2e -- --project=chromium ;;
+            *)             npm run e2e ;;
+          esac
+
+      - name: Upload Playwright report
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: playwright-report-manual
+          path: frontend/playwright-report/
+          retention-days: 14

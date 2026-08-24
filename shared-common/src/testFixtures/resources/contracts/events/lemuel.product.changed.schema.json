@@ -1,0 +1,12 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "lemuel.product.changed",
+  "description": "상품 정보가 변경된 사실. name 은 항상 존재하되 null 허용 — 수신 측은 null-safe 로 파싱한다.",
+  "type": "object",
+  "properties": {
+    "productId": { "type": "integer" },
+    "name": { "type": ["string", "null"] }
+  },
+  "required": ["productId", "name"],
+  "additionalProperties": true
+}

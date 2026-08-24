@@ -1,0 +1,17 @@
+{
+  "name": "fashion-copilot",
+  "version": "0.1.0",
+  "description": "패션 이커머스 도메인 특화 AI 에이전트 플러그인 — 반품·드랍 재고·리뷰·쿠폰 규칙(skills) + 읽기 전용 검증 도구(MCP) + 가드레일(hooks)",
+  "author": { "name": "Lemuel Commerce Platform" },
+  "keywords": ["fashion", "ecommerce", "refund", "stock-drop", "coupon", "review", "guardrail"],
+  "skills": "./skills/",
+  "mcpServers": "./.mcp.json",
+  "hooks": "./hooks/hooks.json",
+  "interface": {
+    "displayName": "Fashion Copilot",
+    "shortDescription": "반품/드랍 재고/리뷰/쿠폰 4축 운영 점검을 read-only 도구와 도메인 규칙으로 수행",
+    "developerName": "Lemuel Commerce Platform",
+    "category": "Productivity",
+    "capabilities": ["Read"]
+  }
+}

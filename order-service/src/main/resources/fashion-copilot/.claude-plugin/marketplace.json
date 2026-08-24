@@ -1,0 +1,11 @@
+{
+  "name": "fashion-copilot",
+  "owner": { "name": "Lemuel Commerce Platform" },
+  "plugins": [
+    {
+      "name": "fashion-copilot",
+      "source": ".",
+      "description": "패션 이커머스 도메인 특화 AI 에이전트 플러그인 — 반품·드랍 재고·리뷰·쿠폰 규칙(skills) + 읽기 전용 검증 도구(MCP) + 가드레일(hooks)"
+    }
+  ]
+}

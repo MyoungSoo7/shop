@@ -1,0 +1,206 @@
+{
+  "$comment": [
+    "Kafka 토픽 전송 속성의 단일 출처 — ADR 0035. 페이로드 계약은 ADR 0024(testFixtures/contracts/events)가 정본이다.",
+    "partitions 는 되돌릴 수 없는 값이다: 메시지 키가 outbox aggregateId 이므로 파티션 수가 바뀌면 hash(key)%N 이 바뀌어",
+    "같은 애그리거트의 이벤트가 다른 파티션으로 흩어진다(순서 보장 소급 붕괴). 변경은 반드시 코드 리뷰 + 마이그레이션 절차를 거친다.",
+    "owner 는 이 토픽을 발행하는 Gradle 모듈 — 토픽을 만드는 주체는 프로듀서 하나뿐이다(컨슈머는 만들지 않는다).",
+    "orderingKey 는 메시지 키의 도메인 의미 = KafkaOutboxPublisher 가 싣는 outbox aggregateId 다.",
+    "2026-08-14 전 publisher(OutboxEvent.pending 49개 호출부) 대조로 확정했다 — 계약 스키마의 첫 식별자와",
+    "다른 경우가 12건 있었다(card 5종은 전부 cardAccountId, insurance 는 policyNumber/fcId/bankCode).",
+    "replicas 는 2026-08-14 실측값 1이다(브로커 1대라 그 이상 불가). 코드 상수가 아니라 토픽별 선언인 이유는",
+    "파티션과 같다 — 프로덕션 전환 시 리뷰 대상이 되어야 한다. 변경은 파티션 재배치가 필요하므로 프로비저너는",
+    "자동으로 고치지 않고 드리프트로만 보고한다.",
+    "retentionDays 는 프로비저너가 기동마다 토픽에 고정한다(파티션과 달리 되돌릴 수 있고 키·순서와 무관하다).",
+    "값이 같아도 상속 상태(DEFAULT_CONFIG)면 고정한다 — 클러스터 log_retention_ms 가 바뀌면 조용히 따라 바뀌기 때문이다.",
+    "DLT 는 등록하지 않는다 — 원본에서 파생되며 파티션 수가 항상 원본과 같다(TopicCatalog.Topic#deadLetterSpec).",
+    "partitions 는 2026-08-14 브로커 실측으로 맞춘 값이다(rpk topic list). 데이터가 쌓인 토픽은 실측치를 그대로",
+    "적었다 — 증설하면 기존 키가 재해시되기 때문이다. 비어 있던 토픽만 3으로 올려 여유를 확보했다.",
+    "1 로 적힌 토픽을 올리려면 드레인 후 계획된 마이그레이션이 필요하다(카탈로그만 고치면 드리프트로만 뜬다).",
+    "2026-08-18 재실측: lemuel.point.* 6종은 브로커에 미생성(order-service 가 아직 배포 전) = 데이터 0건이므로",
+    "위 규칙대로 1→3 으로 올렸다. 생성되고 나면 되돌릴 수 없다. 같은 실측에서 secured_loan 3종의 드리프트도",
+    "확인했다(카탈로그 3p / 브로커 1p, HIGH-WATERMARK 0) — 프로비저너는 증설하지 않으므로 브로커 쪽 조치가 필요하다.",
+    "의도적 제외: lemuel.ops.*(shared-common KafkaOpsSignalPublisher — 모든 서비스가 발행해 owner 가 하나로",
+    "정해지지 않고, best-effort 라 순서 보장 대상이 아니다) · lemuel.payment.{authorized,confirmed,created}(레거시,",
+    "어느 서비스도 참조하지 않음) · lemuel.user.membership_changed(cross-service 소비자가 생기면 편입 — ADR 0024)."
+  ],
+  "topics": [
+    {
+      "name": "lemuel.order.created",
+      "owner": "order-service",
+      "orderingKey": "orderId",
+      "partitions": 1,
+      "replicas": 1,
+      "retentionDays": 7
+    },
+    {
+      "name": "lemuel.user.registered",
+      "owner": "order-service",
+      "orderingKey": "userId",
+      "partitions": 1,
+      "replicas": 1,
+      "retentionDays": 7
+    },
+    {
+      "name": "lemuel.product.changed",
+      "owner": "order-service",
+      "orderingKey": "productId",
+      "partitions": 1,
+      "replicas": 1,
+      "retentionDays": 7
+    },
+    {
+      "name": "lemuel.payment.captured",
+      "owner": "order-service",
+      "orderingKey": "paymentId",
+      "partitions": 6,
+      "replicas": 1,
+      "retentionDays": 7
+    },
+    {
+      "name": "lemuel.payment.refunded",
+      "owner": "order-service",
+      "orderingKey": "paymentId",
+      "partitions": 3,
+      "replicas": 1,
+      "retentionDays": 7
+    },
+    {
+      "name": "lemuel.seller.tier_changed",
+      "owner": "order-service",
+      "orderingKey": "sellerId",
+      "partitions": 3,
+      "replicas": 1,
+      "retentionDays": 7
+    },
+    {
+      "name": "lemuel.organization.created",
+      "owner": "order-service",
+      "orderingKey": "organizationId",
+      "partitions": 3,
+      "replicas": 1,
+      "retentionDays": 7
+    },
+    {
+      "name": "lemuel.organization.member_joined",
+      "owner": "order-service",
+      "orderingKey": "organizationId",
+      "partitions": 3,
+      "replicas": 1,
+      "retentionDays": 7
+    },
+    {
+      "name": "lemuel.organization.member_removed",
+      "owner": "order-service",
+      "orderingKey": "organizationId",
+      "partitions": 3,
+      "replicas": 1,
+      "retentionDays": 7
+    },
+    {
+      "name": "lemuel.organization.member_role_changed",
+      "owner": "order-service",
+      "orderingKey": "organizationId",
+      "partitions": 3,
+      "replicas": 1,
+      "retentionDays": 7
+    },
+    {
+      "name": "lemuel.education.course_published",
+      "owner": "operation-service",
+      "orderingKey": "courseId",
+      "partitions": 3,
+      "replicas": 1,
+      "retentionDays": 7
+    },
+    {
+      "name": "lemuel.point.charged",
+      "owner": "order-service",
+      "orderingKey": "accountId",
+      "partitions": 3,
+      "replicas": 1,
+      "retentionDays": 7,
+      "$comment": "현금 충전 원금 — account-service 가 DR CASH / CR POINT_LIABILITY 로 인식"
+    },
+    {
+      "name": "lemuel.point.granted",
+      "owner": "order-service",
+      "orderingKey": "accountId",
+      "partitions": 3,
+      "replicas": 1,
+      "retentionDays": 7,
+      "$comment": "보너스·구매적립·수기지급 — DR POINT_PROMOTION_EXPENSE / CR POINT_LIABILITY"
+    },
+    {
+      "name": "lemuel.point.used",
+      "owner": "order-service",
+      "orderingKey": "accountId",
+      "partitions": 3,
+      "replicas": 1,
+      "retentionDays": 7,
+      "$comment": "결제 사용 — DR POINT_LIABILITY / CR CASH (정산이 가정한 현금 유입을 상계)"
+    },
+    {
+      "name": "lemuel.point.restored",
+      "owner": "order-service",
+      "orderingKey": "accountId",
+      "partitions": 3,
+      "replicas": 1,
+      "retentionDays": 7,
+      "$comment": "환불 복원 — DR CASH / CR POINT_LIABILITY (사용의 대칭)"
+    },
+    {
+      "name": "lemuel.point.expired",
+      "owner": "order-service",
+      "orderingKey": "accountId",
+      "partitions": 3,
+      "replicas": 1,
+      "retentionDays": 7,
+      "$comment": "유효기간 소멸 — DR POINT_LIABILITY / CR POINT_BREAKAGE_INCOME"
+    },
+    {
+      "name": "lemuel.point.revoked",
+      "owner": "order-service",
+      "orderingKey": "accountId",
+      "partitions": 3,
+      "replicas": 1,
+      "retentionDays": 7,
+      "$comment": "주문 취소·환불로 적립 회수 — DR POINT_LIABILITY / CR POINT_PROMOTION_EXPENSE (판촉비 환입)"
+    },
+    {
+      "name": "lemuel.giftcard.registered",
+      "owner": "order-service",
+      "orderingKey": "giftCardId",
+      "partitions": 1,
+      "replicas": 1,
+      "retentionDays": 7,
+      "$comment": "기프트카드 등록 — DR GIFT_CARD_PROMOTION_EXPENSE / CR GIFT_CARD_LIABILITY (부채가 생기는 유일한 지점)"
+    },
+    {
+      "name": "lemuel.giftcard.used",
+      "owner": "order-service",
+      "orderingKey": "giftCardId",
+      "partitions": 1,
+      "replicas": 1,
+      "retentionDays": 7,
+      "$comment": "기프트카드 사용 — DR GIFT_CARD_LIABILITY / CR CASH (정산이 가정한 현금 유입을 상계)"
+    },
+    {
+      "name": "lemuel.giftcard.restored",
+      "owner": "order-service",
+      "orderingKey": "giftCardId",
+      "partitions": 1,
+      "replicas": 1,
+      "retentionDays": 7,
+      "$comment": "기프트카드 환불 복원 — DR CASH / CR GIFT_CARD_LIABILITY (사용의 대칭)"
+    },
+    {
+      "name": "lemuel.giftcard.expired",
+      "owner": "order-service",
+      "orderingKey": "giftCardId",
+      "partitions": 1,
+      "replicas": 1,
+      "retentionDays": 7,
+      "$comment": "기프트카드 소멸 — DR GIFT_CARD_LIABILITY / CR GIFT_CARD_BREAKAGE_INCOME"
+    }
+  ]
+}

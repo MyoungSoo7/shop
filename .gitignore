@@ -1,0 +1,246 @@
+### STS ###
+.apt_generated
+.classpath
+.factorypath
+.project
+.settings
+.springBeans
+.sts4-cache
+bin/
+!**/src/main/**/bin/
+!**/src/test/**/bin/
+!**/submission/src/bin/
+
+### IntelliJ IDEA ###
+.idea
+*.iws
+*.iml
+*.ipr
+out/
+!**/src/main/**/out/
+!**/src/test/**/out/
+
+### NetBeans ###
+/nbproject/private/
+/nbbuild/
+/dist/
+/nbdist/
+/.nb-gradle/
+
+
+### VS Code ###
+.vscode/
+.env
+
+### react ###
+node_modules/
+frontend/node_modules/
+
+/gradle.properties
+.gradle.properties
+gradle.properties
+
+### Kubernetes Secrets (절대 커밋 금지) ###
+k8s/secret.yaml
+
+### Gradle ###
+.gradle/
+gradle-app.setting
+!gradle-wrapper.jar
+
+### Build output ###
+build/
+target/
+**/*.class
+
+### Local runtime artifacts ###
+# .claude/ 세션·런타임 디렉토리는 아래 "AI 도구 로컬 설정·세션 아티팩트" 블록에 모아 둔다
+# (worktrees·harness 는 그쪽이 정본 — 여기 중복 선언하지 말 것).
+.claude/scheduled_tasks.lock
+# hookify 캡처 규칙은 로컬 전용 — 정본은 guard.mjs (hookify-to-guard 스킬로 이식)
+.claude/hookify.*.local.md
+*.stackdump
+build-test-output.log
+
+### Claude auto-memory (local only) ###
+memory/
+
+### OMC local runtime state ###
+# .omc/ 통짜 무시 금지 — 디렉토리째 ignore 하면 하위 재포함(!)이 불가능해
+# OMC 4.15.6+ 의 커밋 대상 예외(.omc/skills = 프로젝트 스코프 스킬)가 조용히 누락된다.
+# **/ 접두 필수: 비앵커였던 구 `.omc/` 처럼 모든 깊이의 .omc 런타임 디렉토리를 커버.
+**/.omc/*
+!**/.omc/skills/
+
+
+### Playwright ###
+frontend/coverage/
+frontend/playwright-report/
+frontend/test-results/
+frontend/blob-report/
+frontend/playwright/.cache/
+
+### TypeScript 증분 빌드 캐시 (재생성 산출물) ###
+# `tsc --build` 가 남기는 파일 목록·타임스탬프 캐시. 머신·실행마다 내용이 달라져
+# 커밋하면 매 빌드가 diff 를 만든다. 지워도 다음 빌드가 다시 만든다.
+# 깊이 무관 패턴 — frontend 외 워크스페이스가 늘어도 그대로 커버한다.
+*.tsbuildinfo
+
+### Local repro/debug scripts (절대 커밋 금지) ###
+frontend/repro-*.mjs
+
+### Python sim artifacts ###
+__pycache__/
+*.pyc
+scripts/sim/__pycache__/
+scripts/sim/.sim_state.json
+
+### Vite local env (실제 키 — 커밋 금지) ###
+frontend/.env.production.local
+
+### fashion-copilot 제출물 산출 디렉터리 (재생성 산출물 — 이력 제외) ###
+order-service/src/main/resources/fashion-copilot/dist/
+
+
+### Vite dev 서버 로그 (재생성 가능) ###
+frontend/vite-*.log
+frontend/*.out.log
+
+### 세션 전사·실행 로그 (Claude Code 세션이 실행 중 생성 — 이력 제외) ###
+**/submission/logs/
+# 제출물이 서비스 소유로 재배치되면서 submission/ 세그먼트가 사라진 트리
+**/pwc/accounting/logs/
+**/logs/claude-code/
+*.err.log
+
+### 제출물 플러그인의 라이브 실행 산출물 (재생성 가능 — 이력 제외, 2026-08-06) ###
+# pwc 배치는 실존 상장사 70곳에 대한 AI 생성 부실징후 진단(브리핑 docx/md·패킷·프롬프트·로그)이라
+# 공개 저장소에 원문을 두지 않는다. 플러그인 코드·스킬·테스트는 계속 추적하며,
+# 산출물은 README 의 재현 명령으로 로컬에서 다시 만들 수 있다.
+# 디렉토리째(`outputs/`) 무시 금지: 부모가 제외되면 아래 백테스트 재포함(!)이 불가능하다.
+company-service/src/main/resources/pwc/accounting/outputs/*
+# 예외 — 태영건설 백테스트는 성격이 다르다. 2023-12 워크아웃이라는 **이미 확정·공개된 과거 사건**을
+# 사건 9개월 전 공시(FY2022)만으로 재진단한 방법론 검증이라, 현재 기업에 대한 신용 판단이 아니다.
+# 채점기와 에이전트가 파생 엔진을 공유하는 자기순환을 외부 정답으로 반증한 유일한 증거라 공개 유지한다.
+!company-service/src/main/resources/pwc/accounting/outputs/taeyoung-backtest-2022/
+
+
+### AI 도구 로컬 설정·세션 아티팩트 (공개 저장소 이력 제외) ###
+.credentials.json
+.claude/.credentials.json
+.claude/mcp.json
+.claude/history.jsonl
+.claude/settings.json*.bak*
+.claude/settings.json.backup*
+.claude/settings.local.json
+.claude/agent-memory/
+.claude/scratch/
+# 모든 깊이의 .claude/harness 세션 로그를 이력에서 제외 — 루트·frontend 뿐 아니라
+# 잘못된 cwd 의 세션이 src/main/java 하위에 만든 것까지 (과거에 추적으로 유입된 적 있다)
+**/.claude/harness/
+.claude/worktrees/
+.claude/projects/
+.claude/session-env/
+.claude/sessions/
+.claude/file-history/
+.claude/debug/
+.claude/telemetry/
+.claude/tasks/
+.claude/teams/
+.claude/plans/
+.claude/shell-snapshots/
+.claude/daemon.log
+.claude/scheduled_tasks.json
+.claude/routines/.state/
+.claude/checkpoints/
+.claude/mailbox/
+.claude/agent-registry.json
+.claude/agent-memory-local/
+.claude/first-run
+.claude/assistant-daemon-state.json
+.codex/.env
+.codex/auth.json
+.codex/.credentials.json
+.codex/secrets/
+.codex/mcp-oauth-locks/
+.codex/config.toml
+.codex/config.toml.bak*
+.codex/config.toml.backup*
+.codex/history.jsonl
+.codex/session_index.jsonl
+.codex/transcription-history.jsonl
+.codex/sessions/
+.codex/logs/
+.codex/log/
+.codex/cache/
+.codex/.codex-global-state.json*
+.codex/models_cache.json
+.codex/*.sqlite*
+.codex/sqlite/
+.codex/shell_snapshots/
+.codex/shell-snapshots/
+.codex/.tmp/
+.codex/tmp/
+.superpowers/sdd/
+.symposium/scratch/
+.ouroboros/
+
+### 공공데이터 원본 대용량 덤프 (repo 밖 보관 — import 배치가 로컬 경로로 읽음) ###
+company-service/src/main/resources/*.csv
+# ADR 0044: company 해체로 NPS CSV 가 external-data 로 이관 — 동일 정책(110MB, GitHub 한도 초과)
+external-data-service/src/main/resources/*.csv
+
+### 하네스 실습 자료·해커톤 제출물은 로컬 전용 (2026-08-07) ###
+# 예외 없이 디렉토리째 제외한다. 여기 있던 제출물(kakaopay·musinsa·invest-copilot)은 자사 서비스를
+# 호출하지 않아 소유 서비스가 없고, 따라서 원격 실행 대상이 아니다(CLAUDE.md 배치 기준).
+# 공개 저장소에 대회 제출물·타사 브랜드명·실명 종목 리포트를 싣지 않는다.
+# 소유 서비스가 있는 제출물은 그 서비스의 src/main/resources/ 아래에서 계속 추적된다.
+
+# 프론트 빌드 산출물 — 배포에 쓰이지 않으므로 추적하지 않는다 (2026-08-01).
+#   frontend/Dockerfile 은 COPY . . 후 `npm run build` 로 소스에서 다시 빌드하고,
+#   ci.yml 도 `npm run build` 결과를 아티팩트로 올린다. 커밋된 dist 를 쓰는 경로가 없다.
+#   그동안 기능 커밋마다 "chore(frontend): dist 갱신" 을 따라붙였으나(20커밋, 55파일),
+#   해시 파일명이라 매번 전량 교체돼 diff 를 뒤덮고 머지 충돌만 만들었다.
+frontend/dist/
+
+# verify.sh 가 guard 에 넘기는 목록 — guard 는 저장소 밖 경로를 거부하므로 리포 안에 둔다. 실행 후 자동 삭제.
+.harness-changed.txt
+.harness-deleted.txt
+
+## https 폴더제외
+https
+
+### Codex isolated worktrees ###
+.worktrees/
+
+docs/study/
+docs/inflearn/
+docs/harness/
+docs/ax/
+docs/plan/spec-driven/
+docs/etc/
+docs/ax/
+docs/harness/
+docs/inflearn/
+docs/study/
+docs/sse/
+docs/omx/
+# 게시판 첨부 로컬 저장소 — bootRun 이 여기에 파일을 쓴다(운영은 볼륨 마운트).
+# 사용자가 올린 바이너리라 저장소에 들어갈 이유가 없다.
+board-service/data/
+
+# omp(Oh My Pi) 로컬 에이전트 설정 — 개인 툴이라 저장소 하네스(HARNESS.md)의 일부가 아니다.
+# 추적하면 공개 저장소에 개인 설정이 실린다.
+.omp/
+
+### 모두의 창업 지원 자료 — 개인 제출물이라 공개 저장소에 싣지 않는다 ###
+docs/modoo/
+
+### 커버리지 측정 산출물 (재생성 대상) ###
+# Go 커버리지 프로파일 — polyglot-ci 의 커버리지 게이트가 서비스 디렉토리에 남긴다.
+# 매 실행마다 내용이 달라지고, 지워도 다음 측정이 다시 만든다.
+*-service/coverage.out
+# Python 커버리지 원본 — pytest-cov 가 남긴다(리포트는 term 으로만 쓴다).
+**/.coverage
+**/coverage.xml
+**/htmlcov/

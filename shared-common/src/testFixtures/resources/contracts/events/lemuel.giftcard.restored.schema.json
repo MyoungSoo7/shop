@@ -1,0 +1,48 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "lemuel.giftcard.restored",
+  "description": "환불로 상품권 잔액이 복원된 사실(사용의 대칭). 복원 대상 카드는 원 사용 엔트리에서 도출되므로 페이로드의 giftCardId 는 결과이지 입력이 아니다.",
+  "$comment": "참고(계약 아님) — 회계 해석: DR CASH / CR GIFT_CARD_LIABILITY.",
+  "type": "object",
+  "properties": {
+    "giftCardId": {
+      "type": "integer"
+    },
+    "userId": {
+      "type": "integer"
+    },
+    "codeLast4": {
+      "type": "string"
+    },
+    "remainingAmount": {
+      "type": "string",
+      "pattern": "^-?[0-9]+(\\.[0-9]+)?$"
+    },
+    "amount": {
+      "type": "string",
+      "pattern": "^-?[0-9]+(\\.[0-9]+)?$"
+    },
+    "occurredAt": {
+      "type": "string"
+    },
+    "entryId": {
+      "type": "integer"
+    },
+    "referenceType": {
+      "type": "string"
+    },
+    "referenceId": {
+      "type": "string"
+    },
+    "sequence": {
+      "type": "integer"
+    }
+  },
+  "required": [
+    "giftCardId",
+    "userId",
+    "entryId",
+    "amount"
+  ],
+  "additionalProperties": true
+}

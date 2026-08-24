@@ -1,0 +1,19 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "lemuel.payment.refunded",
+  "description": "결제가 환불된 사실. refundedAmount 는 누적 환불액, refundAmount 는 이번 건의 delta, refundId 는 환불 건 식별자(원장 역분개 연결에 쓰인다). 금액은 BigDecimal.toPlainString() 문자열. 둘 중 최소 하나의 금액 필드는 필수 — 금액 없는 환불 이벤트는 계약 위반.",
+  "type": "object",
+  "properties": {
+    "paymentId": { "type": "integer" },
+    "orderId": { "type": "integer" },
+    "refundedAmount": { "type": "string", "pattern": "^-?[0-9]+(\\.[0-9]+)?$" },
+    "refundAmount": { "type": "string", "pattern": "^-?[0-9]+(\\.[0-9]+)?$" },
+    "refundId": { "type": "integer" }
+  },
+  "required": ["paymentId", "orderId"],
+  "anyOf": [
+    { "required": ["refundAmount"] },
+    { "required": ["refundedAmount"] }
+  ],
+  "additionalProperties": true
+}

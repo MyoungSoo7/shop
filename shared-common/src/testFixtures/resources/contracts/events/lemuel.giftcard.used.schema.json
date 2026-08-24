@@ -1,0 +1,48 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "lemuel.giftcard.used",
+  "description": "상품권이 결제에 사용된 사실. 한 결제가 여러 장을 걸치면 카드마다 이벤트가 하나씩 나간다.",
+  "$comment": "참고(계약 아님) — 회계 해석: DR GIFT_CARD_LIABILITY / CR CASH. 대변이 현금인 이유는 포인트와 같다 — settlement.created 가 주문금액만큼 전기한 현금 유입 중 상품권 결제분은 실제로 들어오지 않았으므로 이 전표가 상계한다.",
+  "type": "object",
+  "properties": {
+    "giftCardId": {
+      "type": "integer"
+    },
+    "userId": {
+      "type": "integer"
+    },
+    "codeLast4": {
+      "type": "string"
+    },
+    "remainingAmount": {
+      "type": "string",
+      "pattern": "^-?[0-9]+(\\.[0-9]+)?$"
+    },
+    "amount": {
+      "type": "string",
+      "pattern": "^-?[0-9]+(\\.[0-9]+)?$"
+    },
+    "occurredAt": {
+      "type": "string"
+    },
+    "entryId": {
+      "type": "integer"
+    },
+    "referenceType": {
+      "type": "string"
+    },
+    "referenceId": {
+      "type": "string"
+    },
+    "sequence": {
+      "type": "integer"
+    }
+  },
+  "required": [
+    "giftCardId",
+    "userId",
+    "entryId",
+    "amount"
+  ],
+  "additionalProperties": true
+}

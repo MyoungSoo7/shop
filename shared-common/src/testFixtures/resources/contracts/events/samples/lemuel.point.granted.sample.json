@@ -1,0 +1,11 @@
+{
+  "userId": 42,
+  "accountId": 7,
+  "lotId": 56,
+  "amount": "8000",
+  "origin": "CHARGE_BONUS",
+  "referenceType": "CHARGE",
+  "referenceId": "chg-20260818-0001",
+  "expiresAt": "2027-08-18T10:15:30Z",
+  "occurredAt": "2026-08-18T10:15:30Z"
+}

@@ -1,0 +1,89 @@
+# SAST — Semgrep OSS.
+#
+# CodeQL 을 쓰지 않는 이유: 이 저장소는 private 이고 GitHub Advanced Security 가 없어
+# 코드 스캐닝 자체가 비활성이다(`/code-scanning/alerts` → 403). CodeQL 도, SARIF 업로드도
+# 동작하지 않으므로 결과를 로그·종료코드로 직접 다루는 Semgrep 으로 대체한다.
+# 저장소를 public 으로 전환하거나 GHAS 를 켜면 CodeQL 로 갈아탈 수 있다.
+#
+# 게이트 설계 — "새로 생긴 것만 막는다":
+#   PR   : base 이후 새로 생긴 ERROR 만 차단(--baseline-commit). 기존 부채로 CI 가 통째로
+#          빨개지지 않으면서, 새 결함은 확실히 막힌다.
+#   push : 전수 스캔(ERROR+WARNING)을 비차단으로 돌려 현황을 남긴다. 이 숫자가 줄면
+#          PR 게이트를 WARNING 까지 넓히면 된다.
+name: semgrep
+
+on:
+  pull_request:
+    branches: [main, develop]
+  push:
+    branches: [main, develop]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: semgrep-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  semgrep:
+    name: SAST (Semgrep OSS)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0 # --baseline-commit 에 merge-base 가 필요
+
+      # 컨테이너(semgrep/semgrep, alpine) 대신 pip 설치를 쓴다 —
+      # alpine 컨테이너에서는 node20 기반 액션(actions/checkout)이 깨진다.
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      # 버전 고정 + 휠 전용 설치: SAST 결과가 러너마다 달라지지 않게 하고(같은 엔진·같은 룰 해석),
+      # sdist 의 setup.py 실행 경로를 막는다. 버전 상향은 이 줄을 바꾸는 명시적 커밋으로만.
+      - name: Install Semgrep
+        run: |
+          pip install --disable-pip-version-check --only-binary :all: "semgrep==1.173.0"
+
+      - name: Semgrep — PR (new ERROR findings only, blocking)
+        if: github.event_name == 'pull_request'
+        env:
+          BASE_REF: ${{ github.base_ref }}
+          SEMGREP_SEND_METRICS: "off"
+        run: |
+          set -euo pipefail
+          git fetch --no-tags origin "$BASE_REF"
+          BASE=$(git merge-base "origin/${BASE_REF}" HEAD)
+          echo "baseline commit: $BASE"
+          semgrep scan \
+            --config p/default \
+            --config p/secrets \
+            --baseline-commit "$BASE" \
+            --severity ERROR \
+            --error \
+            --metrics off \
+            --exclude 'frontend/dist' \
+            --exclude 'build' \
+            --exclude 'docs' \
+            --exclude '*.min.js'
+
+      - name: Semgrep — push (full scan, informational)
+        if: github.event_name == 'push'
+        env:
+          SEMGREP_SEND_METRICS: "off"
+        run: |
+          set -euo pipefail
+          # 비차단: 여기서 나온 부채 규모를 보고 PR 게이트 범위를 넓힌다.
+          semgrep scan \
+            --config p/default \
+            --config p/secrets \
+            --severity ERROR \
+            --severity WARNING \
+            --metrics off \
+            --exclude 'frontend/dist' \
+            --exclude 'build' \
+            --exclude 'docs' \
+            --exclude '*.min.js' || echo "::warning::Semgrep found issues — see the scan output above (non-blocking on push)."

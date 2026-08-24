@@ -1,0 +1,60 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "lemuel.point.restored",
+  "description": "환불로 포인트가 복원된 사실(사용의 대칭). 복원 대상 계정은 원 사용 엔트리에서 도출되므로 페이로드의 accountId 는 결과이지 입력이 아니다.",
+  "$comment": "참고(계약 아님) — 회계 해석: DR CASH / CR POINT_LIABILITY.",
+  "type": "object",
+  "properties": {
+    "userId": {
+      "type": "integer"
+    },
+    "accountId": {
+      "type": "integer"
+    },
+    "amount": {
+      "type": "string",
+      "pattern": "^-?[0-9]+(\\.[0-9]+)?$"
+    },
+    "occurredAt": {
+      "type": "string"
+    },
+    "entryId": {
+      "type": "integer"
+    },
+    "referenceType": {
+      "type": "string"
+    },
+    "referenceId": {
+      "type": "string"
+    },
+    "sequence": {
+      "type": "integer"
+    },
+    "lots": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "lotId": {
+            "type": "integer"
+          },
+          "amount": {
+            "type": "string",
+            "pattern": "^-?[0-9]+(\\.[0-9]+)?$"
+          }
+        },
+        "required": [
+          "lotId",
+          "amount"
+        ]
+      }
+    }
+  },
+  "required": [
+    "userId",
+    "accountId",
+    "entryId",
+    "amount"
+  ],
+  "additionalProperties": true
+}

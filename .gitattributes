@@ -1,0 +1,27 @@
+# 기본: 모든 텍스트 파일을 LF 로 정규화한다.
+# Windows 에디터가 CRLF 로 저장해 발생하던 "유령 diff"(내용 동일한데 전 줄이 바뀐 것처럼 보임) 재발 방지.
+* text=auto eol=lf
+
+# 셸/래퍼 스크립트 — LF 강제
+/gradlew text eol=lf
+*.sh text eol=lf
+
+# Windows 배치 — CRLF 필수
+*.bat text eol=crlf
+*.cmd text eol=crlf
+
+# 바이너리 — EOL 정규화/변환 금지 (손상 방지)
+*.jar binary
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.ico binary
+*.svg text eol=lf
+*.pdf binary
+*.woff binary
+*.woff2 binary
+*.ttf binary
+*.eot binary
+*.zip binary
+*.class binary

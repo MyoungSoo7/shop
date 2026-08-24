@@ -1,0 +1,54 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "lemuel.point.granted",
+  "description": "포인트가 무상으로 적립된 사실 — 보너스·구매적립·수기지급. expiresAt 이 null 이면 무기한 로트다.",
+  "$comment": "참고(계약 아님) — 회계 해석: DR POINT_PROMOTION_EXPENSE / CR POINT_LIABILITY(회사가 비용으로 얹은 몫).",
+  "type": "object",
+  "properties": {
+    "userId": {
+      "type": "integer"
+    },
+    "accountId": {
+      "type": "integer"
+    },
+    "amount": {
+      "type": "string",
+      "pattern": "^-?[0-9]+(\\.[0-9]+)?$"
+    },
+    "occurredAt": {
+      "type": "string"
+    },
+    "lotId": {
+      "type": "integer"
+    },
+    "origin": {
+      "type": "string",
+      "enum": [
+        "CHARGE_BONUS",
+        "ORDER_EARN",
+        "MANUAL_GRANT",
+        "REFUND_RESTORE"
+      ]
+    },
+    "referenceType": {
+      "type": "string"
+    },
+    "referenceId": {
+      "type": "string"
+    },
+    "expiresAt": {
+      "type": [
+        "string",
+        "null"
+      ]
+    }
+  },
+  "required": [
+    "userId",
+    "accountId",
+    "lotId",
+    "amount",
+    "origin"
+  ],
+  "additionalProperties": true
+}

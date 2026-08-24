@@ -1,0 +1,11 @@
+{
+  "paymentId": 1001,
+  "orderId": 5001,
+  "amount": "45000",
+  "capturedAt": "2026-07-01T10:15:30",
+  "paymentMethod": "CARD",
+  "pgTransactionId": "toss-tx-20260701-0001",
+  "sellerId": 777,
+  "sellerTier": "VIP",
+  "settlementCycle": "T_PLUS_3"
+}

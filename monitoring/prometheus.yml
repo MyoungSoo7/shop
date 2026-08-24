@@ -1,0 +1,65 @@
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+  external_labels:
+    cluster: 'lemuel-prod'
+    replica: '1'
+
+# Alertmanager configuration
+alerting:
+  alertmanagers:
+    - static_configs:
+        - targets:
+            - 'alertmanager:9093'
+
+# Load alert rules
+rule_files:
+  - 'alert-rules.yml'
+
+# Scrape configurations
+scrape_configs:
+  # Lemuel Spring Boot Application (order-service) — compose 서비스명 order-service:8080
+  - job_name: 'lemuel'
+    metrics_path: '/actuator/prometheus'
+    static_configs:
+      - targets: ['order-service:8080']
+        labels:
+          application: 'lemuel'
+          environment: 'production'
+
+  # operation-service — 운영 관제(인시던트). 관제의 관제: 이 서비스가 죽으면 인시던트 수집이 침묵하므로
+  # up{job="operation"} 알람(OperationServiceDown)의 소스가 된다.
+  - job_name: 'operation'
+    metrics_path: '/actuator/prometheus'
+    static_configs:
+      - targets: ['operation-service:8080']
+        labels:
+          application: 'lemuel-operation'
+          environment: 'production'
+
+  # kafka-exporter — Redpanda 컨슈머 그룹 lag/오프셋 (브로커 관점, 파티션별).
+  # actuator 의 client-side lag 과 달리 모든 그룹·토픽·파티션의 정확한 lag 을 노출. Grafana lag 대시보드 소스.
+  - job_name: 'kafka-exporter'
+    static_configs:
+      - targets: ['kafka-exporter:9308']
+
+  # postgres-exporter — PostgreSQL 통계(pg_stat_database_deadlocks 등). operation-service 의
+  # DB_DEADLOCK 신호 폴링 소스.
+  - job_name: 'postgres-exporter'
+    static_configs:
+      - targets: ['postgres-exporter:9187']
+
+  # redis-exporter — Redis 가용성(redis_up 등). operation-service 의 REDIS_FAILURE 신호 폴링 소스.
+  - job_name: 'redis-exporter'
+    static_configs:
+      - targets: ['redis-exporter:9121']
+
+  # Prometheus self-monitoring
+  - job_name: 'prometheus'
+    static_configs:
+      - targets: ['localhost:9090']
+
+  # Alertmanager monitoring
+  - job_name: 'alertmanager'
+    static_configs:
+      - targets: ['alertmanager:9093']

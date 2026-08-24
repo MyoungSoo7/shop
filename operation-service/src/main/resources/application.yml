@@ -1,0 +1,269 @@
+spring:
+  profiles:
+    active: local
+
+  application:
+    name: lemuel-operation
+
+  threads:
+    virtual:
+      enabled: true
+
+  # ★ operation-service 는 자체 DB(lemuel_operation) 를 소유한다 (DB-per-service).
+  #   로컬 기본값은 compose 의 호스트 매핑(127.0.0.1:5439 → operation-postgres:5432)을 가리킨다.
+  datasource:
+    url: jdbc:postgresql://localhost:5439/lemuel_operation?reWriteBatchedInserts=true
+    username: ${POSTGRES_USER}
+    password: ${POSTGRES_PASSWORD}
+    driver-class-name: org.postgresql.Driver
+    hikari:
+      pool-name: lemuel-operation-pool
+      maximum-pool-size: ${DB_POOL_MAX:20}
+      minimum-idle: ${DB_POOL_MIN_IDLE:5}
+      connection-timeout: 10000
+      leak-detection-threshold: 30000
+      # 커넥션이 조용히 죽는 것을 막는다 (2026-07-30).
+      # 파드와 postgres 가 서로 다른 노드에 있어 유휴 커넥션이 CNI/conntrack 상태 만료로
+      # 소리 없이 끊긴다. 그러면 다음 borrow 때 SQLState 08003(connection does not exist)나
+      # 'Connection is not available … (total=0)' 로 터진다 — 형제 서비스의 outbox 폴러가
+      # 이틀간 46회 이렇게 실패했다. keepalive 로 주기적으로 살아있음을 확인하고,
+      # max-lifetime 으로 오래된 커넥션을 선제 교체한다.
+      max-lifetime: 1800000     # 30분
+      keepalive-time: 300000    # 5분
+
+  jpa:
+    hibernate:
+      ddl-auto: validate
+    show-sql: false
+    open-in-view: false
+    properties:
+      hibernate:
+        # ★ 스키마명은 opslab 을 재사용한다(물리 DB 는 lemuel_operation 으로 분리됨).
+        #   shared-common Outbox claim 네이티브 쿼리가 'opslab.outbox_events' 를 하드코딩하므로,
+        #   엔티티의 무스키마 매핑도 opslab 으로 해석되도록 default_schema 를 맞춘다 (loan-service 와 동일).
+        default_schema: opslab
+        jdbc:
+          batch_size: 50
+          batch_versioned_data: true
+        order_inserts: true
+        order_updates: true
+
+  # 자체 DB 마이그레이션을 직접 책임진다 (V1 인시던트 코어, V2 outbox/멱등 인프라).
+  flyway:
+    enabled: true
+    schemas: opslab          # opslab 스키마를 생성·기본 스키마로 사용 (무스키마 DDL 이 여기로 적재됨)
+    locations: classpath:db/migration
+
+  cache:
+    type: caffeine
+    caffeine:
+      spec: maximumSize=500,expireAfterWrite=600s
+
+  # Kafka (Phase 2) — 도메인 이벤트 구독으로 신호 분모(시도 건수) 집계.
+  # operation 전용 컨슈머 그룹 → settlement/loan 소비에 영향 없음. 트렌드 신호이므로
+  # auto-offset-reset=latest (과거 전량 재적재 불필요, 새로 뜨면 지금부터 관측).
+  kafka:
+    bootstrap-servers: ${SPRING_KAFKA_BOOTSTRAP_SERVERS:localhost:9092}
+    consumer:
+      group-id: lemuel-operation
+      auto-offset-reset: latest
+      enable-auto-commit: false
+      properties:
+        isolation.level: read_committed
+    listener:
+      ack-mode: manual_immediate
+      missing-topics-fatal: false
+
+  # 첨부 상한 (board 슬라이스) — 게시판별 정책(max_attachment_size_kb, 최대 20MB)이 진짜 한도이고
+  # 이건 그 위의 방어선이다. 여기서 먼저 끊어야 20MB 를 넘는 요청이 애플리케이션 메모리까지 오지 않는다.
+  servlet:
+    multipart:
+      max-file-size: 20MB
+      max-request-size: 24MB
+
+  lifecycle:
+    timeout-per-shutdown-phase: 30s
+
+server:
+  port: 8092
+  shutdown: graceful
+  servlet:
+    encoding:
+      charset: UTF-8
+      enabled: true
+      force: true
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics,prometheus
+      base-path: /actuator
+  endpoint:
+    prometheus:
+      enabled: true
+    health:
+      show-details: when-authorized
+      probes:
+        enabled: true
+  health:
+    elasticsearch:
+      enabled: false
+    db:
+      enabled: true
+  server:
+    port: 8093
+  metrics:
+    tags:
+      application: ${spring.application.name}
+      environment: ${ENVIRONMENT:local}
+
+springdoc:
+  api-docs:
+    path: /v3/api-docs
+  swagger-ui:
+    path: /swagger-ui.html
+
+app:
+  # Kafka 컨슈머·인프라 빈 토글 (shared-common KafkaConfig + operation 컨슈머의 @ConditionalOnProperty).
+  # 로컬/테스트 기본 off — 브로커 없이 부팅. compose/운영에서 APP_KAFKA_ENABLED=true 주입.
+  kafka:
+    enabled: ${APP_KAFKA_ENABLED:false}
+    topic:
+      # ADR 0035 — 이 모듈이 발행(소유)하는 토픽만 만든다(파티션 정본은 topic-catalog.json).
+      # education-service 흡수로 CoursePublished 발행이 operation 소유가 됐다. Outbox 폴러가
+      # aggregateType="Education" + eventType="CoursePublished" 에서 이 토픽명을 파생한다.
+      owner: operation-service
+      course-published: lemuel.education.course_published
+
+  # Outbox → Kafka 발행 폴링 주기 (education 슬라이스의 CoursePublished 가 유일한 발행 경로).
+  # opssignal(인시던트 신호)은 의도적으로 Outbox 미사용 — 이 폴러와 무관하다.
+  outbox:
+    polling-delay-ms: ${APP_OUTBOX_POLLING_DELAY_MS:2000}
+
+  # JWT — shared-common JwtProperties(prefix=app.jwt). 루트 @SpringBootApplication 이
+  # common.config.jwt 를 스캔하므로 secret 이 필수다(order-service 와 동일 시크릿).
+  jwt:
+    issuer: ${JWT_ISSUER:lemuel}
+    secret: ${JWT_SECRET}
+    ttl-seconds: ${JWT_TTL_SECONDS:3600}
+
+  # ── 게시판 슬라이스 (board-service 흡수) ────────────────────────────────────────
+  board:
+    attachment:
+      # 컨테이너에서는 볼륨을 여기에 마운트한다. 이 디렉터리가 사라지면 첨부 행은 남고 파일만
+      # 없어져 다운로드가 404 로 떨어진다(LocalFileSystemAttachmentStorageAdapter 참조).
+      base-dir: ${APP_BOARD_ATTACHMENT_BASE_DIR:./data/board-attachments}
+      # 고아 파일 청소 — DB 가 참조하지 않는 파일을 지운다. 유예 기간(시간)보다 최근 파일은
+      # 건드리지 않는다: 업로드는 '파일 저장 → DB 기록' 순서라 그 사이 정상 파일도 잠깐 고아처럼 보인다.
+      cleanup-enabled: ${APP_BOARD_ATTACHMENT_CLEANUP_ENABLED:true}
+      cleanup-cron: ${APP_BOARD_ATTACHMENT_CLEANUP_CRON:0 10 4 * * *}
+      cleanup-grace-hours: ${APP_BOARD_ATTACHMENT_CLEANUP_GRACE_HOURS:24}
+
+  # ── 알림 슬라이스 (폴리글랏 notification-service 흡수) ────────────────────────────
+  # 도메인 이벤트 → 다채널 팬아웃(log·slack·email·SSE) + /api/notifications/stream 푸시 허브.
+  # 무영속이다 — dedupe 창과 재생 버퍼가 프로세스 메모리라 재기동 시 사라진다(docs/sse.md).
+  dedupe:
+    ttl-minutes: ${APP_DEDUPE_TTL_MINUTES:30}
+  stream:
+    buffer-per-recipient: ${APP_STREAM_BUFFER_PER_RECIPIENT:100}
+    max-recipients: ${APP_STREAM_MAX_RECIPIENTS:10000}
+    max-pending-per-subscriber: ${APP_STREAM_MAX_PENDING:200}
+    timeout-ms: ${APP_STREAM_TIMEOUT_MS:1800000}
+    heartbeat-seconds: ${APP_STREAM_HEARTBEAT_SECONDS:15}
+    reconnect-hint-ms: ${APP_STREAM_RECONNECT_HINT_MS:2000}
+  dispatch:
+    per-channel-timeout-ms: ${APP_DISPATCH_TIMEOUT_MS:3000}
+    max-attempts: ${APP_DISPATCH_MAX_ATTEMPTS:3}
+    base-backoff-ms: ${APP_DISPATCH_BACKOFF_MS:50}
+  channels:
+    # 자격증명이 없으면 해당 채널이 스스로 비활성이 된다(반쯤 설정돼 매번 실패하는 것보다 낫다).
+    # LogChannel·SsePushChannel 은 항상 활성이라 설정이 전혀 없어도 알림이 사라지지 않는다.
+    slack:
+      webhook-url: ${SLACK_WEBHOOK_URL:}
+    email:
+      host: ${MAIL_HOST:smtp.gmail.com}
+      port: ${MAIL_PORT:587}
+      username: ${MAIL_USERNAME:}
+      password: ${MAIL_PASSWORD:}
+      from: ${MAIL_FROM:no-reply@lemuel.co.kr}
+
+  ops:
+    webhook:
+      # Alertmanager → webhook 인증 토큰. Alertmanager 는 커스텀 헤더를 못 보내므로
+      # X-Internal-Api-Key 대신 Authorization: Bearer 를 쓰되, 시크릿 값은 기존
+      # INTERNAL_API_KEY 를 재사용해 시크릿 관리 지점을 늘리지 않는다.
+      # 미설정 시 검증 비활성(개발) + 경고 — shared-common InternalApiKeyFilter 와 동일 시맨틱.
+      token: ${INTERNAL_API_KEY:}
+    # Alertmanager alert 의 labels.component → SignalCategory 매핑.
+    # 알람 룰(alert-rules.yml)이 늘어나면 여기만 추가하면 된다 (재빌드 불필요, 재기동만).
+    category-mapping:
+      settlement-batch: SETTLEMENT_FAILURE
+      settlement-adjustment: SETTLEMENT_FAILURE
+      cashflow-report: SETTLEMENT_FAILURE
+      refund: PAYMENT_FAILURE
+      kafka-consumer: KAFKA_BACKLOG
+      outbox: KAFKA_BACKLOG
+      settlement-projection: KAFKA_BACKLOG
+      http: API_TIMEOUT
+      database: DB_DEADLOCK
+      jvm: INFRA_ETC
+      application: INFRA_ETC
+    default-category: UNKNOWN
+    # REFIRED 타임라인 억제 간격 — repeat_interval(critical 5m)마다 재수신되는 firing 이
+    # 타임라인을 폭주시키지 않도록, 직전 REFIRED 이후 이 간격이 지나야만 타임라인 행을 남긴다.
+    refire-timeline-suppression: 30m
+
+    # ── Phase 2: 신호 수집 ──────────────────────────────────────────────
+    # 카프카 도메인 이벤트 → 신호 버킷 분모(시도 건수). enabled 는 spring.kafka 와 별개로
+    # 컨슈머 빈만 토글 (shared-common 은 app.kafka.enabled 를 봄).
+    signal:
+      # 성공 이벤트 → count_total(분모). 실패 이벤트(count_signal)는 Phase 2b 에서 추가.
+      topics:
+        order-created: ${OPS_TOPIC_ORDER_CREATED:lemuel.order.created}
+        payment-captured: ${OPS_TOPIC_PAYMENT_CAPTURED:lemuel.payment.captured}
+      # 버킷 폭 (초). 5분 = 300. Phase 3 베이스라인/z-score 판정 단위와 일치해야 한다.
+      bucket-seconds: 300
+
+    # Prometheus 인스턴트 쿼리 폴링 → 게이지 버킷. 인프라 신호(Kafka lag/Redis/DB deadlock/HTTP)는
+    # 이벤트로 만들 필요 없이 이미 메트릭으로 존재하므로 폴링으로 흡수한다.
+    prometheus:
+      # 기본 off — 로컬/테스트에서 Prometheus 없이 부팅. compose/운영에서 true + base-url 주입.
+      enabled: ${OPS_PROMETHEUS_ENABLED:false}
+      base-url: ${OPS_PROMETHEUS_URL:http://localhost:9090}
+      poll-interval-ms: ${OPS_PROMETHEUS_POLL_MS:60000}
+      timeout-ms: 5000
+      # metric_key → PromQL 인스턴트 쿼리. 알람 룰이 늘면 여기만 추가(재빌드 불필요).
+      queries:
+        kafka.lag.max: "max(kafka_consumergroup_lag)"
+        redis.up: "min(redis_up)"
+        db.deadlock.rate: "sum(rate(pg_stat_database_deadlocks[5m]))"
+        http.error.ratio: "100 * sum(rate(http_server_requests_seconds_count{status=~\"4..|5..\"}[5m])) / sum(rate(http_server_requests_seconds_count[5m]))"
+
+    # ── Phase 3: 베이스라인 이상 탐지 ────────────────────────────────────
+    # 실패율 카운터 5종을 5분마다 직전 마감 버킷 기준으로 롤링윈도우 z-score 판정,
+    # 이상이면 source=ANOMALY 인시던트 자동 생성/refire, 정상 복귀 K회 연속 시 자동 해제.
+    # 인프라 게이지(kafka lag/redis/deadlock/http)는 Alertmanager 룰이 커버하므로 대상 제외.
+    # 임계는 전부 아래에서 외부화 — 운영 튜닝은 재빌드 없이 재기동만.
+    anomaly:
+      # 기본 off — 로컬/테스트는 스캐너 미기동(테스트는 UseCase 직접 호출). compose/운영에서 true 주입.
+      enabled: ${OPS_ANOMALY_ENABLED:false}
+      scan-interval-ms: ${OPS_ANOMALY_SCAN_MS:300000}   # 버킷 폭(5분)과 일치
+      window-size: 12                                    # 롤링 베이스라인 = 직전 12버킷(1시간)
+      z-threshold: 3.0                                   # 이상 z-score 하한
+      critical-z-threshold: 5.0                          # z>=5 → CRITICAL, 3<=z<5 → WARNING
+      min-sample-total: 30                               # 최소 표본(count_total) 게이트
+      failure-rate-floor: 0.10                           # 상대임계 하한(실패율 10% 미만은 이상 아님)
+      resolve-streak-k: 3                                # 정상 3버킷 연속 시 자동 해제
+      # metric_key → 인시던트 SignalCategory. key 집합이 곧 탐지 대상.
+      # metric_key 는 signal 버킷 키와 동일(DomainEventSignalConsumer/OpsFailureSignalConsumer).
+      metric-category:
+        settlement: SETTLEMENT_FAILURE
+        payment: PAYMENT_FAILURE
+        stock: STOCK_SHORTAGE
+        shipping: SHIPPING_DELAY
+        # order 는 의도적으로 제외 — order.failed 프로듀서가 아직 미배선이라(Phase 2b §2b.4:
+        # 주문 생성 실패의 단일 catch 지점 부재로 배선 보류) count_signal 이 항상 0 → failure_rate 0 →
+        # 이상 판정이 구조적으로 불가능하다. "감시 중인데 절대 안 울리는" 착시를 피하려 목록에서 뺀다.
+        # order.failed 발행 지점이 확정되면 아래 한 줄을 추가하면 즉시 활성화된다.
+        # order: ORDER_FAILURE

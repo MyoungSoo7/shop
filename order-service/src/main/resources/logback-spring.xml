@@ -1,0 +1,48 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+    T2-④ 구조화 로그 설정.
+    - local 프로파일: 색깔 있는 평문 포맷 (개발자 친화)
+    - 그 외(prod/staging): JSON 포맷 (ELK/Loki 수집용)
+    MDC 키: traceId, userId, orderId, paymentId, settlementId, refundId
+-->
+<configuration>
+    <springProperty name="appName" source="spring.application.name" defaultValue="lemuel"/>
+
+    <!-- T2-⑤ PII 마스킹 컨버터 등록. 패턴에 %mask(%msg) 로 사용. -->
+    <conversionRule conversionWord="mask"
+                    class="github.lms.lemuel.common.config.observability.PIIMaskingConverter"/>
+
+    <!-- local 프로파일: 사람이 읽기 쉬운 평문 포맷 -->
+    <springProfile name="local">
+        <appender name="STDOUT" class="ch.qos.logback.core.ConsoleAppender">
+            <encoder>
+                <pattern>%d{HH:mm:ss.SSS} %highlight(%-5level) [%thread] %cyan(%logger{20}) [traceId=%X{traceId:-}, paymentId=%X{paymentId:-}, settlementId=%X{settlementId:-}] - %mask(%msg)%n</pattern>
+            </encoder>
+        </appender>
+
+        <root level="INFO">
+            <appender-ref ref="STDOUT"/>
+        </root>
+        <logger name="github.lms.lemuel" level="DEBUG"/>
+    </springProfile>
+
+    <!-- 그 외 프로파일: JSON 포맷 -->
+    <springProfile name="!local">
+        <appender name="JSON" class="ch.qos.logback.core.ConsoleAppender">
+            <encoder class="net.logstash.logback.encoder.LogstashEncoder">
+                <customFields>{"app":"${appName}"}</customFields>
+                <includeMdcKeyName>traceId</includeMdcKeyName>
+                <includeMdcKeyName>userId</includeMdcKeyName>
+                <includeMdcKeyName>orderId</includeMdcKeyName>
+                <includeMdcKeyName>paymentId</includeMdcKeyName>
+                <includeMdcKeyName>settlementId</includeMdcKeyName>
+                <includeMdcKeyName>refundId</includeMdcKeyName>
+            </encoder>
+        </appender>
+
+        <root level="INFO">
+            <appender-ref ref="JSON"/>
+        </root>
+        <logger name="github.lms.lemuel" level="INFO"/>
+    </springProfile>
+</configuration>

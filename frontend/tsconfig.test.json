@@ -1,0 +1,19 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "noEmit": true,
+    // 테스트 러너(vitest, Node 20+/jsdom)는 Array.prototype.at 을 실제로 제공한다 — 프로덕션
+    // 번들 타깃(ES2020)과 별개로, 테스트 코드의 lib 만 런타임 실체에 맞춘다.
+    "lib": ["ES2022", "DOM", "DOM.Iterable"]
+  },
+  "include": [
+    // 앰비언트 선언(vite/client 의 import.meta.env, 토스 전역)은 테스트가 끌어오는 소스에도 필요하다.
+    "src/**/*.d.ts",
+    "src/__tests__/**/*",
+    "**/*.test.ts",
+    "**/*.test.tsx",
+    "**/*.spec.ts",
+    "**/*.spec.tsx"
+  ],
+  "exclude": ["e2e", "node_modules", "dist", "build"]
+}

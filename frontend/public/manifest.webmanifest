@@ -1,0 +1,55 @@
+{
+  "id": "/",
+  "name": "Lemuel Settlement",
+  "short_name": "Settlement",
+  "description": "Lemuel 정산 시스템 대시보드",
+  "categories": ["business", "finance", "productivity"],
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "display_override": ["standalone", "minimal-ui"],
+  "orientation": "any",
+  "background_color": "#0f172a",
+  "theme_color": "#0f172a",
+  "icons": [
+    { "src": "/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ],
+  "screenshots": [
+    {
+      "src": "/screenshots/narrow.png",
+      "sizes": "1170x1992",
+      "type": "image/png",
+      "form_factor": "narrow",
+      "label": "로그인 — 모바일"
+    },
+    {
+      "src": "/screenshots/wide.png",
+      "sizes": "1280x800",
+      "type": "image/png",
+      "form_factor": "wide",
+      "label": "로그인 — 데스크톱"
+    }
+  ],
+  "shortcuts": [
+    {
+      "name": "주문하기",
+      "short_name": "주문",
+      "url": "/order",
+      "icons": [{ "src": "/icon-192.png", "sizes": "192x192", "type": "image/png" }]
+    },
+    {
+      "name": "장바구니",
+      "short_name": "장바구니",
+      "url": "/cart",
+      "icons": [{ "src": "/icon-192.png", "sizes": "192x192", "type": "image/png" }]
+    },
+    {
+      "name": "정산 조회",
+      "short_name": "정산",
+      "url": "/settlement/search",
+      "icons": [{ "src": "/icon-192.png", "sizes": "192x192", "type": "image/png" }]
+    }
+  ]
+}

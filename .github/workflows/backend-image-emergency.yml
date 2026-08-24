@@ -1,0 +1,71 @@
+# 응급 백엔드 이미지 빌드·push (테스트 skip).
+#
+# 용도: CI 가 인프라 사정(러너 hang 등)으로 막혔는데 프로덕션 스큐를 즉시 풀어야 할 때.
+# 테스트를 건너뛰므로 *수동 dispatch 전용* — 코드 신뢰도는 직전 CI 결과로 판단할 것.
+# 태그·build-args 는 ci.yml 의 backend-ghcr job 과 동일하게 유지한다.
+# (2026-07-08: 프론트 main-2f8a180 / 백엔드 main-6468c05 스큐 해소에 사용)
+# 이미지 매핑:
+#   order-service     → ghcr.io/myoungsoo7/shop
+#   gateway-service   → ghcr.io/myoungsoo7/shop-gateway
+#   operation-service → ghcr.io/myoungsoo7/shop-operation
+name: Backend image (emergency, no tests)
+
+on:
+  workflow_dispatch:
+
+env:
+  REGISTRY: ghcr.io
+  BACKEND_IMAGE: ${{ github.repository }}
+
+permissions:
+  contents: read
+  packages: write
+
+jobs:
+  build-push:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        include:
+          - module: order-service
+            image_suffix: ""
+          - module: gateway-service
+            image_suffix: "-gateway"
+          - module: operation-service
+            image_suffix: "-operation"
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Login to GHCR
+        uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@bb05f3f5519dd87d3ba754cc423b652a5edd6d2c # v4.2.0
+
+      - name: Docker metadata
+        id: meta
+        uses: docker/metadata-action@dc802804100637a589fabce1cb79ff13a1411302 # v6.2.0
+        with:
+          images: ${{ env.REGISTRY }}/${{ env.BACKEND_IMAGE }}${{ matrix.image_suffix }}
+          tags: |
+            type=ref,event=branch
+            type=sha,prefix={{branch}}-
+            type=raw,value=latest,enable={{is_default_branch}}
+
+      - name: Build and push (GHCR)
+        uses: docker/build-push-action@53b7df96c91f9c12dcc8a07bcb9ccacbed38856a # v7.3.0
+        with:
+          context: .
+          file: ./Dockerfile
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          build-args: |
+            MODULE=${{ matrix.module }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+          platforms: linux/amd64

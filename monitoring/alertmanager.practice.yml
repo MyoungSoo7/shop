@@ -1,0 +1,50 @@
+# 실습용 Alertmanager 설정 (Prometheus·Grafana 로컬 실습 전용)
+# 목적: 시크릿/외부 의존 없이 확실히 기동 + 실제 Slack(#일반) 으로 알림이 새지 않도록 null 리시버 사용.
+#   - 발화/그룹핑/inhibit/silence 는 Alertmanager UI(http://localhost:9093) 에서 그대로 관찰 가능
+#   - 실제 Slack 연동 실습이 필요하면 docker-compose 의 마운트를 monitoring/alertmanager.yml 로 교체
+global:
+  resolve_timeout: 5m
+
+route:
+  group_by: ['alertname', 'severity']
+  group_wait: 10s
+  group_interval: 10s
+  repeat_interval: 1h
+  receiver: 'practice-null'
+  routes:
+    # ★ operation-service 인시던트화 — 모든 알람을 webhook 에도 전달하고(continue),
+    #   이후 기존 severity 라우팅을 계속 평가한다. send_resolved 가 자동 해제(AUTO_RESOLVED)의 전제.
+    - receiver: 'operation-webhook'
+      continue: true
+    - match:
+        severity: critical
+      receiver: 'practice-null'
+      repeat_interval: 5m
+    - match:
+        severity: warning
+      receiver: 'practice-null'
+      repeat_interval: 1h
+
+# 통합(integration) 없는 리시버 = null sink. 알림은 UI 에 뜨지만 외부로 전송되지 않음.
+receivers:
+  - name: 'practice-null'
+
+  # operation-service Phase 1 — 알람 → 인시던트 적재 (docs/design/operation-service-phase1.md)
+  # credentials 는 compose 의 INTERNAL_API_KEY 기본값과 일치해야 한다.
+  # (.env 로 INTERNAL_API_KEY 를 바꿨다면 이 값도 함께 변경 — Alertmanager 는 env 치환을 지원하지 않음)
+  - name: 'operation-webhook'
+    webhook_configs:
+      - url: 'http://operation-service:8080/api/ops/webhook/alertmanager'
+        send_resolved: true
+        http_config:
+          authorization:
+            type: Bearer
+            credentials: 'lemuel-internal-dev-key'
+
+# critical 이 떠 있으면 동일 alertname 의 warning 은 억제 (실습용으로 그대로 보존)
+inhibit_rules:
+  - source_match:
+      severity: 'critical'
+    target_match:
+      severity: 'warning'
+    equal: ['alertname', 'environment']

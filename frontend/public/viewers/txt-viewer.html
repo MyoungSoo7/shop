@@ -1,0 +1,451 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Text Viewer</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Courier New', 'Consolas', monospace;
+            background: #1e1e1e;
+            color: #d4d4d4;
+            padding: 20px;
+            line-height: 1.6;
+        }
+
+        #toolbar {
+            position: sticky;
+            top: 0;
+            background: #2d2d30;
+            border: 1px solid #3e3e42;
+            border-radius: 6px;
+            padding: 12px;
+            margin-bottom: 20px;
+            display: flex;
+            gap: 10px;
+            flex-wrap: wrap;
+            align-items: center;
+            z-index: 100;
+        }
+
+        #toolbar button,
+        #toolbar select,
+        #toolbar input[type="number"] {
+            padding: 8px 16px;
+            background: #3e3e42;
+            border: 1px solid #555;
+            border-radius: 6px;
+            color: #d4d4d4;
+            cursor: pointer;
+            font-size: 14px;
+            transition: all 0.2s;
+        }
+
+        #toolbar button:hover {
+            background: #4e4e52;
+        }
+
+        #toolbar input[type="file"] {
+            padding: 8px;
+            font-size: 14px;
+            background: #3e3e42;
+            color: #d4d4d4;
+            border: 1px solid #555;
+            border-radius: 6px;
+        }
+
+        #toolbar label {
+            color: #d4d4d4;
+            font-size: 14px;
+        }
+
+        #info {
+            background: #2d2d30;
+            border: 1px solid #3e3e42;
+            border-radius: 6px;
+            padding: 12px;
+            margin-bottom: 20px;
+            display: none;
+        }
+
+        #info.show {
+            display: block;
+        }
+
+        #info-content {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 16px;
+            color: #d4d4d4;
+            font-size: 14px;
+        }
+
+        #info-content div {
+            display: flex;
+            flex-direction: column;
+            gap: 4px;
+        }
+
+        #info-content .label {
+            color: #808080;
+            font-size: 12px;
+        }
+
+        #info-content .value {
+            color: #4ec9b0;
+            font-weight: bold;
+        }
+
+        #content {
+            background: #1e1e1e;
+            padding: 20px;
+            border: 1px solid #3e3e42;
+            border-radius: 6px;
+            min-height: 500px;
+            white-space: pre-wrap;
+            word-wrap: break-word;
+            overflow-x: auto;
+            position: relative;
+        }
+
+        #line-numbers {
+            position: absolute;
+            left: 0;
+            top: 20px;
+            padding: 0 10px;
+            background: #252526;
+            border-right: 1px solid #3e3e42;
+            color: #858585;
+            user-select: none;
+            font-size: 14px;
+            line-height: 1.6;
+        }
+
+        #text-content {
+            padding-left: 60px;
+        }
+
+        .empty-state {
+            text-align: center;
+            padding: 60px 20px;
+            color: #808080;
+        }
+
+        .empty-state h2 {
+            font-size: 1.5em;
+            margin-bottom: 12px;
+            color: #d4d4d4;
+        }
+
+        /* 검색 하이라이트 */
+        .highlight {
+            background-color: #ffff00;
+            color: #000;
+            padding: 2px 0;
+        }
+
+        .current-highlight {
+            background-color: #ff6b35;
+            color: #fff;
+        }
+
+        /* 테마별 스타일 */
+        .theme-light {
+            background: #ffffff;
+            color: #000000;
+        }
+
+        .theme-light #toolbar,
+        .theme-light #info,
+        .theme-light #content {
+            background: #f5f5f5;
+            border-color: #d0d0d0;
+            color: #000000;
+        }
+
+        .theme-light #line-numbers {
+            background: #e8e8e8;
+            color: #858585;
+        }
+
+        .theme-solarized {
+            background: #002b36;
+            color: #839496;
+        }
+
+        .theme-solarized #toolbar,
+        .theme-solarized #info,
+        .theme-solarized #content {
+            background: #073642;
+            border-color: #586e75;
+            color: #839496;
+        }
+    </style>
+</head>
+<body>
+    <div id="toolbar">
+        <input type="file" id="fileInput" accept=".txt,.log,.csv,.json,.xml,.html,.css,.js,.ts,.java,.py,.md">
+        <button onclick="loadSample()">📝 샘플 로드</button>
+        <button onclick="clearContent()">🗑️ 초기화</button>
+
+        <label>폰트 크기:</label>
+        <input type="number" id="fontSize" value="14" min="8" max="32" onchange="changeFontSize()">
+
+        <select id="themeSelect" onchange="changeTheme()">
+            <option value="dark">다크 테마</option>
+            <option value="light">라이트 테마</option>
+            <option value="solarized">Solarized</option>
+        </select>
+
+        <button onclick="toggleLineNumbers()">🔢 줄 번호</button>
+        <button onclick="toggleInfo()">ℹ️ 정보</button>
+        <button onclick="downloadFile()">💾 다운로드</button>
+        <button onclick="copyToClipboard()">📋 복사</button>
+
+        <input type="text" id="searchInput" placeholder="검색..." style="padding: 8px;">
+        <button onclick="search()">🔍 검색</button>
+    </div>
+
+    <div id="info">
+        <div id="info-content"></div>
+    </div>
+
+    <div id="content">
+        <div id="line-numbers"></div>
+        <div id="text-content">
+            <div class="empty-state">
+                <h2>📄 Text Viewer</h2>
+                <p>텍스트 파일을 선택하거나 샘플을 로드하세요.</p>
+                <p style="margin-top: 12px; font-size: 12px;">
+                    지원 형식: TXT, LOG, CSV, JSON, XML, HTML, CSS, JS, TS, Java, Python, Markdown 등
+                </p>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let currentContent = '';
+        let currentFileName = '';
+        let showLineNumbers = true;
+        let searchResults = [];
+        let currentSearchIndex = -1;
+
+        // 파일 업로드
+        document.getElementById('fileInput').addEventListener('change', function(e) {
+            const file = e.target.files[0];
+            if (!file) return;
+
+            currentFileName = file.name;
+            const reader = new FileReader();
+
+            reader.onload = function(event) {
+                currentContent = event.target.result;
+                displayContent(currentContent);
+                updateInfo(file);
+            };
+
+            reader.readAsText(file);
+        });
+
+        // 컨텐츠 표시
+        function displayContent(text) {
+            const lines = text.split('\n');
+            const lineNumbersHTML = lines.map((_, i) => i + 1).join('\n');
+
+            document.getElementById('line-numbers').textContent = showLineNumbers ? lineNumbersHTML : '';
+            document.getElementById('text-content').textContent = text;
+        }
+
+        // 파일 정보 업데이트
+        function updateInfo(file) {
+            const lines = currentContent.split('\n').length;
+            const chars = currentContent.length;
+            const words = currentContent.split(/\s+/).filter(w => w.length > 0).length;
+            const size = (file.size / 1024).toFixed(2);
+
+            const infoHTML = `
+                <div><span class="label">파일명</span><span class="value">${file.name}</span></div>
+                <div><span class="label">크기</span><span class="value">${size} KB</span></div>
+                <div><span class="label">줄 수</span><span class="value">${lines.toLocaleString()}</span></div>
+                <div><span class="label">문자 수</span><span class="value">${chars.toLocaleString()}</span></div>
+                <div><span class="label">단어 수</span><span class="value">${words.toLocaleString()}</span></div>
+                <div><span class="label">인코딩</span><span class="value">UTF-8</span></div>
+            `;
+
+            document.getElementById('info-content').innerHTML = infoHTML;
+        }
+
+        // 샘플 로드
+        function loadSample() {
+            const sample = `텍스트 뷰어 샘플 파일
+====================
+
+이것은 샘플 텍스트 파일입니다.
+
+주요 기능:
+1. 텍스트 파일 열기 (.txt, .log, .csv 등)
+2. 줄 번호 표시/숨김
+3. 다양한 테마 (다크, 라이트, Solarized)
+4. 폰트 크기 조절
+5. 텍스트 검색
+6. 파일 정보 표시
+7. 클립보드 복사
+8. 파일 다운로드
+
+코드 예시:
+
+function hello() {
+    console.log("Hello, World!");
+    return true;
+}
+
+JSON 예시:
+{
+    "name": "Lemuel",
+    "version": "1.0.0",
+    "features": ["viewer", "editor", "search"]
+}
+
+다국어 지원:
+- 한글: 안녕하세요
+- English: Hello
+- 日本語: こんにちは
+- 中文: 你好
+
+특수 문자: !@#$%^&*()_+-=[]{}|;:',.<>?/~\`
+
+긴 줄 테스트: ${'a'.repeat(100)}
+
+끝.`;
+
+            currentContent = sample;
+            currentFileName = 'sample.txt';
+            displayContent(sample);
+
+            // 가상 파일 정보
+            const info = `
+                <div><span class="label">파일명</span><span class="value">sample.txt</span></div>
+                <div><span class="label">크기</span><span class="value">0.68 KB</span></div>
+                <div><span class="label">줄 수</span><span class="value">${sample.split('\n').length}</span></div>
+                <div><span class="label">문자 수</span><span class="value">${sample.length}</span></div>
+                <div><span class="label">단어 수</span><span class="value">${sample.split(/\s+/).filter(w => w.length > 0).length}</span></div>
+                <div><span class="label">인코딩</span><span class="value">UTF-8</span></div>
+            `;
+            document.getElementById('info-content').innerHTML = info;
+        }
+
+        // 초기화
+        function clearContent() {
+            currentContent = '';
+            currentFileName = '';
+            document.getElementById('content').innerHTML = `
+                <div id="line-numbers"></div>
+                <div id="text-content">
+                    <div class="empty-state">
+                        <h2>📄 Text Viewer</h2>
+                        <p>텍스트 파일을 선택하거나 샘플을 로드하세요.</p>
+                    </div>
+                </div>
+            `;
+            document.getElementById('fileInput').value = '';
+            document.getElementById('info').classList.remove('show');
+        }
+
+        // 폰트 크기 변경
+        function changeFontSize() {
+            const size = document.getElementById('fontSize').value;
+            document.getElementById('text-content').style.fontSize = size + 'px';
+            document.getElementById('line-numbers').style.fontSize = size + 'px';
+        }
+
+        // 테마 변경
+        function changeTheme() {
+            const theme = document.getElementById('themeSelect').value;
+            document.body.className = 'theme-' + theme;
+        }
+
+        // 줄 번호 토글
+        function toggleLineNumbers() {
+            showLineNumbers = !showLineNumbers;
+            if (currentContent) {
+                displayContent(currentContent);
+            }
+            document.getElementById('text-content').style.paddingLeft = showLineNumbers ? '60px' : '0';
+        }
+
+        // 정보 토글
+        function toggleInfo() {
+            document.getElementById('info').classList.toggle('show');
+        }
+
+        // 다운로드
+        function downloadFile() {
+            if (!currentContent) {
+                alert('다운로드할 내용이 없습니다.');
+                return;
+            }
+
+            const blob = new Blob([currentContent], { type: 'text/plain' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = currentFileName || 'download.txt';
+            a.click();
+            URL.revokeObjectURL(url);
+        }
+
+        // 클립보드 복사
+        function copyToClipboard() {
+            if (!currentContent) {
+                alert('복사할 내용이 없습니다.');
+                return;
+            }
+
+            navigator.clipboard.writeText(currentContent).then(() => {
+                alert('클립보드에 복사되었습니다!');
+            }).catch(err => {
+                console.error('복사 실패:', err);
+            });
+        }
+
+        // 검색
+        function search() {
+            const query = document.getElementById('searchInput').value;
+            if (!query || !currentContent) return;
+
+            const content = document.getElementById('text-content');
+            let html = currentContent;
+
+            // 이전 하이라이트 제거
+            html = html.replace(/<span class="highlight.*?<\/span>/g, '');
+
+            // 검색어 하이라이트
+            const regex = new RegExp(query.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'gi');
+            const matches = currentContent.match(regex);
+
+            if (matches) {
+                html = html.replace(regex, '<span class="highlight">$&</span>');
+                content.innerHTML = html;
+                alert(`${matches.length}개의 결과를 찾았습니다.`);
+            } else {
+                alert('검색 결과가 없습니다.');
+            }
+        }
+
+        // 메시지 수신 (부모 창에서 컨텐츠 전달)
+        window.addEventListener('message', function(event) {
+            if (event.data.type === 'loadText') {
+                currentContent = event.data.content;
+                currentFileName = event.data.filename || 'document.txt';
+                displayContent(currentContent);
+            }
+        });
+    </script>
+</body>
+</html>

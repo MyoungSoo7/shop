@@ -1,0 +1,10 @@
+{
+  "giftCardId": 501,
+  "userId": 42,
+  "codeLast4": "6789",
+  "remainingAmount": "50000",
+  "entryId": 900,
+  "amount": "50000",
+  "expiresAt": "2027-08-18T00:00:00Z",
+  "occurredAt": "2026-08-18T10:20:00Z"
+}

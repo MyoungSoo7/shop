@@ -1,0 +1,11 @@
+# 운영(prod) 프로파일 — SPRING_PROFILES_ACTIVE=prod 로 활성.
+#
+# order-service 는 /internal/recon/** 를 실제로 호스팅하는 유일한 서비스다(정산 대사 소스).
+# 기본(로컬/개발) 프로파일은 내부 API 키 미설정 시 fail-open(경고 후 통과)으로 개발 편의를 보존하지만,
+# 운영에서는 이 플래그를 고정해 fail-closed 로 전환한다: INTERNAL_API_KEY 가 주입되지 않으면
+# /internal/** 호출을 통과가 아니라 401 로 거부한다(InternalApiKeyFilter). 키 누락으로 결제·환불
+# 합계 대사 엔드포인트가 무방비 노출되는 사고를 배포 프로파일 차원에서 원천 차단한다
+# (settlement/loan/investment 의 application-prod.yml 과 동형 — 호스트 측이 빠져 있던 감사 지적 보완).
+app:
+  security:
+    internal-key-required: true

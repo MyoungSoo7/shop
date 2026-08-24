@@ -1,0 +1,60 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "lemuel.point.revoked",
+  "description": "주문 취소·환불로 적립 포인트가 회수된 사실. amount 는 실제로 되가져온 금액이라 원 적립액보다 작을 수 있다(이미 쓴 몫은 회수하지 않는다).",
+  "$comment": "참고(계약 아님) — 회계 해석: DR POINT_LIABILITY / CR POINT_PROMOTION_EXPENSE(판촉비 환입 — 소멸의 이익 인식과 다르다).",
+  "type": "object",
+  "properties": {
+    "userId": {
+      "type": "integer"
+    },
+    "accountId": {
+      "type": "integer"
+    },
+    "entryId": {
+      "type": "integer"
+    },
+    "amount": {
+      "type": "string",
+      "pattern": "^-?[0-9]+(\\.[0-9]+)?$"
+    },
+    "referenceType": {
+      "type": "string"
+    },
+    "referenceId": {
+      "type": "string"
+    },
+    "sequence": {
+      "type": "integer"
+    },
+    "lots": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "lotId": {
+            "type": "integer"
+          },
+          "amount": {
+            "type": "string",
+            "pattern": "^-?[0-9]+(\\.[0-9]+)?$"
+          }
+        },
+        "required": [
+          "lotId",
+          "amount"
+        ]
+      }
+    },
+    "occurredAt": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "userId",
+    "accountId",
+    "entryId",
+    "amount"
+  ],
+  "additionalProperties": true
+}

@@ -1,0 +1,428 @@
+spring:
+  profiles:
+    active: local
+
+  application:
+    name: lemuel
+
+  threads:
+    virtual:
+      enabled: true # Java 21+ 가상 스레드 (Tomcat 요청 처리 + @Scheduled). JEP 491(JDK24+)로 synchronized 핀 없음
+
+  datasource:
+    # reWriteBatchedInserts=true → JDBC 배치 INSERT 를 단일 multi-row 문장으로 재작성 (대량 적재 처리량↑)
+    url: jdbc:postgresql://localhost:5432/opslab?reWriteBatchedInserts=true
+    username: ${POSTGRES_USER}
+    password: ${POSTGRES_PASSWORD}
+    driver-class-name: org.postgresql.Driver
+    hikari:
+      # 가상 스레드가 켜져 있어 요청 스레드 수에는 상한이 없다. 따라서 동시 처리량의
+      # 실질 천장은 이 커넥션 풀이다 — 암묵적 기본값(10) 대신 명시적으로 둬서 의도된 스로틀로 만든다.
+      # PostgreSQL max_connections(기본 100)를 서비스들이 공유하므로 과대 설정 금지.
+      pool-name: lemuel-order-pool
+      maximum-pool-size: ${DB_POOL_MAX:20}
+      minimum-idle: ${DB_POOL_MIN_IDLE:5}
+      # 풀 고갈 시 가상 스레드가 무한 대기하지 않도록 빠르게 실패시킨다.
+      connection-timeout: 10000
+      leak-detection-threshold: 30000
+      # 커넥션이 조용히 죽는 것을 막는다 (2026-07-30).
+      # 파드와 postgres 가 서로 다른 노드에 있어 유휴 커넥션이 CNI/conntrack 상태 만료로
+      # 소리 없이 끊긴다. 그러면 다음 borrow 때 SQLState 08003(connection does not exist)나
+      # 'Connection is not available … (total=0)' 로 터진다 — settlement-service 의 outbox 폴러가
+      # 이틀간 46회 이렇게 실패했다. keepalive 로 주기적으로 살아있음을 확인하고,
+      # max-lifetime 으로 오래된 커넥션을 선제 교체한다. (economics/market/common-data 는 이미 적용됨)
+      max-lifetime: 1800000 # 30분
+      keepalive-time: 300000 # 5분
+
+  jpa:
+    hibernate:
+      ddl-auto: validate
+    show-sql: false
+    open-in-view: false
+    properties:
+      hibernate:
+        format_sql: false
+        default_schema: opslab
+        # JDBC 배치 — INSERT/UPDATE 를 묶어 라운드트립 감소. order_inserts/updates 로 배치 그룹화 정렬,
+        # batch_versioned_data 로 @Version(낙관적 락) 엔티티도 배치 대상에 포함.
+        jdbc:
+          batch_size: 50
+          batch_versioned_data: true
+        order_inserts: true
+        order_updates: true
+
+  flyway:
+    enabled: true
+    locations: classpath:db/migration
+    # 데모 시드 마이그레이션 제거(상품·거래 데모) — 기존 DB 를 "missing"으로 관대 처리.
+    # 로그인/계정·RBAC·메뉴·공통코드 시드는 유지(앱 무결성).
+    ignore-migration-patterns: "*:missing"
+    schemas: opslab
+    default-schema: opslab
+    create-schemas: true
+    validate-on-migrate: false
+    # 정수 버전 (V1~V50) 과 타임스탬프 버전 (V20260606003307~) 혼용 환경에서
+    # 신규 정수 버전이 *이미 적용된* 타임스탬프 버전보다 numerically 작아 out-of-order 로
+    # 판정되어 silent skip 되는 사고 방지. 2026-06-16 production 사고 직접 원인.
+    out-of-order: true
+
+  cache:
+    type: caffeine
+    caffeine:
+      spec: maximumSize=500,expireAfterWrite=600s
+
+  data:
+    elasticsearch:
+      repositories:
+        enabled: false
+    redis:
+      host: ${SPRING_DATA_REDIS_HOST:localhost}
+      port: ${SPRING_DATA_REDIS_PORT:6379}
+
+  elasticsearch:
+    uris: https://5d37123531be45ad8e84d19cca735fb5.us-central1.gcp.cloud.es.io
+    username: ${ELASTICSEARCH_USER}
+    password: ${ELASTICSEARCH_PASSWORD}
+    connection-timeout: 5s
+    socket-timeout: 60s
+
+  # Kafka 설정 — app.kafka.enabled 로 활성/비활성 스위칭
+  kafka:
+    bootstrap-servers: ${SPRING_KAFKA_BOOTSTRAP_SERVERS:localhost:9092}
+    producer:
+      acks: all # 모든 in-sync replica 확인 (신뢰성 우선)
+      retries: 5
+      properties:
+        enable.idempotence: true # 프로듀서 중복 발행 방지
+        max.in.flight.requests.per.connection: 5
+        compression.type: lz4
+    consumer:
+      # 모놀리스 분리 시점에 lemuel-settlement 이 남아 있었다. order 에 @KafkaListener 가 붙는 순간
+      # settlement 와 같은 컨슈머 그룹이 되어 파티션을 나눠 갖고 오프셋까지 공유했을 것이다(정산 이벤트
+      # 조용한 유실). 리스너가 0건인 지금 정정한다 — 이관할 오프셋이 없다. guard KAFKA-GROUP-OWNER 강제.
+      group-id: lemuel-order
+      auto-offset-reset: earliest # 새 컨슈머는 시작부터 재생
+      enable-auto-commit: false # 수동 ack → 멱등 처리 후 커밋
+      properties:
+        isolation.level: read_committed
+    listener:
+      ack-mode: manual_immediate
+      missing-topics-fatal: false
+
+  # Graceful Shutdown for K8s Rolling Update
+  lifecycle:
+    timeout-per-shutdown-phase: 30s # Pod 종료 시 최대 30초 대기
+
+  batch:
+    jdbc:
+      initialize-schema: always # BATCH_* 테이블 자동 생성
+    job:
+      enabled: false # 애플리케이션 시작 시 자동 실행 방지
+
+  # Mail Configuration
+  mail:
+    host: smtp.gmail.com
+    port: 587
+    username: ${MAIL_USERNAME}
+    password: ${MAIL_PASSWORD}
+    properties:
+      mail:
+        smtp:
+          auth: true
+          starttls:
+            enable: true
+            required: true
+            # 아래 설정을 추가하거나 확인해 보세요
+          ssl:
+            trust: smtp.gmail.com
+            protocols: TLSv1.2
+          connectiontimeout: 5000
+          timeout: 5000
+          writetimeout: 5000
+    default-encoding: UTF-8
+
+  # 업로드 한도는 *항상 로드되는* 이 파일에 둔다.
+  #
+  # 과거엔 application-image.yml(프로파일 `image`)에만 있었는데, 프로덕션은
+  # SPRING_PROFILES_ACTIVE=prod 로 뜨고 profile group/import 도 없어서 그 파일이 로드되지 않았다.
+  # 결과적으로 운영 한도는 스프링 기본값(1MB/10MB)이었고, 도메인(ImageUpload.MAX_SIZE_BYTES=5MB)이
+  # 허용하도록 짜인 1~5MB 파일이 도메인 검증에 닿기도 전에 서블릿에서 잘렸다.
+  # 설정 파일에 5MB 라고 적혀 있는데 실제로는 1MB 로 도는 상태였다 — 프로파일에 값을 숨기면
+  # "적혀 있음" 과 "적용됨" 이 갈린다.
+  servlet:
+    multipart:
+      enabled: true
+      # 도메인 상수(5MB)와 같은 값이다. 한쪽만 바꾸면 서블릿과 도메인의 판정이 어긋난다.
+      max-file-size: ${APP_UPLOAD_MAX_FILE_SIZE:5MB}
+      max-request-size: ${APP_UPLOAD_MAX_REQUEST_SIZE:25MB}
+      file-size-threshold: 2MB
+
+# Server Configuration
+server:
+  port: 8088
+  shutdown: graceful # Graceful Shutdown 활성화
+  tomcat:
+    connection-timeout: 20s
+    threads:
+      max: 200
+      min-spare: 10
+    uri-encoding: UTF-8 # URL 파라미터 한글 인코딩
+  servlet:
+    encoding:
+      charset: UTF-8
+      enabled: true
+      force: true # 요청/응답 모두 UTF-8 강제
+
+management:
+  # 분산 트레이싱 — Micrometer Tracing + OpenTelemetry → Tempo (또는 Jaeger / Zipkin)
+  # 로컬 기본값은 비활성. docker-compose 에서 OTEL_EXPORTER_OTLP_ENDPOINT 만 주면 자동 활성.
+  tracing:
+    sampling:
+      probability: ${MANAGEMENT_TRACING_SAMPLING_PROBABILITY:1.0}
+  otlp:
+    tracing:
+      endpoint: ${MANAGEMENT_OTLP_TRACING_ENDPOINT:}
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics,prometheus
+      base-path: /actuator
+  endpoint:
+    prometheus:
+      enabled: true
+    health:
+      show-details: when-authorized
+      show-components: always
+      probes:
+        enabled: true # K8s Liveness/Readiness Probe 활성화
+  health:
+    mail:
+      enabled: false
+    redis:
+      enabled: ${MANAGEMENT_HEALTH_REDIS_ENABLED:false} # jpa 모드(기본)엔 Redis 서버 없음 → readiness DOWN 방지. redis 모드 compose 에서 true
+    livenessState:
+      enabled: true
+    readinessState:
+      enabled: true
+    elasticsearch:
+      enabled: false
+    db:
+      enabled: true # PostgreSQL Health Check
+  server:
+    port: 8089 # 로컬 dev: 메인(8080)과 분리. Docker: MANAGEMENT_SERVER_PORT=8080으로 오버라이드하여 단일 포트로 통합
+  metrics:
+    distribution:
+      percentiles-histogram:
+        refund.processing.duration: true
+        settlement.batch.creation.duration: true
+        settlement.batch.confirmation.duration: true
+        settlement.batch.adjustment.duration: true
+      percentiles:
+        refund.processing.duration: 0.5,0.95,0.99
+        settlement.batch.creation.duration: 0.5,0.95,0.99
+        settlement.batch.confirmation.duration: 0.5,0.95,0.99
+        settlement.batch.adjustment.duration: 0.5,0.95,0.99
+    tags:
+      application: ${spring.application.name}
+      environment: ${ENVIRONMENT:local}
+
+springdoc:
+  api-docs:
+    path: /v3/api-docs
+  swagger-ui:
+    path: /swagger-ui.html
+
+# 장바구니 저장소 선택 — jpa(기본, PostgreSQL) | redis. 빈 충돌 방지를 위해 어댑터가 @ConditionalOnProperty 로 토글된다.
+cart:
+  store: ${CART_STORE:jpa}
+
+app:
+  # 배송 — 수취인 안심번호(가상번호) 풀.
+  # validity-days: 배정 후 이 기간이 지나면 회수해 재사용한다. 배송 소요보다 짧게 잡으면
+  #   배송 중 연락 수단이 끊기고, 너무 길게 잡으면 유한한 풀이 마른다.
+  # reclaim-cron: 만료 회수 스케줄. 멈추면 풀이 말라 신규 주문이 실번호로 나간다.
+  shipping:
+    safety-number:
+      validity-days: ${SAFETY_NUMBER_VALIDITY_DAYS:7}
+      reclaim-batch: ${SAFETY_NUMBER_RECLAIM_BATCH:200}
+      reclaim-cron: ${SAFETY_NUMBER_RECLAIM_CRON:0 10 * * * *}
+  # 내부 API(/internal/**) 공유 시크릿 — InternalApiKeyFilter 가 X-Internal-Api-Key 헤더를 검증.
+  # settlement(OrderReconClient)의 INTERNAL_API_KEY 와 동일해야 한다. 미설정 시 검증 비활성(개발)+경고.
+  internal:
+    api-key: ${INTERNAL_API_KEY:}
+  security:
+    # 로그인 무차별 대입 방어 + 비밀번호 사용 기한 (LoginSecurityPolicy).
+    # max-failed-attempts: 연속 실패 이 횟수에 닿으면 잠금. 성공 1 회가 누적을 지운다.
+    # lock-minutes: 기한부 잠금 시간. 영구 잠금은 남의 이메일만 알면 서비스 거부를 걸 수 있어 쓰지 않는다.
+    # password-max-age-days: 0 이면 만료 검사 없음. 기준 시각은 users.password_changed_at.
+    login:
+      max-failed-attempts: ${LOGIN_MAX_FAILED_ATTEMPTS:5}
+      lock-minutes: ${LOGIN_LOCK_MINUTES:30}
+      password-max-age-days: ${LOGIN_PASSWORD_MAX_AGE_DAYS:90}
+  # 읽기/쓰기 분리 (opt-in). enabled=true 일 때만 라우팅 데이터소스 활성 — readOnly 트랜잭션은 read 로.
+  # 활성화 시 write/read 에 Hikari 네이티브 프로퍼티(jdbc-url 등)를 지정한다.
+  datasource:
+    read-replica:
+      enabled: ${APP_DATASOURCE_READ_REPLICA_ENABLED:false}
+    # write:
+    #   jdbc-url: ${SPRING_DATASOURCE_URL}
+    #   username: ${POSTGRES_USER}
+    #   password: ${POSTGRES_PASSWORD}
+    #   maximum-pool-size: ${DB_POOL_MAX:30}
+    # read:
+    #   jdbc-url: ${APP_DATASOURCE_READ_URL}      # 읽기 레플리카 엔드포인트
+    #   username: ${POSTGRES_USER}
+    #   password: ${POSTGRES_PASSWORD}
+    #   maximum-pool-size: ${DB_POOL_MAX:30}
+    #   read-only: true
+  # 2-tier 캐시 (opt-in). enabled=true 면 L1(Caffeine)+L2(Redis) 가 활성화되고 로컬 전용 Caffeine 은 back off.
+  # Redis 클래스패스가 있어야 동작(order-service 만 redis 스타터 보유). 다중 인스턴스에서 L2 공유 + Pub/Sub 무효화.
+  cache:
+    two-tier:
+      enabled: ${APP_CACHE_TWO_TIER_ENABLED:false}
+      l1-ttl-seconds: ${APP_CACHE_L1_TTL_SECONDS:60} # L1 staleness 안전망 (무효화 누락 대비)
+      l2-ttl-seconds: ${APP_CACHE_L2_TTL_SECONDS:600} # L2 권위 TTL
+      max-size: ${APP_CACHE_MAX_SIZE:500}
+  kafka:
+    enabled: ${APP_KAFKA_ENABLED:false} # 로컬 개발 기본 OFF — 프로덕션 compose/K8s 에서 true
+    topic:
+      owner: order-service # ADR 0035 — 이 모듈이 발행(소유)하는 토픽만 만든다(파티션 정본은 topic-catalog.json)
+      payment-captured: lemuel.payment.captured
+      payment-refunded: lemuel.payment.refunded
+  outbox:
+    polling-delay-ms: 2000
+  # 현금영수증 대행 연동. 운영(prod)에서만 실 어댑터가 뜨고, 그 외 프로파일은 모의 어댑터다.
+  # enabled=false(기본)면 운영에서도 실 연동 대신 "발급 불가"를 명시적으로 돌려주는 어댑터가 뜬다
+  # — 대행 계약이 없는 배포에서 기동은 계속되되, 발급되지 않은 것을 발급됐다고 기록하지 않는다.
+  # enabled=true 인데 아래 값이 비어 있으면 기동이 실패한다(fail-closed, CashReceiptApiClient 생성자).
+  cash-receipt:
+    enabled: ${APP_CASH_RECEIPT_ENABLED:false}
+    base-url: ${CASH_RECEIPT_BASE_URL:}
+    issue-path: ${CASH_RECEIPT_ISSUE_PATH:/v1/cash-receipts}
+    cancel-path: ${CASH_RECEIPT_CANCEL_PATH:/v1/cash-receipts/cancel}
+    merchant-id: ${CASH_RECEIPT_MERCHANT_ID:}
+    secret-key: ${CASH_RECEIPT_SECRET_KEY:}
+  # 다중 PG 라우팅 정책 — PgRouter 가 결제수단·금액·health 를 보고 어댑터 선택
+  pg:
+    routing:
+      # 결제 수단별 1순위 PG (가장 흔한 케이스가 빠른 경로로 가도록)
+      primary-by-method:
+        CARD: TOSS
+        TOSS_PAYMENTS: TOSS
+        BANK_TRANSFER: KCP
+        VIRTUAL_ACCOUNT: KCP
+        KAKAO_PAY: NICE
+        NAVER_PAY: NICE
+        PAYCO: NICE
+        SAMSUNG_PAY: NICE
+      # 1순위가 미지원/OPEN 일 때 좌→우 순으로 시도
+      fallback-chain: [TOSS, NICE, KCP, INICIS]
+      # 100 만원 이상 거래는 한도/안정성을 위해 고액 우선 PG 로 라우팅
+      high-amount-threshold: 1000000
+      high-amount-preferred: NICE
+  # 셀러 등급 산정 (ADR 0031) — 등급 하나가 수수료율·정산주기·홀드백 3축을 동시에 바꾼다.
+  # 임계는 재무 승인 사항이라 코드가 아니라 여기서 온다(승인 갱신 때 배포 불필요).
+  seller-tier:
+    # 12개월 결제 순액(환불 차감) 기준 승급 임계. 2026-08-09 승인.
+    #   ~5억      NORMAL     수수료 3.5% · T+7 · 홀드백 30%/30일
+    #   5억~30억  VIP        수수료 2.5% · T+3 · 홀드백 10%/14일
+    #   30억~     STRATEGIC  수수료 2.0% · T+1 · 홀드백 0%
+    vip-threshold: ${APP_SELLER_TIER_VIP_THRESHOLD:500000000}
+    strategic-threshold: ${APP_SELLER_TIER_STRATEGIC_THRESHOLD:3000000000}
+    # 강등만 유예한다(승급은 즉시). 임계 근처 셀러가 매월 오르내리면 경제조건이 출렁이기 때문이다.
+    # 승급 후 3개월은 강등 없음 + 유예가 끝나도 연속 2회 미달해야 강등된다(1회는 GUARDED 로 이력만).
+    guard-months: ${APP_SELLER_TIER_GUARD_MONTHS:3}
+    miss-threshold: ${APP_SELLER_TIER_MISS_THRESHOLD:2}
+    auto-evaluate:
+      # 기본 OFF — 사람 확인 없이 수수료·정산주기·홀드백이 바뀌지 않게 한다. 운영 절차는
+      # POST /admin/seller-tiers/evaluate (미리보기) → 결과 확인 → ?dryRun=false (반영).
+      enabled: ${APP_SELLER_TIER_AUTO_EVALUATE_ENABLED:false}
+  search:
+    enabled: false
+  jwt:
+    issuer: ${JWT_ISSUER}
+    secret: ${JWT_SECRET}
+    ttl-seconds: ${JWT_TTL_SECONDS}
+  # 주문 알림 멀티채널 (Strategy + Composite). 메일은 항상 활성, Slack 은 opt-in.
+  #
+  # 예전에 있던 app.alerting.slack.{webhook-url,channel,enabled} 는 2026-08-20 고아 파라미터
+  # 감사에서 읽는 코드가 하나도 없음이 확인돼 제거했다. 실제 슬랙 연동은 아래 app.notification.slack
+  # (SlackOrderNotificationChannel 의 @ConditionalOnProperty/@Value)이 전부다. 두 벌이 남아 있으면
+  # 운영자가 죽은 쪽에 값을 넣고 "왜 알림이 안 오지" 를 하게 된다 — 설정은 읽히는 것만 남긴다.
+  notification:
+    slack:
+      enabled: ${APP_NOTIFICATION_SLACK_ENABLED:false}
+      webhook-url: ${APP_NOTIFICATION_SLACK_WEBHOOK_URL:}
+  mail:
+    # from 만 읽힌다(MailOrderNotificationChannel, EmailAdapter). 함께 있던 support-email 은
+    # 읽는 코드가 없어 2026-08-20 감사에서 제거했다 — 필요해지면 그때 소비자와 함께 추가한다.
+    from: ${MAIL_FROM:}
+  password-reset:
+    token-expiry-minutes: 30
+    base-url: ${APP_BASE_URL:http://localhost:5173}
+
+toss:
+  secret-key: ${TOSS_SECRET_KEY}
+  api-url: https://api.tosspayments.com/v1/payments/confirm
+  # 환불(취소) 엔드포인트. {paymentKey} 는 RestTemplate 의 URI 변수로 치환된다 — 문자열 연결로
+  # 바꾸지 말 것(paymentKey 가 URL 인코딩되지 않는다).
+  cancel-url: https://api.tosspayments.com/v1/payments/{paymentKey}/cancel
+
+# Resilience4j — PG 별 독립 CircuitBreaker (한 PG 장애가 다른 PG 로 전이되지 않도록 격벽)
+resilience4j:
+  circuitbreaker:
+    configs:
+      pgDefault:
+        registerHealthIndicator: true
+        slidingWindowType: COUNT_BASED
+        slidingWindowSize: 20 # 최근 20회 요청 기준
+        minimumNumberOfCalls: 10 # 최소 10건 수집 후 판정
+        failureRateThreshold: 50 # 50% 이상 실패면 OPEN
+        waitDurationInOpenState: 30s # OPEN → HALF_OPEN 대기
+        permittedNumberOfCallsInHalfOpenState: 5
+        automaticTransitionFromOpenToHalfOpenEnabled: true
+        # 4xx 는 PG 쪽의 비즈니스 오류 (결제키 만료 등) 이므로 서킷 판정에서 제외
+        ignoreExceptions:
+          - org.springframework.web.client.HttpClientErrorException
+    instances:
+      tossPg:
+        baseConfig: pgDefault
+      kcpPg:
+        baseConfig: pgDefault
+      nicePg:
+        baseConfig: pgDefault
+      inicisPg:
+        baseConfig: pgDefault
+      # 현금영수증 대행 — PG 결제와 격벽을 나눈다(세금 서류 장애가 결제를 끊지 않도록)
+      cashReceipt:
+        baseConfig: pgDefault
+  retry:
+    configs:
+      pgDefault:
+        maxAttempts: 3
+        waitDuration: 500ms
+        enableExponentialBackoff: true
+        exponentialBackoffMultiplier: 2
+        # 4xx 는 재시도해도 똑같이 실패 — 재시도 안 함
+        ignoreExceptions:
+          - org.springframework.web.client.HttpClientErrorException
+        retryExceptions:
+          - org.springframework.web.client.ResourceAccessException
+          - org.springframework.web.client.HttpServerErrorException
+          - java.io.IOException
+    instances:
+      tossPg:
+        baseConfig: pgDefault
+      kcpPg:
+        baseConfig: pgDefault
+      nicePg:
+        baseConfig: pgDefault
+      inicisPg:
+        baseConfig: pgDefault
+      cashReceipt:
+        baseConfig: pgDefault
+
+# 데모 자동로그인 / 게스트 토글. 운영 false, dev/demo true.
+lemuel:
+  demo:
+    enabled: ${LEMUEL_DEMO_ENABLED:false}

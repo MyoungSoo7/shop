@@ -1,0 +1,16 @@
+{
+  "sourceCode": "molit-apt-trade",
+  "count": 2,
+  "records": [
+    {
+      "recordKey": "11680-래미안-2026-05",
+      "collectedAt": "2026-06-01T00:00:00Z",
+      "data": { "dealAmount": "79,000", "aptNm": "래미안", "excluUseAr": "84.98" }
+    },
+    {
+      "recordKey": "11680-래미안-2026-06",
+      "collectedAt": "2026-07-01T00:00:00Z",
+      "data": { "dealAmount": "84,000", "aptNm": "래미안", "excluUseAr": "84.98" }
+    }
+  ]
+}

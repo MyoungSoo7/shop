@@ -1,0 +1,21 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "lemuel.seller.tier_changed",
+  "description": "셀러 등급이 변경된 사실 (ADR 0031). 등급 변경은 비소급이다 — 정산 계산은 결제 시점 등급(PaymentCaptured 동봉값)을 그대로 쓰고, 변경된 등급은 이후 정산부터 반영된다(ADR 0014 §4). prevTier 는 최초 부여 시 null.",
+  "type": "object",
+  "properties": {
+    "sellerId": { "type": "integer" },
+    "prevTier": { "type": ["string", "null"], "enum": ["NORMAL", "VIP", "STRATEGIC", null] },
+    "newTier": { "type": "string", "enum": ["NORMAL", "VIP", "STRATEGIC"] },
+    "reason": {
+      "type": "string",
+      "enum": ["AUTO_PROMOTION", "AUTO_DEMOTION", "ADMIN_OVERRIDE", "BACKFILL"],
+      "description": "BACKFILL 은 등급 변경이 아니라 이미 확정된 등급의 재발행(프로젝션 초기 적재)이다. 소비측이 '이때 바뀌었다'로 해석하면 백필 시각이 변경일로 둔갑한다."
+    },
+    "effectiveFrom": { "type": "string", "format": "date" },
+    "basisAmount": { "type": "string", "description": "판정 근거 12개월 결제 순액. 정밀도 손실 방지를 위해 문자열(toPlainString). 관리자 지정처럼 근거 금액이 없으면 null 이 아니라 필드 자체를 생략한다(required 아님) — 금액 필드는 JSON string 만 허용(DATA-STANDARD N5)" },
+    "occurredAt": { "type": "string" }
+  },
+  "required": ["sellerId", "prevTier", "newTier", "reason", "effectiveFrom", "occurredAt"],
+  "additionalProperties": true
+}

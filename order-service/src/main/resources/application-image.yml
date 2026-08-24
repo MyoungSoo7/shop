@@ -1,0 +1,10 @@
+# 이미지 업로드 저장 위치만 덮어쓰는 프로파일.
+#
+# 크기 한도(spring.servlet.multipart.*)는 여기 두지 않는다 — 이 프로파일은 프로덕션에서
+# 활성화되지 않으므로, 한도를 여기 적으면 "적혀 있는데 적용되지 않는" 설정이 된다.
+# 실제로 그 상태로 있었다: 5MB 라고 적힌 채 운영은 스프링 기본값 1MB 로 돌았다.
+# 한도는 application.yml 이 소유하고, 환경별 조정은 APP_UPLOAD_MAX_FILE_SIZE 로 한다.
+app:
+  upload:
+    dir: /data/uploads
+    base-url: /assets

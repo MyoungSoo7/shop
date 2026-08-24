@@ -1,0 +1,16 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "lemuel.order.created",
+  "description": "주문이 생성된 사실. 금액은 BigDecimal.toPlainString() 문자열(null 이면 프로듀서가 \"0\" 으로 발행).",
+  "type": "object",
+  "properties": {
+    "orderId": { "type": "integer" },
+    "userId": { "type": "integer" },
+    "productId": { "type": "integer" },
+    "status": { "type": "string" },
+    "amount": { "type": "string", "pattern": "^-?[0-9]+(\\.[0-9]+)?$" },
+    "createdAt": { "type": "string", "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}(:[0-9]{2}(\\.[0-9]{1,9})?)?$" }
+  },
+  "required": ["orderId", "userId", "status", "amount"],
+  "additionalProperties": true
+}

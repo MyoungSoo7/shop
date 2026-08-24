@@ -1,0 +1,12 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "lemuel.user.registered",
+  "description": "사용자가 가입한 사실. email 은 항상 존재하되 null 허용 — 수신 측은 null-safe 로 파싱한다.",
+  "type": "object",
+  "properties": {
+    "userId": { "type": "integer" },
+    "email": { "type": ["string", "null"] }
+  },
+  "required": ["userId", "email"],
+  "additionalProperties": true
+}

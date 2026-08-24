@@ -1,0 +1,14 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "lemuel.organization.member_joined",
+  "description": "초대 수락으로 멤버가 조직에 합류(ACTIVE)한 사실. role 은 OWNER|MANAGER|STAFF.",
+  "type": "object",
+  "properties": {
+    "organizationId": { "type": "integer" },
+    "userId": { "type": "integer" },
+    "role": { "type": "string", "enum": ["OWNER", "MANAGER", "STAFF"] },
+    "membershipId": { "type": "integer" }
+  },
+  "required": ["organizationId", "userId", "role", "membershipId"],
+  "additionalProperties": true
+}

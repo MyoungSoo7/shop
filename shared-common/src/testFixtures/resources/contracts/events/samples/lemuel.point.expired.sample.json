@@ -1,0 +1,8 @@
+{
+  "userId": 42,
+  "accountId": 7,
+  "lotId": 55,
+  "amount": "1000",
+  "origin": "ORDER_EARN",
+  "occurredAt": "2027-08-19T03:40:00Z"
+}

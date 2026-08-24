@@ -1,0 +1,9 @@
+{
+  "sellerId": 777,
+  "prevTier": "NORMAL",
+  "newTier": "VIP",
+  "reason": "AUTO_PROMOTION",
+  "effectiveFrom": "2026-09-01",
+  "basisAmount": "612500000",
+  "occurredAt": "2026-09-01T03:00:00"
+}

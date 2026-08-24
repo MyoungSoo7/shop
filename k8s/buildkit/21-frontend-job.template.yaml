@@ -1,0 +1,84 @@
+# 프론트엔드 이미지를 굽는 Job 템플릿 — ci.yml 의 frontend-ghcr 잡 대응물.
+# 직접 apply 하지 말 것 — build.sh 가 __TOKEN__ 을 치환해 stdin 으로 넘긴다.
+#
+# 백엔드 Job(20-) 과 다른 점 3가지:
+#   ① 컨텍스트가 저장소 루트가 아니라 `#<ref>:frontend` 서브디렉터리다(ci.yml 의 context: ./frontend).
+#      → 루트 .dockerignore 가 아니라 frontend/.dockerignore 가 적용된다.
+#   ② VITE_* 빌드 인자가 있다. Vite 는 이 값을 **번들에 굽는다** — 런타임 환경변수로는 못 바꾼다.
+#      백엔드 이미지와 달리 "같은 이미지를 다른 환경에 재사용"이 불가능하다는 뜻이다.
+#   ③ 그래서 buildctl 을 sh 로 감싼다. 빌드 인자를 Job 스펙에 박으면 kubectl get job -o yaml 로
+#      전부 드러나므로, Secret 을 envFrom 으로 받아 런타임에 조립한다.
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: __JOB_NAME__
+  namespace: build
+  labels:
+    app.kubernetes.io/part-of: shop-ci
+    build.shop/module: frontend
+    # 따옴표 필수 — sha7 이 `23260e7` 같은 지수 표기로 읽히면 apply 가 거부된다(20- 템플릿 주석 참조).
+    build.shop/sha: "__SHORT_SHA__"
+spec:
+  backoffLimit: 1
+  ttlSecondsAfterFinished: 86400
+  activeDeadlineSeconds: 3600
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/part-of: shop-ci
+        build.shop/module: frontend
+    spec:
+      restartPolicy: Never
+      containers:
+        - name: buildctl
+          image: moby/buildkit:v0.20.2
+          env:
+            - name: BUILDKIT_HOST
+              value: tcp://buildkitd.build.svc.cluster.local:1234
+            - name: DOCKER_CONFIG
+              value: /docker
+          # 없으면 아래 기본값으로 빌드된다(optional: true) — ci.yml 의 `|| ''`, `|| 'test_ck_…'` 와 동일.
+          #   kubectl -n build create secret generic frontend-build-args \
+          #     --from-literal=VITE_API_BASE_URL=https://jen.lemuel.co.kr \
+          #     --from-literal=VITE_TOSS_CLIENT_KEY=<운영 클라이언트 키>
+          envFrom:
+            - secretRef:
+                name: frontend-build-args
+                optional: true
+          command: ["sh", "-c"]
+          args:
+            - |
+              set -eu
+              # ci.yml 의 기본값과 동일하게 맞춘다.
+              #   VITE_API_BASE_URL   : 빈 값 = 같은 오리진으로 호출(nginx 리버스 프록시 전제)
+              #   VITE_TOSS_CLIENT_KEY: 토스 공개 테스트 키(저장소에 이미 평문으로 있는 값)
+              : "${VITE_API_BASE_URL:=}"
+              : "${VITE_TOSS_CLIENT_KEY:=test_ck_D5GePWvyJnrK0W0k6q8gLzN97Eoq}"
+              echo "VITE_API_BASE_URL=${VITE_API_BASE_URL:-(빈 값)}"
+              exec buildctl build \
+                --frontend=dockerfile.v0 \
+                --opt context=https://github.com/MyoungSoo7/settlement.git#__GIT_REF__:frontend \
+                --opt filename=Dockerfile \
+                --opt build-arg:VITE_API_BASE_URL="$VITE_API_BASE_URL" \
+                --opt build-arg:VITE_TOSS_CLIENT_KEY="$VITE_TOSS_CLIENT_KEY" \
+                --opt platform=linux/amd64 \
+                --output 'type=image,"name=__TAGS__",push=true' \
+                --progress=plain
+          resources:
+            requests:
+              cpu: 50m
+              memory: 128Mi
+            limits:
+              cpu: "1"
+              memory: 512Mi
+          volumeMounts:
+            - name: ghcr-auth
+              mountPath: /docker
+              readOnly: true
+      volumes:
+        - name: ghcr-auth
+          secret:
+            secretName: ghcr-auth
+            items:
+              - key: .dockerconfigjson
+                path: config.json

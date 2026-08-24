@@ -1,0 +1,15 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "lemuel.organization.created",
+  "description": "조직이 생성된 사실. type 은 SELLER|CORPORATE, externalRef 는 nullable 비즈니스 키(sellerId 또는 stockCode). ownerUserId 는 생성자(자동 OWNER).",
+  "type": "object",
+  "properties": {
+    "organizationId": { "type": "integer" },
+    "name": { "type": "string" },
+    "type": { "type": "string", "enum": ["SELLER", "CORPORATE"] },
+    "externalRef": { "type": ["string", "null"] },
+    "ownerUserId": { "type": "integer" }
+  },
+  "required": ["organizationId", "name", "type", "ownerUserId"],
+  "additionalProperties": true
+}

@@ -1,0 +1,86 @@
+/**
+ * 인쇄 공용 스타일 — 리포트 도구(OZ Report 류)의 "용지·밴드·페이지브레이크·반복헤더"에
+ * 해당하는 부분을 웹 표준으로 대체한다. 인쇄 전용 라우트(/print/**)에서만 로드된다.
+ *
+ * 화면 미리보기와 실제 출력물이 **같은 폭**을 갖도록 좌표계를 mm 로 통일한다:
+ *   - 화면: .print-sheet 가 210mm 폭 + 14/12mm 안쪽 여백을 직접 그린다(흰 종이 흉내)
+ *   - 인쇄: 여백은 @page 가 담당하므로 .print-sheet 는 여백·그림자를 모두 벗는다
+ * 두 경로의 본문 폭이 186mm 로 같아, 미리보기에서 맞춘 줄바꿈이 종이에서도 그대로 나온다.
+ */
+
+@page {
+  size: A4 portrait;
+  margin: 14mm 12mm;
+}
+
+.print-sheet {
+  box-sizing: border-box;
+  width: 210mm;
+  min-height: 297mm;
+  margin: 24px auto;
+  padding: 14mm 12mm;
+  background: #ffffff;
+  box-shadow: 0 4px 24px rgba(0, 0, 0, 0.12);
+}
+
+@media print {
+  /* index.css 의 body flex/세로 중앙정렬은 인쇄에서 페이지 분할을 깨뜨린다 — 블록으로 되돌린다. */
+  html,
+  body {
+    display: block !important;
+    min-width: 0 !important;
+    min-height: 0 !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    background: #ffffff !important;
+  }
+
+  /* 표 헤더 배경·상태 뱃지 색이 인쇄에서 흰색으로 날아가지 않게 강제한다. */
+  *,
+  *::before,
+  *::after {
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+  }
+
+  /* 툴바·버튼 등 종이에 나오면 안 되는 요소 */
+  .no-print {
+    display: none !important;
+  }
+
+  .print-sheet {
+    width: auto;
+    min-height: 0;
+    margin: 0;
+    padding: 0;
+    box-shadow: none;
+  }
+
+  /* 여러 장으로 넘어가는 표: 페이지마다 헤더/푸터를 반복하고 행이 중간에 잘리지 않게 한다. */
+  thead {
+    display: table-header-group;
+  }
+  tfoot {
+    display: table-footer-group;
+  }
+  tr,
+  .print-keep {
+    break-inside: avoid;
+    page-break-inside: avoid;
+  }
+
+  /* 명시적 페이지 나눔 (문서 여러 건을 한 번에 뽑을 때 사용) */
+  .print-break-after {
+    break-after: page;
+    page-break-after: always;
+  }
+  .print-break-before {
+    break-before: page;
+    page-break-before: always;
+  }
+
+  /* 일부 브라우저가 링크 뒤에 URL 을 덧붙이는 것을 막는다. */
+  a[href]::after {
+    content: none !important;
+  }
+}

@@ -1,0 +1,425 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>바둑</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;700&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --bg: #1a1a1f;
+      --board-bg: #dcb35c;
+      --board-line: #8b6914;
+      --stone-black: #1a1a1a;
+      --stone-white: #f5f5f0;
+      --text: #e8e6e3;
+      --accent: #c9a227;
+    }
+
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+
+    body {
+      min-height: 100vh;
+      background: var(--bg);
+      font-family: 'Noto Sans KR', sans-serif;
+      color: var(--text);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      padding: 1rem;
+      background-image: radial-gradient(ellipse at 30% 70%, rgba(201, 162, 39, 0.08) 0%, transparent 50%);
+    }
+
+    h1 {
+      font-size: 1.75rem;
+      font-weight: 700;
+      margin-bottom: 0.5rem;
+      color: var(--accent);
+    }
+
+    .subtitle {
+      font-size: 0.85rem;
+      opacity: 0.8;
+      margin-bottom: 1rem;
+    }
+
+    .game-wrap {
+      display: flex;
+      gap: 1.5rem;
+      align-items: flex-start;
+      flex-wrap: wrap;
+      justify-content: center;
+    }
+
+    .board-wrap {
+      padding: 16px;
+      background: linear-gradient(145deg, #2a2520 0%, #1f1c18 100%);
+      border-radius: 12px;
+      box-shadow: 0 4px 24px rgba(0,0,0,0.4);
+      border: 1px solid rgba(201, 162, 39, 0.2);
+    }
+
+    #board {
+      display: block;
+      background: var(--board-bg);
+      border-radius: 4px;
+      cursor: pointer;
+      box-shadow: inset 0 0 20px rgba(139, 105, 20, 0.3);
+    }
+
+    .sidebar {
+      min-width: 180px;
+      display: flex;
+      flex-direction: column;
+      gap: 1rem;
+    }
+
+    .turn-indicator {
+      padding: 1rem;
+      background: rgba(255,255,255,0.05);
+      border-radius: 8px;
+      border: 1px solid rgba(255,255,255,0.08);
+      text-align: center;
+    }
+
+    .turn-label { font-size: 0.8rem; opacity: 0.7; margin-bottom: 0.25rem; }
+    .turn-stone {
+      width: 28px;
+      height: 28px;
+      border-radius: 50%;
+      margin: 0.4rem auto;
+      box-shadow: 0 2px 6px rgba(0,0,0,0.3);
+    }
+    .turn-stone.black { background: radial-gradient(circle at 35% 35%, #3a3a3a, var(--stone-black)); }
+    .turn-stone.white { background: radial-gradient(circle at 35% 35%, #fff, #ddd); border: 1px solid #ccc; }
+
+    .status {
+      padding: 0.75rem;
+      border-radius: 8px;
+      background: rgba(255,255,255,0.05);
+      border: 1px solid rgba(255,255,255,0.08);
+      font-size: 0.9rem;
+      text-align: center;
+    }
+
+    .captured { font-size: 1.1rem; margin-top: 0.25rem; }
+    button {
+      padding: 0.7rem 1rem;
+      font-family: inherit;
+      font-size: 0.9rem;
+      font-weight: 700;
+      color: var(--bg);
+      background: var(--accent);
+      border: none;
+      border-radius: 8px;
+      cursor: pointer;
+    }
+    button:hover { filter: brightness(1.1); }
+    button.pass { background: #4a5568; }
+    button.pass:hover { filter: brightness(1.15); }
+  </style>
+</head>
+<body>
+  <h1>바둑</h1>
+  <p class="subtitle">흑·백이 번갈아 두고, 상대 돌을 포위해 잡거나 넓이를 다툽니다. 연속 패스로 종료.</p>
+
+  <div class="game-wrap">
+    <div class="board-wrap">
+      <canvas id="board"></canvas>
+    </div>
+    <div class="sidebar">
+      <div class="turn-indicator">
+        <div class="turn-label">차례</div>
+        <div id="turnStone" class="turn-stone black"></div>
+        <span id="turnText">흑</span>
+      </div>
+      <div id="status" class="status">
+        <div>흑 차례</div>
+        <div class="captured">잡은 돌: 흑 <span id="capB">0</span> · 백 <span id="capW">0</span></div>
+      </div>
+      <button type="button" id="pass" class="pass">패스</button>
+      <button type="button" id="restart">새 게임</button>
+    </div>
+  </div>
+
+  <script>
+    (function () {
+      const SIZE = 19;
+      const CELL = 22;
+      const PADDING = CELL * 0.5;
+      const STONE_R = CELL * 0.44;
+      const CANVAS_SIZE = (SIZE - 1) * CELL + PADDING * 2;
+
+      const canvas = document.getElementById('board');
+      const ctx = canvas.getContext('2d');
+      const statusEl = document.getElementById('status');
+      const turnStoneEl = document.getElementById('turnStone');
+      const turnTextEl = document.getElementById('turnText');
+      const capBEl = document.getElementById('capB');
+      const capWEl = document.getElementById('capW');
+      const passBtn = document.getElementById('pass');
+      const restartBtn = document.getElementById('restart');
+
+      let board = [];
+      let currentPlayer = 1; // 1 = 흑, -1 = 백
+      let captured = { 1: 0, [-1]: 0 };
+      let lastMove = null;
+      let lastBoardSnapshot = null; // ko
+      let consecutivePass = 0;
+      let gameOver = false;
+
+      function initBoard() {
+        board = Array(SIZE).fill(null).map(() => Array(SIZE).fill(0));
+        currentPlayer = 1;
+        captured = { 1: 0, [-1]: 0 };
+        lastMove = null;
+        lastBoardSnapshot = null;
+        consecutivePass = 0;
+        gameOver = false;
+        updateUI();
+        draw();
+      }
+
+      function boardSnapshot() {
+        return board.map(r => r.join(',')).join('|');
+      }
+
+      function getGroup(i, j) {
+        const color = board[i][j];
+        if (color === 0) return { stones: [], liberties: new Set() };
+        const stones = [];
+        const liberties = new Set();
+        const visited = Array(SIZE).fill(null).map(() => Array(SIZE).fill(false));
+
+        function dfs(r, c) {
+          if (r < 0 || r >= SIZE || c < 0 || c >= SIZE || visited[r][c]) return;
+          visited[r][c] = true;
+          if (board[r][c] === 0) {
+            liberties.add(r * SIZE + c);
+            return;
+          }
+          if (board[r][c] !== color) return;
+          stones.push({ r, c });
+          dfs(r - 1, c);
+          dfs(r + 1, c);
+          dfs(r, c - 1);
+          dfs(r, c + 1);
+        }
+        dfs(i, j);
+        return { stones, liberties };
+      }
+
+      function countLiberties(i, j) {
+        return getGroup(i, j).liberties.size;
+      }
+
+      function removeGroup(i, j) {
+        const color = board[i][j];
+        if (color === 0) return 0;
+        const { stones } = getGroup(i, j);
+        stones.forEach(({ r, c }) => { board[r][c] = 0; });
+        return stones.length;
+      }
+
+      function wouldHaveLiberty(i, j, color) {
+        const opp = -color;
+        const copy = board.map(r => [...r]);
+        copy[i][j] = color;
+        [[-1,0],[1,0],[0,-1],[0,1]].forEach(([di, dj]) => {
+          const ni = i + di, nj = j + dj;
+          if (ni >= 0 && ni < SIZE && nj >= 0 && nj < SIZE && copy[ni][nj] === opp) {
+            const g = getGroupFrom(ni, nj, copy, opp);
+            if (g.liberties.size === 0)
+              g.stones.forEach(({ r, c }) => { copy[r][c] = 0; });
+          }
+        });
+        return getGroupFrom(i, j, copy, color).liberties.size > 0;
+      }
+
+      function getGroupFrom(i, j, b, color) {
+        const stones = [];
+        const liberties = new Set();
+        const visited = Array(SIZE).fill(null).map(() => Array(SIZE).fill(false));
+        function dfs(r, c) {
+          if (r < 0 || r >= SIZE || c < 0 || c >= SIZE || visited[r][c]) return;
+          visited[r][c] = true;
+          if (b[r][c] === 0) { liberties.add(r * SIZE + c); return; }
+          if (b[r][c] !== color) return;
+          stones.push({ r, c });
+          dfs(r-1,c); dfs(r+1,c); dfs(r,c-1); dfs(r,c+1);
+        }
+        dfs(i, j);
+        return { stones, liberties };
+      }
+
+      function isValidMove(i, j) {
+        if (board[i][j] !== 0) return false;
+        const color = currentPlayer;
+        const opp = -color;
+        let wouldCapture = 0;
+        [[-1,0],[1,0],[0,-1],[0,1]].forEach(([di, dj]) => {
+          const ni = i + di, nj = j + dj;
+          if (ni >= 0 && ni < SIZE && nj >= 0 && nj < SIZE && board[ni][nj] === opp) {
+            if (countLiberties(ni, nj) === 1) wouldCapture += getGroup(ni, nj).stones.length;
+          }
+        });
+        const hasLibertyAfter = wouldHaveLiberty(i, j, color);
+        if (!hasLibertyAfter && wouldCapture === 0) return false;
+        const nextSnapshot = simulateMove(i, j);
+        if (lastBoardSnapshot && nextSnapshot === lastBoardSnapshot) return false;
+        return true;
+      }
+
+      function simulateMove(i, j) {
+        const b = board.map(r => [...r]);
+        const color = currentPlayer;
+        const opp = -color;
+        b[i][j] = color;
+        for (let r = 0; r < SIZE; r++)
+          for (let c = 0; c < SIZE; c++)
+            if (b[r][c] === opp && getGroupLibsFrom(b, r, c, opp) === 0)
+              getGroupFrom(r, c, b, opp).stones.forEach(({ r: rr, c: cc }) => { b[rr][cc] = 0; });
+        return b.map(row => row.join(',')).join('|');
+      }
+
+      function getGroupLibsFrom(b, i, j, color) {
+        return getGroupFrom(i, j, b, color).liberties.size;
+      }
+
+      function placeStone(i, j) {
+        if (gameOver || !isValidMove(i, j)) return;
+        const color = currentPlayer;
+        const opp = -color;
+        lastBoardSnapshot = boardSnapshot();
+        board[i][j] = color;
+        [[-1,0],[1,0],[0,-1],[0,1]].forEach(([di, dj]) => {
+          const ni = i + di, nj = j + dj;
+          if (ni >= 0 && ni < SIZE && nj >= 0 && nj < SIZE && board[ni][nj] === opp && countLiberties(ni, nj) === 0) {
+            const n = removeGroup(ni, nj);
+            captured[color] += n;
+          }
+        });
+        lastMove = { i, j };
+        consecutivePass = 0;
+        currentPlayer = opp;
+        updateUI();
+        draw();
+      }
+
+      function pass() {
+        if (gameOver) return;
+        consecutivePass++;
+        lastBoardSnapshot = null;
+        lastMove = null;
+        if (consecutivePass >= 2) {
+          gameOver = true;
+          statusEl.innerHTML = '게임 종료 (연속 패스)<br><span class="captured">잡은 돌: 흑 ' + captured[1] + ' · 백 ' + captured[-1] + '</span>';
+        } else {
+          currentPlayer = -currentPlayer;
+          updateUI();
+          draw();
+        }
+      }
+
+      function updateUI() {
+        if (gameOver) return;
+        turnStoneEl.className = 'turn-stone ' + (currentPlayer === 1 ? 'black' : 'white');
+        turnTextEl.textContent = currentPlayer === 1 ? '흑' : '백';
+        statusEl.innerHTML = (currentPlayer === 1 ? '흑' : '백') + ' 차례<br><span class="captured">잡은 돌: 흑 <span id="capB">' + captured[1] + '</span> · 백 <span id="capW">' + captured[-1] + '</span></span>';
+        capBEl.textContent = captured[1];
+        capWEl.textContent = captured[-1];
+      }
+
+      function draw() {
+        const dpr = window.devicePixelRatio || 1;
+        if (canvas.width !== CANVAS_SIZE * dpr || canvas.height !== CANVAS_SIZE * dpr) {
+          canvas.width = CANVAS_SIZE * dpr;
+          canvas.height = CANVAS_SIZE * dpr;
+          canvas.style.width = CANVAS_SIZE + 'px';
+          canvas.style.height = CANVAS_SIZE + 'px';
+          ctx.scale(dpr, dpr);
+        }
+        const w = CANVAS_SIZE, h = CANVAS_SIZE;
+        ctx.fillStyle = '#dcb35c';
+        ctx.fillRect(0, 0, w, h);
+        ctx.strokeStyle = '#8b6914';
+        ctx.lineWidth = 1;
+        for (let i = 0; i < SIZE; i++) {
+          const p = PADDING + i * CELL;
+          ctx.beginPath();
+          ctx.moveTo(PADDING, p);
+          ctx.lineTo(PADDING + (SIZE - 1) * CELL, p);
+          ctx.stroke();
+          ctx.beginPath();
+          ctx.moveTo(p, PADDING);
+          ctx.lineTo(p, PADDING + (SIZE - 1) * CELL);
+          ctx.stroke();
+        }
+        const star = [3, 9, 15];
+        if (SIZE === 19) {
+          [3, 9, 15].forEach(i => [3, 9, 15].forEach(j => {
+            const x = PADDING + i * CELL, y = PADDING + j * CELL;
+            ctx.fillStyle = '#8b6914';
+            ctx.beginPath();
+            ctx.arc(x, y, 3, 0, Math.PI * 2);
+            ctx.fill();
+          }));
+        }
+        for (let i = 0; i < SIZE; i++) {
+          for (let j = 0; j < SIZE; j++) {
+            const v = board[i][j];
+            if (v === 0) continue;
+            const x = PADDING + j * CELL, y = PADDING + i * CELL;
+            if (v === 1) {
+              ctx.fillStyle = '#1a1a1a';
+              ctx.beginPath();
+              ctx.arc(x, y, STONE_R, 0, Math.PI * 2);
+              ctx.fill();
+              ctx.strokeStyle = '#333';
+              ctx.lineWidth = 1;
+              ctx.stroke();
+            } else {
+              ctx.fillStyle = '#f5f5f0';
+              ctx.beginPath();
+              ctx.arc(x, y, STONE_R, 0, Math.PI * 2);
+              ctx.fill();
+              ctx.strokeStyle = '#ccc';
+              ctx.lineWidth = 1;
+              ctx.stroke();
+            }
+          }
+        }
+        if (lastMove) {
+          const x = PADDING + lastMove.j * CELL, y = PADDING + lastMove.i * CELL;
+          ctx.fillStyle = board[lastMove.i][lastMove.j] === 1 ? '#fff' : '#000';
+          ctx.beginPath();
+          ctx.arc(x, y, 4, 0, Math.PI * 2);
+          ctx.fill();
+        }
+      }
+
+      function xyToIndex(x, y) {
+        const rect = canvas.getBoundingClientRect();
+        const scaleX = (rect.right - rect.left) / CANVAS_SIZE;
+        const scaleY = (rect.bottom - rect.top) / CANVAS_SIZE;
+        const px = (x - rect.left) / scaleX, py = (y - rect.top) / scaleY;
+        const j = Math.round((px - PADDING) / CELL), i = Math.round((py - PADDING) / CELL);
+        if (i < 0 || i >= SIZE || j < 0 || j >= SIZE) return null;
+        return { i, j };
+      }
+
+      canvas.addEventListener('click', function (e) {
+        const pos = xyToIndex(e.clientX, e.clientY);
+        if (pos) placeStone(pos.i, pos.j);
+      });
+      passBtn.addEventListener('click', pass);
+      restartBtn.addEventListener('click', initBoard);
+
+      initBoard();
+    })();
+  </script>
+</body>
+</html>

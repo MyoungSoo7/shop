@@ -1,0 +1,288 @@
+groups:
+  - name: lemuel_refund_alerts
+    interval: 30s
+    rules:
+      # 환불 실패율 높음 (5분간 10% 이상 실패)
+      - alert: HighRefundFailureRate
+        expr: |
+          (
+            rate(refund_failed_total{job="lemuel"}[5m])
+            /
+            rate(refund_requests_total{job="lemuel"}[5m])
+          ) > 0.1
+        for: 3m
+        labels:
+          severity: critical
+          component: refund
+        annotations:
+          summary: "환불 실패율 높음"
+          description: "최근 5분간 환불 실패율이 {{ $value | humanizePercentage }}로 10%를 초과했습니다."
+          runbook_url: "https://github.com/MyoungSoo7/lemuel/wiki/Refund-Failure-Rate"
+
+      # 환불 요청 급증 (평소 대비 5배 이상)
+      - alert: RefundRequestSpike
+        expr: |
+          rate(refund_requests_total{job="lemuel"}[5m])
+          >
+          5 * avg_over_time(rate(refund_requests_total{job="lemuel"}[5m])[1h:5m])
+        for: 5m
+        labels:
+          severity: warning
+          component: refund
+        annotations:
+          summary: "환불 요청 급증 감지"
+          description: "현재 환불 요청률이 평소 대비 5배 이상 증가했습니다. 현재: {{ $value | humanize }}/sec"
+
+      # 환불 처리 시간 지연
+      - alert: RefundProcessingSlow
+        expr: histogram_quantile(0.95, rate(refund_processing_duration_seconds_bucket[5m])) > 5
+        for: 5m
+        labels:
+          severity: warning
+          component: refund
+        annotations:
+          summary: "환불 처리 시간 지연"
+          description: "환불 처리의 95 percentile 시간이 {{ $value }}초로 5초를 초과했습니다."
+
+      # Idempotency Key 재사용 급증
+      - alert: HighIdempotencyKeyReuse
+        expr: rate(idempotency_key_reuse_total{job="lemuel"}[5m]) > 10
+        for: 5m
+        labels:
+          severity: warning
+          component: refund
+        annotations:
+          summary: "Idempotency Key 재사용 빈도 높음"
+          description: "최근 5분간 초당 {{ $value | humanize }}건의 중복 요청이 발생하고 있습니다. 클라이언트 재시도 로직을 확인하세요."
+
+  - name: lemuel_health_alerts
+    interval: 30s
+    rules:
+      # 헬스 체크 실패
+      - alert: ApplicationHealthDown
+        expr: up{job="lemuel"} == 0
+        for: 1m
+        labels:
+          severity: critical
+          component: application
+        annotations:
+          summary: "애플리케이션 다운"
+          description: "Lemuel 애플리케이션이 응답하지 않습니다. instance={{ $labels.instance }}"
+
+      # Custom Health Indicator - 배치 상태 불량
+      - alert: SettlementBatchHealthWarning
+        expr: health_status{component="settlementBatch"} == 0
+        for: 5m
+        labels:
+          severity: warning
+          component: settlement-batch
+        annotations:
+          summary: "정산 배치 헬스 체크 경고"
+          description: "정산 배치 헬스 체크가 WARNING 상태입니다. PENDING 건수를 확인하세요."
+
+  - name: lemuel_performance_alerts
+    interval: 1m
+    rules:
+      # JVM 메모리 사용률 높음
+      - alert: HighJVMMemoryUsage
+        expr: |
+          (
+            jvm_memory_used_bytes{job="lemuel", area="heap"}
+            /
+            jvm_memory_max_bytes{job="lemuel", area="heap"}
+          ) > 0.85
+        for: 5m
+        labels:
+          severity: warning
+          component: jvm
+        annotations:
+          summary: "JVM Heap 메모리 사용률 높음"
+          description: "Heap 메모리 사용률이 {{ $value | humanizePercentage }}로 85%를 초과했습니다."
+
+      # DB 커넥션 풀 고갈 임박
+      - alert: DatabaseConnectionPoolNearExhaustion
+        expr: |
+          (
+            hikaricp_connections_active{pool="HikariPool-1"}
+            /
+            hikaricp_connections_max{pool="HikariPool-1"}
+          ) > 0.8
+        for: 3m
+        labels:
+          severity: warning
+          component: database
+        annotations:
+          summary: "DB 커넥션 풀 고갈 임박"
+          description: "DB 커넥션 사용률이 {{ $value | humanizePercentage }}로 80%를 초과했습니다."
+
+  - name: lemuel_outbox_alerts
+    interval: 30s
+    rules:
+      # Outbox PENDING 적체 — 폴러 이슈나 외부 시스템 장애 신호
+      - alert: OutboxPendingBacklog
+        expr: outbox_pending_count > 1000
+        for: 5m
+        labels:
+          severity: warning
+          component: outbox
+        annotations:
+          summary: "Outbox PENDING 적체"
+          description: "outbox_events 테이블 PENDING 건수가 {{ $value }}건으로 1000을 초과했습니다. OutboxPublisherScheduler 또는 외부 발행 경로를 확인하세요."
+
+      - alert: OutboxPendingCritical
+        expr: outbox_pending_count > 10000
+        for: 2m
+        labels:
+          severity: critical
+          component: outbox
+        annotations:
+          summary: "Outbox 심각한 적체 — 이벤트 유실 위험"
+          description: "outbox_events PENDING 건수가 {{ $value }}건. 발행 파이프라인 완전 정지 가능성. 즉시 대응."
+
+      # Outbox 발행 지연 — p95 초과
+      - alert: OutboxPublishSlow
+        expr: histogram_quantile(0.95, rate(outbox_publish_duration_seconds_bucket[5m])) > 2
+        for: 10m
+        labels:
+          severity: warning
+          component: outbox
+        annotations:
+          summary: "Outbox 발행 p95 지연 > 2s"
+          description: "단일 outbox 이벤트 외부 발행 p95 가 {{ $value }}초. 네트워크 또는 외부 시스템 응답 확인."
+
+  - name: lemuel_kafka_dlt_alerts
+    interval: 30s
+    rules:
+      # 알림 슬라이스(operation-service)는 자체 저장소도 replay 콘솔도 없다(무영속). 즉 DLT 로 간 알림을
+      # 되살릴 자동 경로가 없으므로 "격리가 일어났다" 자체를 즉시 알아야 한다 — settlement 보다 임계를
+      # 낮게 잡는다(0.01/s = 5분 평균 3건). 정상 운영에서는 0 이어야 한다.
+      #
+      # ★ 메트릭 이름이 바뀌었다(ADR 0041): 폴리글랏 시절 자체 Kotlin 설정이 내던
+      # notification_kafka_dlt_published_total → operation-service 가 shared-common
+      # KafkaConsumerErrorHandlingConfig 를 쓰면서 접두가 spring.application.name(lemuel-operation)
+      # 유래로 통일됐다. 그 대가로 이 카운터는 operation 의 모든 컨슈머를 합산한다 — 다만 신호
+      # 컨슈머(DomainEventSignalConsumer·OpsFailureSignalConsumer)는 적재 실패도 ack 하고 넘어가
+      # DLT 로 가지 않으므로, 실질적으로 이 값이 오르는 경로는 알림뿐이다.
+      - alert: NotificationKafkaDltPublishedSpike
+        expr: rate(operation_kafka_dlt_published_total{job="operation"}[5m]) > 0.01
+        for: 2m
+        labels:
+          severity: critical
+          component: kafka-consumer
+        annotations:
+          summary: "알림 이벤트가 DLT 로 격리되는 중 (replay 자동 경로 없음)"
+          description: |
+            최근 5 분간 operation-service 알림 슬라이스가 초당 {{ $value | humanize }} 건을 DLT 로 라우팅 중.
+            가능한 원인:
+              - 계약 드리프트 (파싱 불가 페이로드 → UnparseableEventPayloadException)
+              - 활성 채널 전멸 (전 채널 실패 → NotificationDispatchFailedException)
+            대응:
+              1. rpk topic consume <원본토픽>.DLT --num 20 — 페이로드와 kafka_dlt-exception-fqcn 확인
+              2. 채널 장애면 채널 복구, 계약 드리프트면 프로듀서/템플릿 수정
+              3. 원본 토픽에 재투입 (rpk 직접 produce 시 -z none 필수)
+            이 슬라이스에는 /admin/dlq 가 없다 — settlement 와 달리 수작업 경로뿐이다. ADR 0017 참조.
+          runbook_url: "https://github.com/MyoungSoo7/settlement/blob/develop/docs/runbook/notification-dlt.md"
+
+      # DLT publish 발생 — 정산 시작점 이벤트가 처리 실패한 것 — 즉시 운영자 호출
+      # 임계 0.1/s = 5 분 평균 30 건 이상 DLT 라우팅. 정상 운영에서는 0 이어야 함.
+      - alert: SettlementKafkaDltPublishedSpike
+        expr: rate(settlement_kafka_dlt_published_total{job="lemuel"}[5m]) > 0.1
+        for: 2m
+        labels:
+          severity: critical
+          component: kafka-consumer
+        annotations:
+          summary: "Kafka 컨슈머 DLT 라우팅 빈도 임계 초과"
+          description: |
+            최근 5 분간 settlement-service 가 초당 {{ $value | humanize }} 건의 메시지를 DLT 로 라우팅 중.
+            가능한 원인:
+              - 페이로드 스키마 변경 (producer-consumer drift)
+              - 도메인 검증 실패 (정산 인풋 무효)
+              - 컨슈머 버그
+            대응:
+              1. GET /admin/dlq/inspect?topic=lemuel.payment.captured.DLT&max=20 — 페이로드/예외 확인
+              2. 페이로드 패치 또는 컨슈머 핫픽스
+              3. POST /admin/dlq/replay 로 재처리
+            ADR 0017 참조.
+
+      # DLT 단 한 건이라도 발생 — 정상이 0 이어야 하는 환경에서는 즉시 알림 (개발/스테이징 권장)
+      - alert: SettlementKafkaDltAnyMessage
+        expr: increase(settlement_kafka_dlt_published_total{job="lemuel"}[10m]) > 0
+        for: 1m
+        labels:
+          severity: warning
+          component: kafka-consumer
+        annotations:
+          summary: "Kafka DLT 메시지 발생 (정상 운영에선 0)"
+          description: "최근 10 분간 {{ $value }} 건이 DLT 로 라우팅됨. 운영자가 inspect/replay 결정 필요."
+
+      # 재시도 빈발 = 백엔드 (DB·외부 API) 불안 신호
+      # 정상 운영에선 transient 거의 없으므로 재시도가 잦으면 인프라 점검 신호
+      - alert: SettlementKafkaRetrySpike
+        expr: rate(settlement_kafka_retry_total{job="lemuel"}[5m]) > 1
+        for: 5m
+        labels:
+          severity: warning
+          component: kafka-consumer
+        annotations:
+          summary: "Kafka 컨슈머 재시도 빈도 임계 초과 — 백엔드 불안 가능성"
+          description: |
+            settlement-service Kafka 컨슈머 재시도가 초당 {{ $value | humanize }} 건. 6 초 backoff 가 SLA 잠식.
+            점검 항목:
+              - DB 락 / 커넥션 풀 (HikariCP)
+              - 외부 의존성 응답시간
+              - 컨슈머 트랜잭션 시간
+
+      # Replay 행위 감시 — 운영자가 실수로 폭주시키지 않는지 확인
+      # 5 분 내 100 건 이상 replay = 무한루프 또는 운영자 실수 가능성
+      - alert: SettlementKafkaDltReplaySurge
+        expr: increase(settlement_kafka_dlt_replayed_total{job="lemuel"}[5m]) > 100
+        for: 1m
+        labels:
+          severity: warning
+          component: kafka-consumer
+        annotations:
+          summary: "DLT replay 폭주 — 운영자 실수 또는 무한루프 의심"
+          description: |
+            최근 5 분 내 {{ $value }} 건 replay. x-replay-count 5 회 cap 이 작동 중인지 확인.
+            audit_logs 에서 operator 추적 필요.
+
+  # ──────────────────────────────────────────────────────────────────────
+  # Settlement 로컬 프로젝션 (CQRS read model) — ADR 0020 Phase 5.6
+  # order 이벤트가 settlement_db 프로젝션에 반영되는 지연/처리량 감시.
+  # DB 물리 분리(Phase 4) 후 eventual consistency 의 lag 를 운영에서 관측.
+  # 메트릭: SettlementProjectionMetrics / SettlementProjectionGauges 노출.
+  # ──────────────────────────────────────────────────────────────────────
+  - name: lemuel_operation_alerts
+    interval: 30s
+    rules:
+      - alert: OperationServiceDown
+        expr: up{job="operation"} == 0
+        for: 1m
+        labels:
+          severity: critical
+          component: operation
+        annotations:
+          summary: "operation-service 다운 — 인시던트 수집 중단"
+          description: "webhook 수신이 멈춥니다. 복구 후엔 Alertmanager 재전송(repeat_interval)이 놓친 알람을 보상하지만 즉시 확인 필요."
+
+  # ──────────────────────────────────────────────────────────────────────
+  # HTTP 에러율 — 전 서비스 공통(http_server_requests). 4xx+5xx 비율이 임계 초과 시.
+  # ──────────────────────────────────────────────────────────────────────
+  - name: lemuel_http_error_alerts
+    interval: 15s
+    rules:
+      - alert: HighHttpErrorRate
+        expr: |
+          100 * sum(rate(http_server_requests_seconds_count{job="lemuel",status=~"4..|5.."}[1m]))
+              / sum(rate(http_server_requests_seconds_count{job="lemuel"}[1m])) > 5
+        for: 5m
+        labels:
+          severity: warning
+          component: http
+        annotations:
+          summary: "HTTP 에러율 > 5% (5분 지속)"
+          description: |
+            최근 1분 4xx+5xx 비율이 {{ $value | printf "%.1f" }}% 로 5% 를 초과한 상태가 5분 지속됐습니다.
+            상태코드 분해: sum by(status)(rate(http_server_requests_seconds_count[1m]))
+            경로 식별: 5xx rps by uri 패널(lemuel-http-traffic 대시보드) 확인.

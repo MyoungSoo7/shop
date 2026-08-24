@@ -1,0 +1,18 @@
+#!/bin/sh
+# Repo-tracked pre-commit — survives fresh clone (unlike .git/hooks/).
+# Enable once with: node scripts/harness/install-hooks.mjs   (sets core.hooksPath)
+#
+# Layer 1 (mandatory, plugin-independent): harness core-invariant guard.
+ROOT="$(git rev-parse --show-toplevel)" || exit 1
+node "$ROOT/scripts/harness/guard.mjs" --staged || exit 1
+
+# Layer 2 (best-effort): copilot plugin guards, only if the plugin is present.
+# 경로 정본은 여기 — 플러그인 트리를 옮기면 이 목록도 함께 옮긴다(미존재 시 조용히 skip 되므로
+# harness-audit 의 plugin-guard-path 점검이 드리프트를 잡는다).
+for g in \
+  "settlement-service/src/main/resources/settlement-copilot/hooks/guards/pre-commit.mjs" ; do
+  p="$ROOT/$g"
+  [ -f "$p" ] && { node "$p" || exit 1; }
+done
+
+exit 0

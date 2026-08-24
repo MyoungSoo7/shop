@@ -1,0 +1,35 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "lemuel.point.charged",
+  "description": "포인트가 현금으로 충전된 사실(원금). 금액은 BigDecimal.toPlainString() 문자열(정밀도 보존). 보너스분은 별도 lemuel.point.granted 로 나간다.",
+  "$comment": "참고(계약 아님) — 회계 해석: DR CASH / CR POINT_LIABILITY.",
+  "type": "object",
+  "properties": {
+    "userId": {
+      "type": "integer"
+    },
+    "accountId": {
+      "type": "integer"
+    },
+    "amount": {
+      "type": "string",
+      "pattern": "^-?[0-9]+(\\.[0-9]+)?$"
+    },
+    "occurredAt": {
+      "type": "string"
+    },
+    "lotId": {
+      "type": "integer"
+    },
+    "chargeReference": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "userId",
+    "accountId",
+    "lotId",
+    "amount"
+  ],
+  "additionalProperties": true
+}

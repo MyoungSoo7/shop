@@ -1,0 +1,9 @@
+[
+  {
+    "paymentId": 5001,
+    "pgTransactionId": "PG-20260718-0001",
+    "amount": 45000.00,
+    "refundedAmount": 0.00,
+    "capturedDate": "2026-07-18"
+  }
+]

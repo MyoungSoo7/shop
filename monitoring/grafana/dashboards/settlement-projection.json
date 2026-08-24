@@ -1,0 +1,239 @@
+{
+  "annotations": { "list": [] },
+  "editable": true,
+  "fiscalYearStartMonth": 0,
+  "graphTooltip": 1,
+  "id": null,
+  "title": "Lemuel — Settlement Projection (ADR 0020 Phase 5.6)",
+  "uid": "lemuel-settlement-projection",
+  "tags": ["lemuel", "settlement", "cqrs", "adr-0020"],
+  "timezone": "browser",
+  "schemaVersion": 39,
+  "version": 1,
+  "refresh": "10s",
+  "time": { "from": "now-1h", "to": "now" },
+  "templating": { "list": [] },
+  "panels": [
+    {
+      "id": 1,
+      "type": "row",
+      "title": "프로젝션 복제 지연 (Projection Lag)",
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 0 },
+      "collapsed": false
+    },
+    {
+      "id": 2,
+      "type": "timeseries",
+      "title": "프로젝션 반영 지연 p95 (type 별) — 발행→반영 end-to-end",
+      "datasource": "Prometheus",
+      "gridPos": { "h": 8, "w": 16, "x": 0, "y": 1 },
+      "fieldConfig": { "defaults": { "unit": "s" }, "overrides": [] },
+      "targets": [
+        {
+          "expr": "histogram_quantile(0.95, sum by (le, type) (rate(settlement_projection_lag_seconds_bucket[5m])))",
+          "legendFormat": "{{type}} p95"
+        },
+        {
+          "expr": "histogram_quantile(0.99, sum by (le, type) (rate(settlement_projection_lag_seconds_bucket[5m])))",
+          "legendFormat": "{{type}} p99"
+        }
+      ]
+    },
+    {
+      "id": 3,
+      "type": "stat",
+      "title": "전체 프로젝션 지연 p99 (현재)",
+      "datasource": "Prometheus",
+      "gridPos": { "h": 8, "w": 8, "x": 16, "y": 1 },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "yellow", "value": 30 },
+              { "color": "red", "value": 120 }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "colorMode": "background",
+        "graphMode": "area",
+        "justifyMode": "auto",
+        "orientation": "horizontal",
+        "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false },
+        "textMode": "auto"
+      },
+      "targets": [
+        {
+          "expr": "histogram_quantile(0.99, sum by (le) (rate(settlement_projection_lag_seconds_bucket[5m])))",
+          "legendFormat": "p99 lag"
+        }
+      ]
+    },
+    {
+      "id": 4,
+      "type": "row",
+      "title": "처리량 & 프로젝션 규모",
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 9 },
+      "collapsed": false
+    },
+    {
+      "id": 5,
+      "type": "timeseries",
+      "title": "프로젝션 반영 처리량 (type 별, ops/s)",
+      "datasource": "Prometheus",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 10 },
+      "fieldConfig": { "defaults": { "unit": "ops" }, "overrides": [] },
+      "targets": [
+        {
+          "expr": "sum by (type) (rate(settlement_projection_applied_total[5m]))",
+          "legendFormat": "{{type}}"
+        }
+      ]
+    },
+    {
+      "id": 6,
+      "type": "timeseries",
+      "title": "프로젝션 행 수 (view 별) — opslab 원천 대조용",
+      "datasource": "Prometheus",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 10 },
+      "fieldConfig": { "defaults": { "unit": "short" }, "overrides": [] },
+      "targets": [
+        {
+          "expr": "settlement_projection_rows",
+          "legendFormat": "{{view}}"
+        }
+      ]
+    },
+    {
+      "id": 7,
+      "type": "row",
+      "title": "장애 신호 (DLT)",
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 18 },
+      "collapsed": false
+    },
+    {
+      "id": 8,
+      "type": "timeseries",
+      "title": "Kafka DLT 라우팅 / 재시도 / replay (rate)",
+      "datasource": "Prometheus",
+      "gridPos": { "h": 8, "w": 24, "x": 0, "y": 19 },
+      "fieldConfig": { "defaults": { "unit": "ops" }, "overrides": [] },
+      "targets": [
+        {
+          "expr": "rate(settlement_kafka_dlt_published_total[5m])",
+          "legendFormat": "DLT published"
+        },
+        {
+          "expr": "rate(settlement_kafka_retry_total[5m])",
+          "legendFormat": "retry"
+        },
+        {
+          "expr": "rate(settlement_kafka_dlt_replayed_total[5m])",
+          "legendFormat": "replayed"
+        }
+      ]
+    },
+    {
+      "id": 9,
+      "type": "row",
+      "title": "Cross-DB 대사 (Phase 5.2) — opslab 원천 vs settlement_db 프로젝션",
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 27 },
+      "collapsed": false
+    },
+    {
+      "id": 10,
+      "type": "timeseries",
+      "title": "원천 vs 프로젝션 행 수 (view 별)",
+      "datasource": "Prometheus",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 28 },
+      "fieldConfig": { "defaults": { "unit": "short" }, "overrides": [] },
+      "targets": [
+        {
+          "expr": "max by (view) (settlement_recon_source_rows)",
+          "legendFormat": "source {{view}}"
+        },
+        {
+          "expr": "max by (view) (settlement_projection_rows)",
+          "legendFormat": "projection {{view}}"
+        }
+      ]
+    },
+    {
+      "id": 11,
+      "type": "timeseries",
+      "title": "프로젝션 드리프트 (원천 - 프로젝션, view 별)",
+      "datasource": "Prometheus",
+      "description": "0 이 정상. 양수가 지속되면 프로젝션 누락 → /admin/settlement-projection/backfill 자가치유.",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 28 },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "yellow", "value": 10 }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "expr": "max by (view) (settlement_recon_source_rows) - max by (view) (settlement_projection_rows)",
+          "legendFormat": "drift {{view}}"
+        }
+      ]
+    },
+    {
+      "id": 12,
+      "type": "timeseries",
+      "title": "원천 vs 프로젝션 금액 합계 (view 별, CAPTURED 결제·전체 주문)",
+      "datasource": "Prometheus",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 36 },
+      "fieldConfig": { "defaults": { "unit": "locale" }, "overrides": [] },
+      "targets": [
+        {
+          "expr": "max by (view) (settlement_recon_source_amount)",
+          "legendFormat": "source {{view}}"
+        },
+        {
+          "expr": "max by (view) (settlement_projection_amount)",
+          "legendFormat": "projection {{view}}"
+        }
+      ]
+    },
+    {
+      "id": 13,
+      "type": "timeseries",
+      "title": "금액 드리프트 (원천 - 프로젝션, view 별)",
+      "datasource": "Prometheus",
+      "description": "0 이 정상. |drift|>1000(KRW) 지속이면 금액 불일치 → backfill 자가치유. 부동소수 노이즈 무시용 임계.",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 36 },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "locale",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "red", "value": 1000 }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "expr": "max by (view) (settlement_recon_source_amount) - max by (view) (settlement_projection_amount)",
+          "legendFormat": "amount drift {{view}}"
+        }
+      ]
+    }
+  ]
+}

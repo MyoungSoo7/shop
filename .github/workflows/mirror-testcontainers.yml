@@ -1,0 +1,50 @@
+# Docker Hub → ghcr.io 테스트 이미지 미러링.
+#
+# 배경: GitHub Actions 러너는 Docker Hub 익명 pull rate limit 을 공유 IP 로 맞아
+# Testcontainers 이미지 pull 이 수십 분 서는 일이 있다 (2026-07-08 main CI hang).
+# 해결: 테스트가 쓰는 이미지를 ghcr.io/myoungsoo7/mirror/* 로 복사해 두고,
+# testcontainers.properties(hub.image.name.prefix) + ci.yml 로 ghcr 에서만 pull.
+#
+# 실행: 수동 (Actions 탭 → Mirror testcontainers images → Run workflow).
+# 이미지 버전을 올릴 때 images 목록 갱신 후 재실행.
+name: Mirror testcontainers images
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  packages: write
+
+jobs:
+  mirror:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Login to GHCR
+        uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Pull, tag, push
+        run: |
+          set -euo pipefail
+          MIRROR=ghcr.io/myoungsoo7/mirror
+          # testcontainers 가 쓰는 이미지 + ci.yml service container
+          images=(
+            "confluentinc/cp-kafka:7.6.1"
+            "postgres:17-alpine"
+            "postgres:17"
+            "redis:7-alpine"
+            # testcontainers 유틸 — hub.image.name.prefix 가 ryuk 에도 적용되므로 미러 필수
+            # (버전은 org.testcontainers 라이브러리 버전에 따라 다름 — 실패 로그의 imageName 참조)
+            "testcontainers/ryuk:0.14.0"
+          )
+          for img in "${images[@]}"; do
+            echo "── $img"
+            docker pull "docker.io/$img"
+            docker tag "docker.io/$img" "$MIRROR/$img"
+            docker push "$MIRROR/$img"
+          done
+          echo "✅ ${#images[@]}개 미러 완료"

@@ -1,0 +1,244 @@
+{
+  "annotations": {
+    "list": []
+  },
+  "editable": true,
+  "fiscalYearStartMonth": 0,
+  "graphTooltip": 1,
+  "id": null,
+  "title": "Lemuel — Business KPI",
+  "uid": "lemuel-kpi",
+  "tags": ["lemuel", "business"],
+  "timezone": "browser",
+  "schemaVersion": 39,
+  "version": 1,
+  "refresh": "10s",
+  "time": { "from": "now-1h", "to": "now" },
+  "templating": { "list": [] },
+  "panels": [
+    {
+      "id": 1,
+      "type": "row",
+      "title": "결제 (Payment)",
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 0 },
+      "collapsed": false
+    },
+    {
+      "id": 2,
+      "type": "stat",
+      "title": "PG 라우팅 분포 (provider 별)",
+      "datasource": "Prometheus",
+      "gridPos": { "h": 6, "w": 8, "x": 0, "y": 1 },
+      "targets": [
+        {
+          "expr": "sum by (provider) (rate(pg_routing_requests_total[5m]))",
+          "legendFormat": "{{provider}}"
+        }
+      ],
+      "options": {
+        "colorMode": "value",
+        "graphMode": "area",
+        "justifyMode": "auto",
+        "orientation": "horizontal",
+        "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false },
+        "textMode": "auto"
+      }
+    },
+    {
+      "id": 3,
+      "type": "timeseries",
+      "title": "결제 환불 처리 시간 (refund.processing.duration)",
+      "datasource": "Prometheus",
+      "gridPos": { "h": 8, "w": 16, "x": 8, "y": 1 },
+      "targets": [
+        {
+          "expr": "histogram_quantile(0.50, sum by (le) (rate(refund_processing_duration_seconds_bucket[5m])))",
+          "legendFormat": "p50"
+        },
+        {
+          "expr": "histogram_quantile(0.95, sum by (le) (rate(refund_processing_duration_seconds_bucket[5m])))",
+          "legendFormat": "p95"
+        },
+        {
+          "expr": "histogram_quantile(0.99, sum by (le) (rate(refund_processing_duration_seconds_bucket[5m])))",
+          "legendFormat": "p99"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s",
+          "custom": { "drawStyle": "line", "lineWidth": 2 }
+        }
+      }
+    },
+    {
+      "id": 10,
+      "type": "row",
+      "title": "Outbox / DLQ",
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 9 }
+    },
+    {
+      "id": 11,
+      "type": "stat",
+      "title": "Outbox PENDING",
+      "datasource": "Prometheus",
+      "gridPos": { "h": 4, "w": 6, "x": 0, "y": 10 },
+      "targets": [{ "expr": "outbox_pending_count", "legendFormat": "pending" }],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "yellow", "value": 100 },
+              { "color": "red", "value": 1000 }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "id": 12,
+      "type": "stat",
+      "title": "Outbox FAILED (DLQ 알람 대상)",
+      "datasource": "Prometheus",
+      "gridPos": { "h": 4, "w": 6, "x": 6, "y": 10 },
+      "targets": [{ "expr": "outbox_failed_count", "legendFormat": "failed" }],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "red", "value": 1 }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "id": 13,
+      "type": "timeseries",
+      "title": "Outbox 발행 latency (p99)",
+      "datasource": "Prometheus",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 10 },
+      "targets": [
+        {
+          "expr": "histogram_quantile(0.99, sum by (le) (rate(outbox_publish_duration_seconds_bucket[5m])))",
+          "legendFormat": "p99"
+        },
+        {
+          "expr": "histogram_quantile(0.50, sum by (le) (rate(outbox_publish_duration_seconds_bucket[5m])))",
+          "legendFormat": "p50"
+        }
+      ],
+      "fieldConfig": { "defaults": { "unit": "s" } }
+    },
+    {
+      "id": 14,
+      "type": "timeseries",
+      "title": "DLQ 발행 누적 + Admin 액션",
+      "datasource": "Prometheus",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 14 },
+      "targets": [
+        { "expr": "rate(outbox_dlq_published_total[5m])", "legendFormat": "DLQ 발행/s" },
+        { "expr": "rate(outbox_admin_retry_total[5m])", "legendFormat": "운영자 재처리/s" },
+        { "expr": "rate(outbox_admin_skip_total[5m])", "legendFormat": "운영자 스킵/s" }
+      ]
+    },
+    {
+      "id": 20,
+      "type": "row",
+      "title": "재고 동시성 (SKU)",
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 22 }
+    },
+    {
+      "id": 21,
+      "type": "timeseries",
+      "title": "Variant 재고 차감 — 성공 / 재시도 / 실패",
+      "datasource": "Prometheus",
+      "gridPos": { "h": 8, "w": 16, "x": 0, "y": 23 },
+      "targets": [
+        { "expr": "rate(variant_stock_decrease_success_total[5m])", "legendFormat": "성공/s" },
+        { "expr": "rate(variant_stock_decrease_retry_total[5m])", "legendFormat": "Optimistic 충돌 재시도/s" },
+        { "expr": "rate(variant_stock_decrease_failure_total[5m])", "legendFormat": "재시도 한계 초과 실패/s" }
+      ]
+    },
+    {
+      "id": 22,
+      "type": "stat",
+      "title": "재시도/성공 비율",
+      "description": "이 값이 1을 넘으면 hot SKU 가 있다는 신호 — Redis 분산락 격상 검토",
+      "datasource": "Prometheus",
+      "gridPos": { "h": 8, "w": 8, "x": 16, "y": 23 },
+      "targets": [
+        {
+          "expr": "rate(variant_stock_decrease_retry_total[5m]) / clamp_min(rate(variant_stock_decrease_success_total[5m]), 0.001)",
+          "legendFormat": "retry/success ratio"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percentunit",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "yellow", "value": 0.5 },
+              { "color": "red", "value": 1 }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "id": 30,
+      "type": "row",
+      "title": "PG 정산파일 대사",
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 31 }
+    },
+    {
+      "id": 31,
+      "type": "timeseries",
+      "title": "차이 분류별 발생 (provider × type)",
+      "datasource": "Prometheus",
+      "gridPos": { "h": 8, "w": 24, "x": 0, "y": 32 },
+      "targets": [
+        {
+          "expr": "sum by (provider, type) (rate(pg_reconciliation_discrepancies_total[1h]))",
+          "legendFormat": "{{provider}} / {{type}}"
+        }
+      ]
+    },
+    {
+      "id": 40,
+      "type": "row",
+      "title": "정산 (Settlement)",
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 40 }
+    },
+    {
+      "id": 41,
+      "type": "timeseries",
+      "title": "정산 배치 처리 시간 (creation / confirmation / adjustment)",
+      "datasource": "Prometheus",
+      "gridPos": { "h": 8, "w": 24, "x": 0, "y": 41 },
+      "targets": [
+        {
+          "expr": "histogram_quantile(0.95, sum by (le) (rate(settlement_batch_creation_duration_seconds_bucket[5m])))",
+          "legendFormat": "creation p95"
+        },
+        {
+          "expr": "histogram_quantile(0.95, sum by (le) (rate(settlement_batch_confirmation_duration_seconds_bucket[5m])))",
+          "legendFormat": "confirmation p95"
+        },
+        {
+          "expr": "histogram_quantile(0.95, sum by (le) (rate(settlement_batch_adjustment_duration_seconds_bucket[5m])))",
+          "legendFormat": "adjustment p95"
+        }
+      ],
+      "fieldConfig": { "defaults": { "unit": "s" } }
+    }
+  ]
+}

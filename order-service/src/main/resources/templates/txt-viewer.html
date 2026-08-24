@@ -1,0 +1,661 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>TXT Viewer</title>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@300;400;500;700&family=Outfit:wght@300;400;600;800&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #0c0c0c;
+    --bg-panel: #141414;
+    --bg-hover: #1e1e1e;
+    --bg-gutter: #111111;
+    --text: #d4d4d4;
+    --text-dim: #666;
+    --text-line: #3a3a3a;
+    --accent: #4ec9b0;
+    --accent-dim: #4ec9b01a;
+    --accent-bg: #4ec9b022;
+    --border: #222;
+    --highlight: #4ec9b018;
+    --search-match: #e2b94d33;
+    --search-active: #e2b94d88;
+    --shadow: 0 2px 20px rgba(0,0,0,0.5);
+  }
+
+  .light {
+    --bg: #f7f6f3;
+    --bg-panel: #ffffff;
+    --bg-hover: #f0efeb;
+    --bg-gutter: #faf9f6;
+    --text: #2c2c2c;
+    --text-dim: #999;
+    --text-line: #ccc;
+    --accent: #2d8a70;
+    --accent-dim: #2d8a701a;
+    --accent-bg: #2d8a7015;
+    --border: #e5e2db;
+    --highlight: #2d8a7010;
+    --search-match: #f0d56033;
+    --search-active: #f0d56099;
+    --shadow: 0 2px 20px rgba(0,0,0,0.06);
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    font-family: 'Outfit', sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    min-height: 100vh;
+    transition: background 0.35s, color 0.35s;
+  }
+
+  /* ─── Top Bar ─── */
+  .topbar {
+    position: fixed;
+    top: 0; left: 0; right: 0;
+    height: 48px;
+    background: var(--bg-panel);
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    align-items: center;
+    padding: 0 16px;
+    z-index: 100;
+    gap: 10px;
+    transition: background 0.35s, border 0.35s;
+  }
+
+  .logo {
+    font-weight: 800;
+    font-size: 15px;
+    color: var(--accent);
+    letter-spacing: 1px;
+    font-family: 'IBM Plex Mono', monospace;
+  }
+
+  .separator {
+    width: 1px;
+    height: 20px;
+    background: var(--border);
+  }
+
+  .filename {
+    font-size: 13px;
+    color: var(--text-dim);
+    flex-shrink: 1;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-family: 'IBM Plex Mono', monospace;
+    font-weight: 400;
+  }
+
+  .file-meta {
+    font-size: 11px;
+    color: var(--text-dim);
+    background: var(--accent-dim);
+    padding: 3px 8px;
+    border-radius: 4px;
+    font-family: 'IBM Plex Mono', monospace;
+    white-space: nowrap;
+  }
+
+  .spacer { flex: 1; }
+
+  .btn {
+    background: none;
+    border: 1px solid var(--border);
+    color: var(--text-dim);
+    padding: 5px 12px;
+    border-radius: 5px;
+    font-size: 12px;
+    font-family: 'Outfit', sans-serif;
+    cursor: pointer;
+    transition: all 0.2s;
+    white-space: nowrap;
+    display: flex;
+    align-items: center;
+    gap: 5px;
+  }
+
+  .btn:hover {
+    border-color: var(--accent);
+    color: var(--accent);
+    background: var(--accent-dim);
+  }
+
+  .btn.icon { padding: 5px 7px; font-size: 15px; }
+
+  /* ─── Search Bar ─── */
+  .search-bar {
+    position: fixed;
+    top: 48px; left: 0; right: 0;
+    height: 0;
+    overflow: hidden;
+    background: var(--bg-panel);
+    border-bottom: 1px solid transparent;
+    display: flex;
+    align-items: center;
+    padding: 0 16px;
+    gap: 10px;
+    transition: height 0.25s, border-color 0.25s, background 0.35s;
+    z-index: 99;
+  }
+
+  .search-bar.open {
+    height: 44px;
+    border-bottom-color: var(--border);
+  }
+
+  .search-input {
+    flex: 1;
+    max-width: 400px;
+    background: var(--bg);
+    border: 1px solid var(--border);
+    color: var(--text);
+    padding: 6px 12px;
+    border-radius: 5px;
+    font-size: 13px;
+    font-family: 'IBM Plex Mono', monospace;
+    outline: none;
+    transition: border 0.2s;
+  }
+
+  .search-input:focus { border-color: var(--accent); }
+
+  .search-info {
+    font-size: 12px;
+    color: var(--text-dim);
+    font-family: 'IBM Plex Mono', monospace;
+    min-width: 70px;
+  }
+
+  .search-nav {
+    display: flex;
+    gap: 4px;
+  }
+
+  .search-nav button {
+    background: none;
+    border: 1px solid var(--border);
+    color: var(--text-dim);
+    width: 28px;
+    height: 28px;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 13px;
+    transition: all 0.2s;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .search-nav button:hover {
+    border-color: var(--accent);
+    color: var(--accent);
+  }
+
+  /* ─── Welcome ─── */
+  .welcome {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    min-height: 100vh;
+    padding: 48px 20px 20px;
+  }
+
+  .welcome.hidden { display: none; }
+
+  .drop-zone {
+    width: 100%;
+    max-width: 480px;
+    border: 2px dashed var(--border);
+    border-radius: 14px;
+    padding: 56px 36px;
+    text-align: center;
+    cursor: pointer;
+    transition: all 0.3s;
+  }
+
+  .drop-zone:hover,
+  .drop-zone.drag-over {
+    border-color: var(--accent);
+    background: var(--accent-dim);
+  }
+
+  .drop-icon {
+    font-size: 40px;
+    margin-bottom: 18px;
+    opacity: 0.25;
+  }
+
+  .drop-zone h2 {
+    font-weight: 600;
+    font-size: 20px;
+    margin-bottom: 6px;
+  }
+
+  .drop-zone p {
+    font-size: 13px;
+    color: var(--text-dim);
+    line-height: 1.7;
+  }
+
+  .drop-zone kbd {
+    background: var(--bg-hover);
+    border: 1px solid var(--border);
+    border-radius: 3px;
+    padding: 1px 6px;
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 11px;
+    color: var(--text-dim);
+  }
+
+  /* ─── Content ─── */
+  .content {
+    display: none;
+    margin-top: 48px;
+    min-height: calc(100vh - 48px);
+  }
+
+  .content.visible { display: block; }
+  .content.search-open { margin-top: 92px; }
+
+  .text-container {
+    display: flex;
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 13.5px;
+    line-height: 1.75;
+  }
+
+  .gutter {
+    position: sticky;
+    left: 0;
+    background: var(--bg-gutter);
+    border-right: 1px solid var(--border);
+    padding: 20px 0;
+    text-align: right;
+    user-select: none;
+    min-width: 56px;
+    z-index: 2;
+    transition: background 0.35s, border 0.35s;
+  }
+
+  .line-num {
+    padding: 0 12px 0 8px;
+    color: var(--text-line);
+    font-size: 12px;
+    height: calc(1.75 * 13.5px);
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    transition: color 0.15s;
+  }
+
+  .line-num:hover { color: var(--accent); }
+
+  .lines {
+    flex: 1;
+    padding: 20px 20px 20px 16px;
+    overflow-x: auto;
+  }
+
+  .line {
+    white-space: pre-wrap;
+    word-break: break-all;
+    min-height: calc(1.75 * 13.5px);
+    padding: 0 4px;
+    border-radius: 2px;
+    transition: background 0.15s;
+  }
+
+  .line:hover { background: var(--highlight); }
+
+  .line .match {
+    background: var(--search-match);
+    border-radius: 2px;
+    padding: 1px 0;
+  }
+
+  .line .match.active {
+    background: var(--search-active);
+    outline: 1px solid var(--accent);
+  }
+
+  /* ─── Word Wrap Toggle indicator ─── */
+  .lines.no-wrap .line {
+    white-space: pre;
+    word-break: normal;
+  }
+
+  /* ─── Drag Overlay ─── */
+  .drag-overlay {
+    position: fixed;
+    inset: 0;
+    background: var(--bg);
+    opacity: 0;
+    pointer-events: none;
+    z-index: 200;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: opacity 0.25s;
+  }
+
+  .drag-overlay.active { opacity: 0.95; pointer-events: auto; }
+
+  .drag-overlay span { font-size: 44px; display: block; margin-bottom: 14px; text-align: center; }
+  .drag-overlay p { font-size: 20px; color: var(--accent); font-weight: 600; text-align: center; }
+
+  /* ─── Scroll Top ─── */
+  .scroll-top {
+    position: fixed;
+    bottom: 24px;
+    right: 24px;
+    width: 38px;
+    height: 38px;
+    border-radius: 50%;
+    background: var(--bg-panel);
+    border: 1px solid var(--border);
+    color: var(--text-dim);
+    font-size: 16px;
+    cursor: pointer;
+    display: none;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.2s;
+    z-index: 80;
+  }
+
+  .scroll-top:hover { border-color: var(--accent); color: var(--accent); }
+  .scroll-top.visible { display: flex; }
+
+  /* ─── Scrollbar ─── */
+  ::-webkit-scrollbar { width: 5px; height: 5px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+  ::-webkit-scrollbar-thumb:hover { background: var(--text-dim); }
+
+  html { scroll-behavior: smooth; }
+
+  @media (max-width: 600px) {
+    .gutter { min-width: 44px; }
+    .lines { padding: 20px 12px 20px 10px; }
+    .file-meta { display: none; }
+  }
+</style>
+</head>
+<body>
+
+<!-- Top Bar -->
+<div class="topbar">
+  <div class="logo">TXT</div>
+  <div class="separator"></div>
+  <span class="filename" id="filename">파일 없음</span>
+  <span class="file-meta" id="fileMeta" style="display:none"></span>
+  <div class="spacer"></div>
+  <button class="btn" id="searchBtn" style="display:none" onclick="toggleSearch()">🔍 검색</button>
+  <button class="btn" id="wrapBtn" style="display:none" onclick="toggleWrap()">줄바꿈</button>
+  <button class="btn" onclick="openFile()">파일 열기</button>
+  <button class="btn icon" onclick="toggleTheme()" title="테마 전환">◐</button>
+</div>
+
+<!-- Search Bar -->
+<div class="search-bar" id="searchBar">
+  <input class="search-input" id="searchInput" type="text" placeholder="검색어 입력..." oninput="doSearch()" onkeydown="searchKeydown(event)">
+  <span class="search-info" id="searchInfo"></span>
+  <div class="search-nav">
+    <button onclick="navSearch(-1)" title="이전">▲</button>
+    <button onclick="navSearch(1)" title="다음">▼</button>
+  </div>
+  <button class="btn" onclick="toggleSearch()" style="font-size:11px">닫기</button>
+</div>
+
+<!-- Welcome -->
+<div class="welcome" id="welcome">
+  <div class="drop-zone" id="dropZone" onclick="openFile()">
+    <div class="drop-icon">📝</div>
+    <h2>텍스트 파일을 열어보세요</h2>
+    <p>.txt 파일을 드래그하거나 클릭해서 열 수 있습니다<br>
+    <kbd>Ctrl</kbd>+<kbd>O</kbd> 열기 &nbsp; <kbd>Ctrl</kbd>+<kbd>F</kbd> 검색</p>
+  </div>
+</div>
+
+<!-- Content -->
+<div class="content" id="content">
+  <div class="text-container">
+    <div class="gutter" id="gutter"></div>
+    <div class="lines" id="lines"></div>
+  </div>
+</div>
+
+<!-- Drag Overlay -->
+<div class="drag-overlay" id="dragOverlay">
+  <div>
+    <span>📝</span>
+    <p>놓아서 파일 열기</p>
+  </div>
+</div>
+
+<!-- Scroll Top -->
+<button class="scroll-top" id="scrollTop" onclick="window.scrollTo({top:0})">↑</button>
+
+<input type="file" id="fileInput" accept=".txt,.log,.cfg,.ini,.csv,.json,.xml,.yaml,.yml,.toml,.env,.gitignore,.conf,.properties,.sh,.bat,.md" style="display:none">
+
+<script>
+  // ─── State ───
+  let rawLines = [];
+  let searchMatches = [];
+  let currentMatch = -1;
+  let searchOpen = false;
+  let wordWrap = true;
+  let isDark = true;
+
+  // ─── Elements ───
+  const $ = id => document.getElementById(id);
+  const welcome = $('welcome');
+  const content = $('content');
+  const gutter = $('gutter');
+  const lines = $('lines');
+  const filenameEl = $('filename');
+  const fileMeta = $('fileMeta');
+  const fileInput = $('fileInput');
+  const dragOverlay = $('dragOverlay');
+  const searchBar = $('searchBar');
+  const searchInput = $('searchInput');
+  const searchInfo = $('searchInfo');
+  const scrollTopBtn = $('scrollTop');
+  const searchBtn = $('searchBtn');
+  const wrapBtn = $('wrapBtn');
+
+  // ─── Theme ───
+  function toggleTheme() {
+    isDark = !isDark;
+    document.body.classList.toggle('light', !isDark);
+  }
+
+  // ─── Word Wrap ───
+  function toggleWrap() {
+    wordWrap = !wordWrap;
+    lines.classList.toggle('no-wrap', !wordWrap);
+    wrapBtn.style.borderColor = wordWrap ? '' : 'var(--accent)';
+    wrapBtn.style.color = wordWrap ? '' : 'var(--accent)';
+  }
+
+  // ─── Search ───
+  function toggleSearch() {
+    searchOpen = !searchOpen;
+    searchBar.classList.toggle('open', searchOpen);
+    content.classList.toggle('search-open', searchOpen);
+    if (searchOpen) {
+      searchInput.focus();
+    } else {
+      searchInput.value = '';
+      clearHighlights();
+      searchInfo.textContent = '';
+    }
+  }
+
+  function escapeRegex(s) {
+    return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  }
+
+  function clearHighlights() {
+    const lineEls = lines.querySelectorAll('.line');
+    lineEls.forEach((el, i) => {
+      el.textContent = rawLines[i] ?? '';
+    });
+    searchMatches = [];
+    currentMatch = -1;
+  }
+
+  function doSearch() {
+    const query = searchInput.value;
+    if (!query) { clearHighlights(); searchInfo.textContent = ''; return; }
+
+    searchMatches = [];
+    currentMatch = -1;
+    const regex = new RegExp(escapeRegex(query), 'gi');
+    const lineEls = lines.querySelectorAll('.line');
+
+    lineEls.forEach((el, i) => {
+      const text = rawLines[i] ?? '';
+      const parts = [];
+      let last = 0;
+      let m;
+      regex.lastIndex = 0;
+
+      while ((m = regex.exec(text)) !== null) {
+        if (m.index > last) parts.push(document.createTextNode(text.slice(last, m.index)));
+        const span = document.createElement('span');
+        span.className = 'match';
+        span.textContent = m[0];
+        span.dataset.matchIdx = searchMatches.length;
+        searchMatches.push({ line: i, el: span });
+        parts.push(span);
+        last = regex.lastIndex;
+      }
+
+      if (parts.length > 0) {
+        if (last < text.length) parts.push(document.createTextNode(text.slice(last)));
+        el.textContent = '';
+        parts.forEach(p => el.appendChild(p));
+      } else {
+        el.textContent = text;
+      }
+    });
+
+    searchInfo.textContent = searchMatches.length > 0 ? `${searchMatches.length}개` : '없음';
+    if (searchMatches.length > 0) navSearch(1);
+  }
+
+  function navSearch(dir) {
+    if (searchMatches.length === 0) return;
+    if (currentMatch >= 0) searchMatches[currentMatch].el.classList.remove('active');
+    currentMatch = (currentMatch + dir + searchMatches.length) % searchMatches.length;
+    const match = searchMatches[currentMatch];
+    match.el.classList.add('active');
+    match.el.scrollIntoView({ block: 'center', behavior: 'smooth' });
+    searchInfo.textContent = `${currentMatch + 1} / ${searchMatches.length}`;
+  }
+
+  function searchKeydown(e) {
+    if (e.key === 'Enter') {
+      navSearch(e.shiftKey ? -1 : 1);
+      e.preventDefault();
+    }
+    if (e.key === 'Escape') toggleSearch();
+  }
+
+  // ─── Render ───
+  function renderText(text, filename) {
+    rawLines = text.split('\n');
+
+    // build gutter
+    let gutterHTML = '';
+    for (let i = 1; i <= rawLines.length; i++) {
+      gutterHTML += `<div class="line-num">${i}</div>`;
+    }
+    gutter.innerHTML = gutterHTML;
+
+    // build lines
+    let linesHTML = '';
+    for (let i = 0; i < rawLines.length; i++) {
+      const escaped = rawLines[i]
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;');
+      linesHTML += `<div class="line">${escaped || ' '}</div>`;
+    }
+    lines.innerHTML = linesHTML;
+
+    // update UI
+    filenameEl.textContent = filename;
+    const size = new Blob([text]).size;
+    const sizeStr = size < 1024 ? size + ' B'
+      : size < 1048576 ? (size / 1024).toFixed(1) + ' KB'
+      : (size / 1048576).toFixed(1) + ' MB';
+    fileMeta.textContent = `${rawLines.length} 줄 · ${sizeStr}`;
+    fileMeta.style.display = '';
+    searchBtn.style.display = '';
+    wrapBtn.style.display = '';
+
+    welcome.classList.add('hidden');
+    content.classList.add('visible');
+    window.scrollTo({ top: 0 });
+  }
+
+  // ─── File IO ───
+  function readFile(file) {
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = e => renderText(e.target.result, file.name);
+    reader.readAsText(file);
+  }
+
+  function openFile() { fileInput.click(); }
+
+  fileInput.addEventListener('change', e => {
+    if (e.target.files[0]) readFile(e.target.files[0]);
+  });
+
+  // ─── Drag & Drop ───
+  let dragCount = 0;
+
+  document.addEventListener('dragenter', e => {
+    e.preventDefault(); dragCount++;
+    dragOverlay.classList.add('active');
+  });
+
+  document.addEventListener('dragleave', e => {
+    e.preventDefault(); dragCount--;
+    if (dragCount <= 0) { dragCount = 0; dragOverlay.classList.remove('active'); }
+  });
+
+  document.addEventListener('dragover', e => e.preventDefault());
+
+  document.addEventListener('drop', e => {
+    e.preventDefault(); dragCount = 0;
+    dragOverlay.classList.remove('active');
+    if (e.dataTransfer.files[0]) readFile(e.dataTransfer.files[0]);
+  });
+
+  // ─── Keyboard ───
+  document.addEventListener('keydown', e => {
+    if ((e.ctrlKey || e.metaKey) && e.key === 'o') { e.preventDefault(); openFile(); }
+    if ((e.ctrlKey || e.metaKey) && e.key === 'f') {
+      e.preventDefault();
+      if (rawLines.length > 0) { if (!searchOpen) toggleSearch(); else searchInput.focus(); }
+    }
+  });
+
+  // ─── Scroll Top ───
+  window.addEventListener('scroll', () => {
+    scrollTopBtn.classList.toggle('visible', window.scrollY > 300);
+  });
+</script>
+</body>
+</html>

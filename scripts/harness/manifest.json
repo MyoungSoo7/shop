@@ -1,0 +1,33 @@
+{
+  "schemaVersion": 1,
+  "requiredTrackedFiles": [
+    "scripts/harness/manifest.json",
+    "scripts/harness/guard.mjs",
+    "scripts/harness/telemetry.mjs",
+    "scripts/harness/skill-router.mjs",
+    "scripts/harness/telemetry-report.mjs",
+    "scripts/harness/telemetry-ci-pull.mjs",
+    "scripts/harness/report-freshness.mjs",
+    "scripts/harness/ci-verdict.mjs",
+    "scripts/harness/session-metrics.mjs",
+    "scripts/harness/install-hooks.mjs",
+    "scripts/harness/hooks/pre-commit",
+    "scripts/harness/test/guard.test.mjs",
+    "scripts/harness/test/skill-router.test.mjs",
+    "scripts/harness/test/session-metrics.test.mjs",
+    "scripts/harness/test/oo-gate.test.mjs",
+    "scripts/harness/test/scheduler-lock-gate.test.mjs",
+    "scripts/harness/test/async-query-gate.test.mjs",
+    "scripts/harness/test/sse-nginx-gate.test.mjs",
+    "scripts/harness/test/coverage-scope-gate.test.mjs",
+    "scripts/harness/test/telemetry-report.test.mjs",
+    "scripts/harness/test/report-freshness.test.mjs",
+    "scripts/harness/test/ci-verdict-gate.test.mjs",
+    "HARNESS.md",
+    ".claude/skills/oo-score/SKILL.md",
+    ".claude/settings.json",
+    ".github/workflows/harness-guard.yml"
+  ],
+  "docLinkIgnorePrefixes": [],
+  "criticalContractPairs": []
+}

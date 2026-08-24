@@ -1,0 +1,417 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Markdown Viewer</title>
+    <!-- Marked.js for Markdown parsing -->
+    <script src="https://cdn.jsdelivr.net/npm/marked@11.1.1/marked.min.js"></script>
+    <!-- Highlight.js for syntax highlighting -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/github.min.css">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Helvetica', 'Arial', sans-serif;
+            line-height: 1.6;
+            color: #24292e;
+            background: #ffffff;
+            padding: 20px;
+            max-width: 900px;
+            margin: 0 auto;
+        }
+
+        #toolbar {
+            position: sticky;
+            top: 0;
+            background: #f6f8fa;
+            border: 1px solid #d0d7de;
+            border-radius: 6px;
+            padding: 12px;
+            margin-bottom: 20px;
+            display: flex;
+            gap: 10px;
+            flex-wrap: wrap;
+            align-items: center;
+            z-index: 100;
+        }
+
+        #toolbar button {
+            padding: 8px 16px;
+            background: #ffffff;
+            border: 1px solid #d0d7de;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 14px;
+            transition: all 0.2s;
+        }
+
+        #toolbar button:hover {
+            background: #f3f4f6;
+            border-color: #959da5;
+        }
+
+        #toolbar input[type="file"] {
+            padding: 8px;
+            font-size: 14px;
+        }
+
+        #toolbar select {
+            padding: 8px 12px;
+            border: 1px solid #d0d7de;
+            border-radius: 6px;
+            font-size: 14px;
+            background: white;
+        }
+
+        #content {
+            background: white;
+            padding: 30px;
+            border: 1px solid #d0d7de;
+            border-radius: 6px;
+            min-height: 400px;
+        }
+
+        /* Markdown 스타일 */
+        #content h1 {
+            font-size: 2em;
+            border-bottom: 1px solid #d0d7de;
+            padding-bottom: 0.3em;
+            margin-top: 24px;
+            margin-bottom: 16px;
+        }
+
+        #content h2 {
+            font-size: 1.5em;
+            border-bottom: 1px solid #d0d7de;
+            padding-bottom: 0.3em;
+            margin-top: 24px;
+            margin-bottom: 16px;
+        }
+
+        #content h3 {
+            font-size: 1.25em;
+            margin-top: 24px;
+            margin-bottom: 16px;
+        }
+
+        #content h4, #content h5, #content h6 {
+            font-size: 1em;
+            margin-top: 24px;
+            margin-bottom: 16px;
+        }
+
+        #content p {
+            margin-bottom: 16px;
+        }
+
+        #content ul, #content ol {
+            padding-left: 2em;
+            margin-bottom: 16px;
+        }
+
+        #content li {
+            margin-bottom: 4px;
+        }
+
+        #content code {
+            background: #f6f8fa;
+            padding: 0.2em 0.4em;
+            border-radius: 3px;
+            font-size: 85%;
+            font-family: 'Courier New', monospace;
+        }
+
+        #content pre {
+            background: #f6f8fa;
+            padding: 16px;
+            border-radius: 6px;
+            overflow-x: auto;
+            margin-bottom: 16px;
+        }
+
+        #content pre code {
+            background: none;
+            padding: 0;
+        }
+
+        #content blockquote {
+            border-left: 4px solid #d0d7de;
+            padding-left: 16px;
+            margin: 16px 0;
+            color: #57606a;
+        }
+
+        #content table {
+            border-collapse: collapse;
+            width: 100%;
+            margin-bottom: 16px;
+        }
+
+        #content table th,
+        #content table td {
+            border: 1px solid #d0d7de;
+            padding: 8px 12px;
+            text-align: left;
+        }
+
+        #content table th {
+            background: #f6f8fa;
+            font-weight: 600;
+        }
+
+        #content img {
+            max-width: 100%;
+            height: auto;
+            border-radius: 6px;
+        }
+
+        #content a {
+            color: #0969da;
+            text-decoration: none;
+        }
+
+        #content a:hover {
+            text-decoration: underline;
+        }
+
+        #content hr {
+            border: none;
+            border-top: 1px solid #d0d7de;
+            margin: 24px 0;
+        }
+
+        .empty-state {
+            text-align: center;
+            padding: 60px 20px;
+            color: #57606a;
+        }
+
+        .empty-state h2 {
+            font-size: 1.5em;
+            margin-bottom: 12px;
+            color: #24292e;
+        }
+
+        .sample-content {
+            text-align: left;
+        }
+    </style>
+</head>
+<body>
+    <div id="toolbar">
+        <input type="file" id="fileInput" accept=".md,.markdown,.txt">
+        <button onclick="loadSample()">📝 샘플 로드</button>
+        <button onclick="clearContent()">🗑️ 초기화</button>
+        <select id="themeSelect" onchange="changeTheme()">
+            <option value="github">GitHub 테마</option>
+            <option value="dark">다크 테마</option>
+        </select>
+        <button onclick="downloadAsHTML()">💾 HTML 저장</button>
+    </div>
+
+    <div id="content">
+        <div class="empty-state">
+            <h2>📄 Markdown Viewer</h2>
+            <p>파일을 선택하거나 샘플을 로드하세요.</p>
+        </div>
+    </div>
+
+    <script>
+        // Marked.js 설정
+        marked.setOptions({
+            highlight: function(code, lang) {
+                if (lang && hljs.getLanguage(lang)) {
+                    return hljs.highlight(code, { language: lang }).value;
+                }
+                return hljs.highlightAuto(code).value;
+            },
+            breaks: true,
+            gfm: true
+        });
+
+        // 파일 업로드 핸들러
+        document.getElementById('fileInput').addEventListener('change', function(e) {
+            const file = e.target.files[0];
+            if (!file) return;
+
+            const reader = new FileReader();
+            reader.onload = function(event) {
+                const markdown = event.target.result;
+                renderMarkdown(markdown);
+            };
+            reader.readAsText(file);
+        });
+
+        // Markdown 렌더링
+        function renderMarkdown(markdown) {
+            const html = marked.parse(markdown);
+            document.getElementById('content').innerHTML = html;
+
+            // 코드 블록 하이라이트
+            document.querySelectorAll('pre code').forEach((block) => {
+                hljs.highlightElement(block);
+            });
+        }
+
+        // 샘플 컨텐츠 로드
+        function loadSample() {
+            const sampleMarkdown = `# 📚 Markdown Viewer 사용 가이드
+
+## 소개
+
+이 뷰어는 **Markdown** 파일을 HTML로 렌더링하여 보여줍니다.
+
+## 주요 기능
+
+### 1. 파일 업로드
+- \`.md\` 또는 \`.txt\` 파일 지원
+- 드래그 앤 드롭 (향후 지원 예정)
+
+### 2. 문법 지원
+
+#### 텍스트 강조
+- **굵게** (Bold)
+- *이탤릭* (Italic)
+- ~~취소선~~ (Strikethrough)
+- \`코드\` (Inline Code)
+
+#### 목록
+- 순서 없는 목록
+  - 중첩 목록
+  - 항목 2
+- 체크박스
+  - [ ] 할 일 1
+  - [x] 완료된 일
+
+1. 순서 있는 목록
+2. 두 번째 항목
+3. 세 번째 항목
+
+#### 코드 블록
+
+\`\`\`javascript
+function hello() {
+    console.log("Hello, Markdown!");
+}
+\`\`\`
+
+\`\`\`python
+def greet(name):
+    print(f"안녕하세요, {name}님!")
+\`\`\`
+
+#### 인용문
+
+> 이것은 인용문입니다.
+> 여러 줄로 작성할 수 있습니다.
+
+#### 표
+
+| 기능 | 설명 | 지원 |
+|------|------|------|
+| Markdown | 문법 렌더링 | ✅ |
+| 코드 하이라이트 | 문법 강조 | ✅ |
+| 테마 변경 | 다크/라이트 | ✅ |
+
+#### 링크 및 이미지
+
+[GitHub](https://github.com)
+
+---
+
+## 사용 방법
+
+1. 파일 선택 버튼 클릭
+2. Markdown 파일 업로드
+3. 자동으로 렌더링됨
+
+## 단축키 (향후 지원)
+
+- \`Ctrl + O\`: 파일 열기
+- \`Ctrl + S\`: HTML로 저장
+- \`Ctrl + P\`: 인쇄
+
+---
+
+**만든이**: Lemuel System
+**버전**: 1.0.0
+**라이선스**: MIT
+`;
+            renderMarkdown(sampleMarkdown);
+        }
+
+        // 컨텐츠 초기화
+        function clearContent() {
+            document.getElementById('content').innerHTML = `
+                <div class="empty-state">
+                    <h2>📄 Markdown Viewer</h2>
+                    <p>파일을 선택하거나 샘플을 로드하세요.</p>
+                </div>
+            `;
+            document.getElementById('fileInput').value = '';
+        }
+
+        // 테마 변경
+        function changeTheme() {
+            const theme = document.getElementById('themeSelect').value;
+            const link = document.querySelector('link[rel="stylesheet"][href*="highlight"]');
+
+            if (theme === 'dark') {
+                link.href = 'https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/github-dark.min.css';
+                document.body.style.background = '#0d1117';
+                document.body.style.color = '#c9d1d9';
+                document.getElementById('content').style.background = '#0d1117';
+                document.getElementById('content').style.borderColor = '#30363d';
+                document.getElementById('content').style.color = '#c9d1d9';
+            } else {
+                link.href = 'https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/github.min.css';
+                document.body.style.background = '#ffffff';
+                document.body.style.color = '#24292e';
+                document.getElementById('content').style.background = 'white';
+                document.getElementById('content').style.borderColor = '#d0d7de';
+                document.getElementById('content').style.color = '#24292e';
+            }
+        }
+
+        // HTML로 저장
+        function downloadAsHTML() {
+            const content = document.getElementById('content').innerHTML;
+            const html = `<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Exported Markdown</title>
+    <style>
+        body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; max-width: 900px; margin: 0 auto; padding: 20px; }
+    </style>
+</head>
+<body>
+${content}
+</body>
+</html>`;
+
+            const blob = new Blob([html], { type: 'text/html' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = 'exported-markdown.html';
+            a.click();
+            URL.revokeObjectURL(url);
+        }
+
+        // 메시지 수신 (부모 창에서 컨텐츠 전달)
+        window.addEventListener('message', function(event) {
+            if (event.data.type === 'loadMarkdown') {
+                renderMarkdown(event.data.content);
+            }
+        });
+    </script>
+</body>
+</html>

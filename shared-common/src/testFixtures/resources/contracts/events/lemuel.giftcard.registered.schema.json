@@ -1,0 +1,41 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "lemuel.giftcard.registered",
+  "description": "사용자가 코드를 등록해 상품권이 귀속된 사실. 발행·활성화에는 이벤트가 없다(아직 아무에게도 가지 않은 코드는 빚이 아니다). 코드도 코드 해시도 페이로드에 싣지 않는다 — 재산에 해당하는 값이라 유출 경로를 넓히지 않는다.",
+  "$comment": "참고(계약 아님) — 회계 해석: DR GIFT_CARD_PROMOTION_EXPENSE / CR GIFT_CARD_LIABILITY(무상 발행분은 회사가 비용으로 준 것이다).",
+  "type": "object",
+  "properties": {
+    "giftCardId": {
+      "type": "integer"
+    },
+    "userId": {
+      "type": "integer"
+    },
+    "codeLast4": {
+      "type": "string"
+    },
+    "remainingAmount": {
+      "type": "string",
+      "pattern": "^-?[0-9]+(\\.[0-9]+)?$"
+    },
+    "amount": {
+      "type": "string",
+      "pattern": "^-?[0-9]+(\\.[0-9]+)?$"
+    },
+    "occurredAt": {
+      "type": "string"
+    },
+    "entryId": {
+      "type": "integer"
+    },
+    "expiresAt": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "giftCardId",
+    "userId",
+    "amount"
+  ],
+  "additionalProperties": true
+}

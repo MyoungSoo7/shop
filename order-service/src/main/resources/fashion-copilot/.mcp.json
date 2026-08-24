@@ -1,0 +1,12 @@
+{
+  "mcpServers": {
+    "fashion-copilot": {
+      "command": "node",
+      "args": ["${CLAUDE_PLUGIN_ROOT}/mcp/server/index.mjs"],
+      "env": {
+        "ORDER_BASE_URL": "${ORDER_BASE_URL:-http://localhost:8088}",
+        "INTERNAL_API_KEY": "${INTERNAL_API_KEY:-}"
+      }
+    }
+  }
+}

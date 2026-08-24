@@ -1,0 +1,8 @@
+{
+  "orderId": 5001,
+  "userId": 301,
+  "productId": 42,
+  "status": "CREATED",
+  "amount": "45000",
+  "createdAt": "2026-07-01T10:15:00"
+}

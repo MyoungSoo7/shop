@@ -1,0 +1,173 @@
+{
+  "annotations": { "list": [] },
+  "editable": true,
+  "fiscalYearStartMonth": 0,
+  "graphTooltip": 1,
+  "id": null,
+  "title": "Lemuel — HTTP Traffic (TPS & Latency)",
+  "uid": "lemuel-http-traffic",
+  "tags": ["lemuel", "http", "tps", "latency"],
+  "timezone": "browser",
+  "schemaVersion": 39,
+  "version": 1,
+  "refresh": "10s",
+  "time": { "from": "now-30m", "to": "now" },
+  "templating": { "list": [] },
+  "panels": [
+    {
+      "id": 1,
+      "type": "row",
+      "title": "처리량 (TPS)",
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 0 },
+      "collapsed": false
+    },
+    {
+      "id": 2,
+      "type": "stat",
+      "title": "전체 TPS (req/s)",
+      "datasource": "Prometheus",
+      "description": "초당 HTTP 요청 수. 카운터라 rate() 로 증가율을 본다.",
+      "gridPos": { "h": 7, "w": 6, "x": 0, "y": 1 },
+      "fieldConfig": { "defaults": { "unit": "reqps", "decimals": 2 }, "overrides": [] },
+      "options": {
+        "colorMode": "value", "graphMode": "area", "justifyMode": "auto",
+        "orientation": "horizontal",
+        "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false },
+        "textMode": "auto"
+      },
+      "targets": [
+        { "expr": "sum(rate(http_server_requests_seconds_count{job=\"lemuel\"}[1m]))", "legendFormat": "TPS" }
+      ]
+    },
+    {
+      "id": 3,
+      "type": "timeseries",
+      "title": "TPS by 상태코드",
+      "datasource": "Prometheus",
+      "gridPos": { "h": 7, "w": 9, "x": 6, "y": 1 },
+      "fieldConfig": { "defaults": { "unit": "reqps" }, "overrides": [] },
+      "targets": [
+        { "expr": "sum by (status) (rate(http_server_requests_seconds_count{job=\"lemuel\"}[5m]))", "legendFormat": "{{status}}" }
+      ]
+    },
+    {
+      "id": 4,
+      "type": "timeseries",
+      "title": "TPS by URI (top 10)",
+      "datasource": "Prometheus",
+      "gridPos": { "h": 7, "w": 9, "x": 15, "y": 1 },
+      "fieldConfig": { "defaults": { "unit": "reqps" }, "overrides": [] },
+      "targets": [
+        { "expr": "topk(10, sum by (uri) (rate(http_server_requests_seconds_count{job=\"lemuel\"}[5m])))", "legendFormat": "{{uri}}" }
+      ]
+    },
+    {
+      "id": 5,
+      "type": "row",
+      "title": "지연 (Latency)",
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 8 },
+      "collapsed": false
+    },
+    {
+      "id": 6,
+      "type": "timeseries",
+      "title": "응답시간 백분위 (p50/p95/p99)",
+      "datasource": "Prometheus",
+      "description": "histogram_quantile 은 _bucket(히스토그램)이 있어야 동작. Spring 에서 management.metrics.distribution.percentiles-histogram.http.server.requests=true 로 버킷 활성화 필요(미설정 시 No data → avg/max 패널 사용).",
+      "gridPos": { "h": 8, "w": 16, "x": 0, "y": 9 },
+      "fieldConfig": { "defaults": { "unit": "s" }, "overrides": [] },
+      "targets": [
+        { "expr": "histogram_quantile(0.50, sum by (le) (rate(http_server_requests_seconds_bucket{job=\"lemuel\"}[5m])))", "legendFormat": "p50" },
+        { "expr": "histogram_quantile(0.95, sum by (le) (rate(http_server_requests_seconds_bucket{job=\"lemuel\"}[5m])))", "legendFormat": "p95" },
+        { "expr": "histogram_quantile(0.99, sum by (le) (rate(http_server_requests_seconds_bucket{job=\"lemuel\"}[5m])))", "legendFormat": "p99" }
+      ]
+    },
+    {
+      "id": 7,
+      "type": "stat",
+      "title": "평균 / 최대 응답시간",
+      "datasource": "Prometheus",
+      "description": "평균 = rate(_sum)/rate(_count) — 버킷 없이도 동작. 최대 = _max(감쇠 윈도 내 최댓값).",
+      "gridPos": { "h": 8, "w": 8, "x": 16, "y": 9 },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s",
+          "thresholds": { "mode": "absolute", "steps": [
+            { "color": "green", "value": null },
+            { "color": "yellow", "value": 0.5 },
+            { "color": "red", "value": 1 }
+          ] }
+        },
+        "overrides": []
+      },
+      "options": {
+        "colorMode": "value", "graphMode": "area", "justifyMode": "auto",
+        "orientation": "horizontal",
+        "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false },
+        "textMode": "auto"
+      },
+      "targets": [
+        { "expr": "sum(rate(http_server_requests_seconds_sum{job=\"lemuel\"}[5m])) / sum(rate(http_server_requests_seconds_count{job=\"lemuel\"}[5m]))", "legendFormat": "avg" },
+        { "expr": "max(http_server_requests_seconds_max{job=\"lemuel\"})", "legendFormat": "max" }
+      ]
+    },
+    {
+      "id": 8,
+      "type": "row",
+      "title": "에러 (Errors)",
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 17 },
+      "collapsed": false
+    },
+    {
+      "id": 9,
+      "type": "stat",
+      "title": "에러율 (4xx+5xx, %)",
+      "datasource": "Prometheus",
+      "description": "status 라벨로 분류. 4xx=클라이언트(인증/요청오류), 5xx=서버. rate 윈도가 겹치면 부하 종료 후에도 잠시 높게 보인다.",
+      "gridPos": { "h": 7, "w": 8, "x": 0, "y": 18 },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percent", "min": 0, "max": 100, "decimals": 1,
+          "thresholds": { "mode": "absolute", "steps": [
+            { "color": "green", "value": null },
+            { "color": "yellow", "value": 1 },
+            { "color": "red", "value": 5 }
+          ] }
+        },
+        "overrides": []
+      },
+      "options": {
+        "colorMode": "background", "graphMode": "area", "justifyMode": "auto",
+        "orientation": "horizontal",
+        "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false },
+        "textMode": "auto"
+      },
+      "targets": [
+        { "expr": "100 * sum(rate(http_server_requests_seconds_count{job=\"lemuel\",status=~\"4..|5..\"}[1m])) / sum(rate(http_server_requests_seconds_count{job=\"lemuel\"}[1m]))", "legendFormat": "error %" }
+      ]
+    },
+    {
+      "id": 10,
+      "type": "timeseries",
+      "title": "에러율 분해 — 4xx vs 5xx (%)",
+      "datasource": "Prometheus",
+      "gridPos": { "h": 7, "w": 16, "x": 8, "y": 18 },
+      "fieldConfig": { "defaults": { "unit": "percent" }, "overrides": [] },
+      "targets": [
+        { "expr": "100 * sum(rate(http_server_requests_seconds_count{job=\"lemuel\",status=~\"4..\"}[1m])) / sum(rate(http_server_requests_seconds_count{job=\"lemuel\"}[1m]))", "legendFormat": "4xx %" },
+        { "expr": "100 * sum(rate(http_server_requests_seconds_count{job=\"lemuel\",status=~\"5..\"}[1m])) / sum(rate(http_server_requests_seconds_count{job=\"lemuel\"}[1m]))", "legendFormat": "5xx %" }
+      ]
+    },
+    {
+      "id": 11,
+      "type": "timeseries",
+      "title": "에러 발생 경로 — 5xx rps by URI (top 10)",
+      "datasource": "Prometheus",
+      "gridPos": { "h": 7, "w": 24, "x": 0, "y": 25 },
+      "fieldConfig": { "defaults": { "unit": "reqps" }, "overrides": [] },
+      "targets": [
+        { "expr": "topk(10, sum by (uri, status) (rate(http_server_requests_seconds_count{job=\"lemuel\",status=~\"5..\"}[5m])))", "legendFormat": "{{status}} {{uri}}" }
+      ]
+    }
+  ]
+}

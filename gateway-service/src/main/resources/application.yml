@@ -1,0 +1,58 @@
+spring:
+  application:
+    name: shop-gateway
+
+  main:
+    # Gateway 는 WebFlux(reactive) 기반이므로 명시적으로 고정한다.
+    web-application-type: reactive
+
+  cloud:
+    gateway:
+      server:
+        webflux:
+          routes:
+            - id: order-service-orders
+              uri: ${ORDER_SERVICE_URI:http://localhost:8088}
+              # 백엔드 컨트롤러 매핑에 맞춘 경로(게이트웨이는 prefix 미변경 전달). order 는 컨트롤러별
+              # prefix 가 혼재한다: 거래/회원/인증계는 비-/api(/auth,/users,/orders,/payments,/coupons,
+              # /reviews,/games,/categories,/memberships,/products), 상품/카테고리/태그/환불이력은 /api.
+              predicates:
+                - Path=/auth/**,/users/**,/orders/**,/payments/**,/coupons/**,/reviews/**,/games/**,/categories/**,/memberships/**,/products/**,/api/products/**,/api/categories/**,/api/tags/**,/api/payments/**,/api/menus/**,/admin/categories/**,/admin/products/**,/admin/pg/**,/admin/menus/**,/admin/common-codes/**,/admin/rbac/**,/admin/payment-expiry/**,/admin/stock-reclaim/**,/admin/seller-tiers/**,/admin/shipments/**,/admin/shipping-policies/**,/admin/option-catalog/**,/display-sections/**,/admin/display-sections/**,/api/points/**,/admin/points/**,/api/gift-cards/**,/api/bulk-orders/**,/admin/gift-cards/**,/admin/audit-logs/**,/admin/members/**,/admin/reviews/**,/admin/coupons/**,/admin/refunds/**,/api/organizations/**
+            - id: operation-service
+              uri: ${OPERATION_SERVICE_URI:http://localhost:8092}
+              # 운영 관제 콘솔(인시던트, /api/ops — JWT ROLE_ADMIN 전용, webhook 은 Bearer 필터가 자체 게이팅)
+              # + 게시판·교육 슬라이스(경로는 외부 계약이라 그대로):
+              #   /api/boards 는 정의 조회(공개 게시판은 미인증도 읽는다), /admin/boards 는 게시판을
+              #   만들고 정책을 바꾸는 콘솔(ADMIN), /admin/education 은 과정·차시 콘텐츠 관리(ADMIN).
+              #   권한 등급이 달라도 인가는 서비스 자체 보안 체인(Board/Education SecurityConfig)이 강제한다.
+              predicates:
+                - Path=/api/ops/**,/api/boards/**,/admin/boards/**,/admin/education/**
+            - id: notification-stream
+              uri: ${OPERATION_SERVICE_URI:http://localhost:8092}
+              # 알림 푸시 SSE — 스트림 하나만 노출한다. operation-service 의 notification 슬라이스가 서빙한다.
+              # 발송·데모(/internal/notifications/**)는 인증 없이 발송하는 내부 경로라 게이트웨이에
+              # 올리지 않는다(와일드카드 금지). 서비스 실경로가 이미 /api/notifications/stream 이라
+              # RewritePath 가 없다.
+              predicates:
+                - Path=/api/notifications/stream
+
+server:
+  port: 8080
+  shutdown: graceful
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics,prometheus
+      base-path: /actuator
+  endpoint:
+    health:
+      show-details: when-authorized
+      probes:
+        enabled: true
+  health:
+    livenessState:
+      enabled: true
+    readinessState:
+      enabled: true

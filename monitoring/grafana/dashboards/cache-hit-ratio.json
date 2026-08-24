@@ -1,0 +1,161 @@
+{
+  "annotations": { "list": [] },
+  "editable": true,
+  "fiscalYearStartMonth": 0,
+  "graphTooltip": 1,
+  "id": null,
+  "title": "Lemuel — Cache (2-tier L1/L2 Hit Ratio)",
+  "uid": "lemuel-cache",
+  "tags": ["lemuel", "cache", "redis", "caffeine"],
+  "timezone": "browser",
+  "schemaVersion": 39,
+  "version": 1,
+  "refresh": "10s",
+  "time": { "from": "now-30m", "to": "now" },
+  "templating": { "list": [] },
+  "panels": [
+    {
+      "id": 1,
+      "type": "row",
+      "title": "히트율 (Hit Ratio)",
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 0 },
+      "collapsed": false
+    },
+    {
+      "id": 2,
+      "type": "stat",
+      "title": "전체 히트율 (%)",
+      "datasource": "Prometheus",
+      "description": "(L1 hit + L2 hit) / 전체 조회. 둘 중 한 계층이라도 적중하면 DB 를 안 친 것. 높을수록 좋다.",
+      "gridPos": { "h": 7, "w": 6, "x": 0, "y": 1 },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percent", "min": 0, "max": 100, "decimals": 1,
+          "thresholds": { "mode": "absolute", "steps": [
+            { "color": "red", "value": null },
+            { "color": "yellow", "value": 50 },
+            { "color": "green", "value": 80 }
+          ] }
+        },
+        "overrides": []
+      },
+      "options": {
+        "colorMode": "background", "graphMode": "area", "justifyMode": "auto",
+        "orientation": "horizontal",
+        "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false },
+        "textMode": "auto"
+      },
+      "targets": [
+        { "expr": "100 * sum(rate(lemuel_cache_requests_total{job=\"lemuel\",result=~\"l1_hit|l2_hit\"}[5m])) / clamp_min(sum(rate(lemuel_cache_requests_total{job=\"lemuel\"}[5m])), 1e-9)", "legendFormat": "hit %" }
+      ]
+    },
+    {
+      "id": 3,
+      "type": "stat",
+      "title": "L1 히트율 (%)",
+      "datasource": "Prometheus",
+      "description": "L1(Caffeine, 인스턴스 로컬) 단독 적중 비율. Redis 트래픽조차 없는 가장 빠른 경로.",
+      "gridPos": { "h": 7, "w": 6, "x": 6, "y": 1 },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percent", "min": 0, "max": 100, "decimals": 1,
+          "thresholds": { "mode": "absolute", "steps": [
+            { "color": "red", "value": null },
+            { "color": "yellow", "value": 40 },
+            { "color": "green", "value": 70 }
+          ] }
+        },
+        "overrides": []
+      },
+      "options": {
+        "colorMode": "value", "graphMode": "area", "justifyMode": "auto",
+        "orientation": "horizontal",
+        "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false },
+        "textMode": "auto"
+      },
+      "targets": [
+        { "expr": "100 * sum(rate(lemuel_cache_requests_total{job=\"lemuel\",result=\"l1_hit\"}[5m])) / clamp_min(sum(rate(lemuel_cache_requests_total{job=\"lemuel\"}[5m])), 1e-9)", "legendFormat": "L1 hit %" }
+      ]
+    },
+    {
+      "id": 4,
+      "type": "timeseries",
+      "title": "캐시별 히트율 (%)",
+      "datasource": "Prometheus",
+      "description": "캐시(products/categories/ecommerce-categories/tags) 단위 히트율. 특정 캐시만 낮으면 그 캐시의 TTL/무효화 빈도를 의심.",
+      "gridPos": { "h": 7, "w": 12, "x": 12, "y": 1 },
+      "fieldConfig": { "defaults": { "unit": "percent", "min": 0, "max": 100 }, "overrides": [] },
+      "targets": [
+        { "expr": "100 * sum by (cache) (rate(lemuel_cache_requests_total{job=\"lemuel\",result=~\"l1_hit|l2_hit\"}[5m])) / clamp_min(sum by (cache) (rate(lemuel_cache_requests_total{job=\"lemuel\"}[5m])), 1e-9)", "legendFormat": "{{cache}}" }
+      ]
+    },
+    {
+      "id": 5,
+      "type": "row",
+      "title": "조회 결과 분해 (L1 / L2 / Miss)",
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 8 },
+      "collapsed": false
+    },
+    {
+      "id": 6,
+      "type": "timeseries",
+      "title": "결과별 조회율 (req/s)",
+      "datasource": "Prometheus",
+      "description": "l1_hit / l2_hit / miss 의 초당 발생량. miss 가 곧 DB 로더 호출 횟수. l2_hit 이 보이면 L1 만료 후 Redis 승격이 일어나는 중.",
+      "gridPos": { "h": 7, "w": 12, "x": 0, "y": 9 },
+      "fieldConfig": { "defaults": { "unit": "reqps" }, "overrides": [] },
+      "targets": [
+        { "expr": "sum by (result) (rate(lemuel_cache_requests_total{job=\"lemuel\"}[5m]))", "legendFormat": "{{result}}" }
+      ]
+    },
+    {
+      "id": 7,
+      "type": "timeseries",
+      "title": "캐시·결과별 조회율 (req/s)",
+      "datasource": "Prometheus",
+      "description": "캐시 × 결과 교차 분해. 어느 캐시에서 miss/l2_hit 가 집중되는지 한눈에 본다.",
+      "gridPos": { "h": 7, "w": 12, "x": 12, "y": 9 },
+      "fieldConfig": { "defaults": { "unit": "reqps" }, "overrides": [] },
+      "targets": [
+        { "expr": "sum by (cache, result) (rate(lemuel_cache_requests_total{job=\"lemuel\"}[5m]))", "legendFormat": "{{cache}} / {{result}}" }
+      ]
+    },
+    {
+      "id": 8,
+      "type": "row",
+      "title": "조회량 & DB 부하 (Throughput & Miss)",
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 16 },
+      "collapsed": false
+    },
+    {
+      "id": 9,
+      "type": "stat",
+      "title": "전체 캐시 조회율 (req/s)",
+      "datasource": "Prometheus",
+      "description": "@Cacheable 메서드의 초당 호출 수(L1+L2+miss 합). 트래픽 규모 기준선.",
+      "gridPos": { "h": 7, "w": 6, "x": 0, "y": 17 },
+      "fieldConfig": { "defaults": { "unit": "reqps", "decimals": 2 }, "overrides": [] },
+      "options": {
+        "colorMode": "value", "graphMode": "area", "justifyMode": "auto",
+        "orientation": "horizontal",
+        "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false },
+        "textMode": "auto"
+      },
+      "targets": [
+        { "expr": "sum(rate(lemuel_cache_requests_total{job=\"lemuel\"}[1m]))", "legendFormat": "lookups" }
+      ]
+    },
+    {
+      "id": 10,
+      "type": "timeseries",
+      "title": "Miss 발생률 by 캐시 (= DB 직격 경로, req/s)",
+      "datasource": "Prometheus",
+      "description": "양 계층 모두 미스 → DB 로더가 실행되는 횟수. 스파이크는 무효화(@CacheEvict)·TTL 만료·콜드스타트 직후를 의미.",
+      "gridPos": { "h": 7, "w": 18, "x": 6, "y": 17 },
+      "fieldConfig": { "defaults": { "unit": "reqps" }, "overrides": [] },
+      "targets": [
+        { "expr": "sum by (cache) (rate(lemuel_cache_requests_total{job=\"lemuel\",result=\"miss\"}[5m]))", "legendFormat": "{{cache}}" }
+      ]
+    }
+  ]
+}

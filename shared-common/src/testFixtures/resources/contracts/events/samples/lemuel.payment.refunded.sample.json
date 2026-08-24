@@ -1,0 +1,7 @@
+{
+  "paymentId": 1001,
+  "orderId": 5001,
+  "refundedAmount": "15000",
+  "refundAmount": "5000",
+  "refundId": 42
+}

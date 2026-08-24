@@ -1,0 +1,53 @@
+# SCA 베이스라인 — Trivy SBOM 스캔(ci.yml backend-ci)이 참조한다.
+#
+# 왜 있나: SCA 게이트를 차단으로 켠 시점(2026-08-12)에 이미 존재하던 부채다.
+#   그전까지 SCA 는 Snyk 스텝이 담당했으나 토큰이 무효(SNYK-0005)라 한 번도 스캔하지 않았고,
+#   continue-on-error 가 그 실패를 삼켰다 — 즉 "새로 생긴 것"이 아니라 "아무도 보지 못한 것"이었다.
+#
+# 설계: semgrep.yml 과 같은 기준 — "새로 생긴 것만 막는다".
+#   여기 없는 신규 HIGH/CRITICAL 은 exit 1 로 차단된다.
+#
+# ⚠ expired_at 이 지나면 다시 차단 대상이 된다(부채가 영구히 숨지 않게 하는 장치).
+#   기한 안에 못 고치면 날짜를 미루지 말고 왜 못 고치는지를 statement 에 적을 것.
+#
+# 경과: 최초 등록 48건(CRITICAL 5 · HIGH 43)
+#   → spring-boot 4.0.4 → 4.0.7 로 40건 해소 (8건 잔여)
+#   → bcprov-jdk18on 1.81 → 1.84 로 CVE-2025-14813 해소 (7건 잔여, **CRITICAL 0건**)
+#   현재 남은 7건은 전부 HIGH 이고, Boot BOM 이 관리하지 않거나 BOM 관리 버전이 아직
+#   수정판에 못 미치는 것들이다.
+#   재측정: ./gradlew cyclonedxBom && trivy sbom build/reports/cyclonedx/bom.json \
+#             --severity HIGH,CRITICAL --ignore-unfixed
+vulnerabilities:
+  # ── org.postgresql:postgresql 42.7.3 → 42.7.11
+  #   Boot BOM 이 아니라 17개 서비스 build.gradle.kts 가 각각 `runtimeOnly(...:42.7.3)` 으로
+  #   명시 고정하고 있다. 상향하려면 17곳을 함께 바꿔야 해서 별도 작업으로 분리했다.
+  - id: CVE-2026-42198
+    statement: "Baseline 2026-08-12. 서비스별 명시 핀(42.7.3) 17곳 일괄 상향 필요."
+    expired_at: 2026-09-30
+
+  # ── io.netty:* 4.2.15.Final → 4.2.16.Final
+  #   Boot 4.0.7 이 관리하는 netty 는 4.2.15 로, 수정판보다 한 패치 아래다.
+  #   Boot 다음 패치가 4.2.16 을 물고 오면 자동 해소된다. 먼저 끄고 싶으면
+  #   dependency-management 의 netty.version 프로퍼티를 덮어쓰는 방법이 있다.
+  - id: CVE-2026-56816
+    statement: "Baseline 2026-08-12. netty-codec-http3. Boot 4.0.7 관리 4.2.15 → 수정판 4.2.16."
+    expired_at: 2026-09-30
+  - id: CVE-2026-56819
+    statement: "Baseline 2026-08-12. netty-codec-http2. Boot 4.0.7 관리 4.2.15 → 수정판 4.2.16."
+    expired_at: 2026-09-30
+  - id: CVE-2026-56745
+    statement: "Baseline 2026-08-12. netty-codec-http. Boot 4.0.7 관리 4.2.15 → 수정판 4.2.16."
+    expired_at: 2026-09-30
+  - id: CVE-2026-55833
+    statement: "Baseline 2026-08-12. netty-codec-http. Boot 4.0.7 관리 4.2.15 → 수정판 4.2.16."
+    expired_at: 2026-09-30
+  - id: CVE-2026-55831
+    statement: "Baseline 2026-08-12. netty-codec-http. Boot 4.0.7 관리 4.2.15 → 수정판 4.2.16."
+    expired_at: 2026-09-30
+  - id: CVE-2026-59901
+    statement: "Baseline 2026-08-12. netty-codec-compression. Boot 4.0.7 관리 4.2.15 → 수정판 4.2.16."
+    expired_at: 2026-09-30
+
+  # ── (해소됨) CVE-2025-14813 / bcprov-jdk18on — gateway-service 의 constraint 로 1.84 고정.
+  #   ignore 로 덮지 않고 실제로 고쳤으므로 항목을 지운다. 이미지 스캔은 이 파일을 참조하지
+  #   않기 때문에(설계상) 여기 남겨둬도 gateway 이미지 게이트는 계속 빨간불이었을 것이다.

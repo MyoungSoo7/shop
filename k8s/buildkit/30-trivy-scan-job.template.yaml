@@ -1,0 +1,64 @@
+# 푸시된 이미지의 컨테이너 취약점 스캔 — ci.yml 의 "Trivy image scan (CRITICAL gate)" 대체물.
+#
+# 왜 필요한가: 하이브리드로 이미지 빌드를 k3s 로 내리면 backend-ghcr 잡이 안 돌고,
+# 그 잡에 붙어 있던 Trivy CRITICAL 게이트도 같이 사라진다. Snyk 은 Gradle 의존성만 보므로
+# 베이스 이미지(temurin:25-jre-alpine) CVE 를 보는 눈이 아예 없어진다.
+#
+# 직접 apply 하지 말 것 — build.sh --scan 이 __TOKEN__ 을 치환해 넘긴다.
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: __JOB_NAME__
+  namespace: build
+  labels:
+    app.kubernetes.io/part-of: shop-ci
+    build.shop/module: __MODULE__
+spec:
+  backoffLimit: 0
+  ttlSecondsAfterFinished: 86400
+  activeDeadlineSeconds: 1800
+  template:
+    spec:
+      restartPolicy: Never
+      containers:
+        - name: trivy
+          # 버전 고정: ci.yml 의 교훈(액션을 SHA 로 핀해도 내부 참조는 안 고정된다)과 같은 이유로
+          # latest 를 쓰지 않는다. DB 스키마 변경으로 깨지면 여기만 올린다.
+          image: aquasec/trivy:0.58.1
+          env:
+            - name: DOCKER_CONFIG
+              value: /docker
+            # 저장소 루트의 .trivyignore.yaml 은 여기서 읽히지 않는다(컨텍스트가 없다).
+            # 예외를 태우려면 ConfigMap 으로 올려 마운트하고 아래를 켤 것.
+            # - name: TRIVY_IGNOREFILE
+            #   value: /trivyignore/.trivyignore.yaml
+          args:
+            - image
+            - --format
+            - table
+            - --vuln-type
+            - os,library
+            - --severity
+            - CRITICAL
+            - --ignore-unfixed
+            - --exit-code
+            - "1"
+            - __IMAGE_REF__
+          resources:
+            requests:
+              cpu: 100m
+              memory: 512Mi
+            limits:
+              cpu: "2"
+              memory: 2Gi
+          volumeMounts:
+            - name: ghcr-auth
+              mountPath: /docker
+              readOnly: true
+      volumes:
+        - name: ghcr-auth
+          secret:
+            secretName: ghcr-auth
+            items:
+              - key: .dockerconfigjson
+                path: config.json

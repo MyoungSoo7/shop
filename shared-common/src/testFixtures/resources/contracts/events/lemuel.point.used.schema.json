@@ -1,0 +1,60 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "lemuel.point.used",
+  "description": "포인트가 결제에 사용된 사실. lots 는 어느 적립분을 얼마나 썼는지의 상세다.",
+  "$comment": "참고(계약 아님) — 회계 해석: DR POINT_LIABILITY / CR CASH. 대변이 현금인 이유 — settlement.created 가 주문금액만큼 현금 유입을 전기하는데 포인트 결제분은 그 시점에 현금이 들어오지 않았다(충전 시점에 이미 받았다). 이 전표가 그 가공의 유입을 상계한다.",
+  "type": "object",
+  "properties": {
+    "userId": {
+      "type": "integer"
+    },
+    "accountId": {
+      "type": "integer"
+    },
+    "amount": {
+      "type": "string",
+      "pattern": "^-?[0-9]+(\\.[0-9]+)?$"
+    },
+    "occurredAt": {
+      "type": "string"
+    },
+    "entryId": {
+      "type": "integer"
+    },
+    "referenceType": {
+      "type": "string"
+    },
+    "referenceId": {
+      "type": "string"
+    },
+    "sequence": {
+      "type": "integer"
+    },
+    "lots": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "lotId": {
+            "type": "integer"
+          },
+          "amount": {
+            "type": "string",
+            "pattern": "^-?[0-9]+(\\.[0-9]+)?$"
+          }
+        },
+        "required": [
+          "lotId",
+          "amount"
+        ]
+      }
+    }
+  },
+  "required": [
+    "userId",
+    "accountId",
+    "entryId",
+    "amount"
+  ],
+  "additionalProperties": true
+}

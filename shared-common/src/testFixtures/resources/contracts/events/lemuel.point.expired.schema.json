@@ -1,0 +1,35 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "lemuel.point.expired",
+  "description": "포인트가 유효기간 소멸로 사라진 사실.",
+  "$comment": "참고(계약 아님) — 회계 해석: DR POINT_LIABILITY / CR POINT_BREAKAGE_INCOME(소멸이익 인식 — 부채로 이월하지 않는다).",
+  "type": "object",
+  "properties": {
+    "userId": {
+      "type": "integer"
+    },
+    "accountId": {
+      "type": "integer"
+    },
+    "amount": {
+      "type": "string",
+      "pattern": "^-?[0-9]+(\\.[0-9]+)?$"
+    },
+    "occurredAt": {
+      "type": "string"
+    },
+    "lotId": {
+      "type": "integer"
+    },
+    "origin": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "userId",
+    "accountId",
+    "lotId",
+    "amount"
+  ],
+  "additionalProperties": true
+}

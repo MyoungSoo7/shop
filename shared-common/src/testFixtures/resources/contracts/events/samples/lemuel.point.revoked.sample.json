@@ -1,0 +1,16 @@
+{
+  "userId": 42,
+  "accountId": 7,
+  "entryId": 902,
+  "amount": "500",
+  "referenceType": "ORDER",
+  "referenceId": "1001",
+  "sequence": 0,
+  "lots": [
+    {
+      "lotId": 57,
+      "amount": "500"
+    }
+  ],
+  "occurredAt": "2026-08-20T09:00:00Z"
+}

@@ -1,0 +1,12 @@
+{
+  "giftCardId": 501,
+  "userId": 42,
+  "codeLast4": "6789",
+  "remainingAmount": "50000",
+  "entryId": 902,
+  "amount": "30000",
+  "referenceType": "PAYMENT_TENDER_REFUND",
+  "referenceId": "tender-77-30000",
+  "sequence": 0,
+  "occurredAt": "2026-08-18T12:00:00Z"
+}

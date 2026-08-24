@@ -1,0 +1,79 @@
+# 서비스 1개를 이미지로 굽는 Job 템플릿.
+# 직접 apply 하지 말 것 — build.sh 가 __TOKEN__ 을 치환해 stdin 으로 넘긴다.
+#
+# 컨텍스트는 로컬 디렉터리가 아니라 git URL 이다.
+#   → 커밋·푸시된 것만 빌드된다. 워킹트리의 미커밋 변경은 이미지에 들어가지 않는다.
+#   → 대신 컨텍스트 전송(수백 MB)이 없고, buildkitd 가 git 을 캐시한다.
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: __JOB_NAME__
+  namespace: build
+  labels:
+    app.kubernetes.io/part-of: shop-ci
+    build.shop/module: __MODULE__
+    # 반드시 따옴표로 감쌀 것 — sha7 이 `23260e7` 처럼 나오면 YAML 이 지수 표기 숫자로 읽어
+    # "cannot unmarshal number into ... labels of type string" 으로 apply 가 거부된다(실측).
+    build.shop/sha: "__SHORT_SHA__"
+spec:
+  backoffLimit: 1
+  # 실패해도 하루는 남겨 로그를 볼 수 있게 한다(성공 파드도 동일 — kubectl logs 로 확인).
+  ttlSecondsAfterFinished: 86400
+  # 데몬이 죽거나 네트워크가 막혀 hang 하면 Job 이 노드를 무한 점유한다.
+  activeDeadlineSeconds: 3600
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/part-of: shop-ci
+        build.shop/module: __MODULE__
+    spec:
+      restartPolicy: Never
+      containers:
+        - name: buildctl
+          # rootless 가 아닌 이미지 — 여기서는 buildctl 클라이언트만 실행한다(빌드는 데몬이 한다).
+          image: moby/buildkit:v0.20.2
+          env:
+            - name: BUILDKIT_HOST
+              value: tcp://buildkitd.build.svc.cluster.local:1234
+            # buildctl 은 클라이언트 쪽에서 레지스트리 자격을 풀어 세션으로 데몬에 넘긴다.
+            # 따라서 GHCR 자격은 데몬이 아니라 이 파드에 있어야 한다.
+            - name: DOCKER_CONFIG
+              value: /docker
+          command: ["buildctl"]
+          args:
+            - build
+            - --frontend=dockerfile.v0
+            - --opt
+            - context=https://github.com/MyoungSoo7/settlement.git#__GIT_REF__
+            - --opt
+            - filename=Dockerfile
+            # ARG MODULE 가 비면 `gradle ::bootJar` 로 빈 세그먼트가 되어 빌드가 깨진다(ci.yml 주석 참조).
+            # build.sh 가 빈 모듈명을 거른다.
+            - --opt
+            - build-arg:MODULE=__MODULE__
+            - --opt
+            - platform=linux/amd64
+            - --output
+            - type=image,"name=__TAGS__",push=true
+            - --progress=plain
+          resources:
+            # 클라이언트라 가볍다. 실제 자원은 buildkitd Deployment 가 쓴다.
+            requests:
+              cpu: 50m
+              memory: 128Mi
+            limits:
+              cpu: "1"
+              memory: 512Mi
+          volumeMounts:
+            - name: ghcr-auth
+              mountPath: /docker
+              readOnly: true
+      volumes:
+        - name: ghcr-auth
+          secret:
+            secretName: ghcr-auth
+            items:
+              # dockerconfigjson 타입 시크릿은 `.dockerconfigjson` 이라는 파일명으로 마운트된다.
+              # buildctl 은 $DOCKER_CONFIG/config.json 을 읽으므로 이름을 바꿔 얹는다.
+              - key: .dockerconfigjson
+                path: config.json

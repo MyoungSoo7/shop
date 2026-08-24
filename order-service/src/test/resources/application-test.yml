@@ -1,0 +1,66 @@
+# 테스트 프로파일 - @DataJpaTest / @WebMvcTest 에서 사용
+# application.yml 의 ${ENV_VAR} 플레이스홀더가 해결되지 않아 기동 실패하는 것을 방지하는
+# 안전한 기본값 모음. 실제 DB 등은 Testcontainers 가 DynamicPropertySource 로 덮어씀.
+
+spring:
+  datasource:
+    url: jdbc:postgresql://localhost:5432/placeholder
+    username: placeholder
+    password: placeholder
+  flyway:
+    enabled: true
+    schemas: opslab
+    default-schema: opslab
+    create-schemas: true
+    validate-on-migrate: false
+  jpa:
+    hibernate:
+      ddl-auto: validate
+    properties:
+      hibernate:
+        default_schema: opslab
+  elasticsearch:
+    uris: http://localhost:9200
+    username: test
+    password: test
+  mail:
+    host: localhost
+    port: 25
+    username: test
+    password: test
+
+app:
+  kafka:
+    enabled: false
+    topic:
+      payment-captured: lemuel.payment.captured
+      payment-refunded: lemuel.payment.refunded
+  outbox:
+    polling-delay-ms: 2000
+  search:
+    enabled: false
+  jwt:
+    issuer: test
+    secret: test-secret-more-than-32-bytes-long-string-for-hs256
+    ttl-seconds: 3600
+  mail:
+    from: test@example.com
+  password-reset:
+    token-expiry-minutes: 30
+    base-url: http://localhost:5173
+
+toss:
+  secret-key: test
+  api-url: http://dummy
+
+ENVIRONMENT: test
+POSTGRES_USER: placeholder
+POSTGRES_PASSWORD: placeholder
+ELASTICSEARCH_USER: test
+ELASTICSEARCH_PASSWORD: test
+MAIL_USERNAME: test
+MAIL_PASSWORD: test
+JWT_ISSUER: test
+JWT_SECRET: test-secret-more-than-32-bytes-long-string-for-hs256
+JWT_TTL_SECONDS: 3600
+TOSS_SECRET_KEY: test

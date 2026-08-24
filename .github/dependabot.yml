@@ -1,0 +1,129 @@
+# 의존성 자동 업데이트. 지금까지 없어서 베이스 이미지·라이브러리 CVE 를 사람이 눈으로 찾아야 했다.
+#
+#
+# ★ 2026-08-19: 위 조임에서 한 걸음 더 나아가 정기 버전 업데이트를 **정지**했다 —
+#   모든 생태계 open-pull-requests-limit: 0. 월 1회로 줄여도 리뷰 대기열에 쌓이는 건
+#   마찬가지라는 판단이다. 아래 ignore/groups 는 되살릴 때를 위해 그대로 둔다.
+#   되살리려면 상한 숫자만 되돌리면 된다(gradle/npm 3, 나머지 2 가 직전 값).
+#   보안 업데이트는 이 파일 소관이 아니므로 영향 없다(바로 아래 문단 참조).
+# 이 파일이 담당하는 것은 *정기 버전 업데이트* 뿐이다. 취약점 대응(Dependabot alerts /
+# security updates)은 리포 Settings 쪽 스위치이고, 이 파일과 별개로 켜져 있다.
+#
+# PR 폭주를 막는 장치 4개:
+#   - schedule.interval: monthly — 주 1회는 아무도 못 따라간다. 2026-08-17 에 19개가
+#     한 번에 열려 이틀간 방치됐고, 그 사이 CI 빨간불에 무뎌지는 부작용만 남았다.
+#   - ignore: 메이저는 봇이 던질 게 아니다. Spring Boot 3→4, Gradle 8→9, numpy 1→2 는
+#     사람이 별건 작업으로 잡아야 하는 마이그레이션이지 리뷰 대기열에 쌓을 PR 이 아니다.
+#   - groups: minor/patch 를 생태계별 PR 1개로 묶는다.
+#   - open-pull-requests-limit: 생태계당 동시 열림 상한.
+#
+# 모든 PR 은 develop 을 target 으로 연다 — main 은 보호 브랜치라 릴리스 PR 로만 들어간다.
+# 주의: target-branch 를 쓰면 그 생태계 설정은 security update 에 적용되지 않는다.
+# 보안 PR 은 항상 리포 기본 브랜치(main)로 열린다 — 즉 아래 ignore 가 보안 PR 을 막지 않는다.
+# 뒤집어 말하면 취약점 스캔 대상도 main 의 매니페스트뿐이므로, develop 에만 있는
+# 의존성은 main 에 올라오기 전까지 경보가 뜨지 않는다.
+# https://docs.github.com/en/code-security/reference/supply-chain-security/dependabot-options-reference
+#
+# ignore 블록은 생태계마다 똑같이 반복된다. YAML 앵커로 묶고 싶겠지만, dependabot.yml 은
+# 스키마 검증이 엄격해 앵커를 담아둘 최상위 키를 거부한다. 설정이 통째로 죽는 것보다
+# 중복이 낫다.
+version: 2
+updates:
+  # ── Java (Gradle 멀티모듈) — 루트 + 서비스 모듈 전부(`/*-service` 글롭) + shared-common
+  - package-ecosystem: gradle
+    directories:
+      - "/"
+      - "/*-service"
+      - "/shared-common"
+    target-branch: develop
+    schedule:
+      interval: monthly
+      time: "09:00"
+      timezone: Asia/Seoul
+    open-pull-requests-limit: 0
+    ignore:
+      - dependency-name: "*"
+        update-types: ["version-update:semver-major"]
+    groups:
+      gradle-minor-patch:
+        update-types: [minor, patch]
+    commit-message:
+      prefix: "chore(deps)"
+
+  # ── 프론트엔드
+  - package-ecosystem: npm
+    directory: /frontend
+    target-branch: develop
+    schedule:
+      interval: monthly
+      time: "09:00"
+      timezone: Asia/Seoul
+    open-pull-requests-limit: 0
+    ignore:
+      - dependency-name: "*"
+        update-types: ["version-update:semver-major"]
+    groups:
+      npm-minor-patch:
+        update-types: [minor, patch]
+    commit-message:
+      prefix: "chore(deps)"
+
+  # ── GitHub Actions (actions/checkout, docker/build-push-action 등 핀 갱신)
+  - package-ecosystem: github-actions
+    directory: /
+    target-branch: develop
+    schedule:
+      interval: monthly
+      time: "09:00"
+      timezone: Asia/Seoul
+    open-pull-requests-limit: 0
+    ignore:
+      - dependency-name: "*"
+        update-types: ["version-update:semver-major"]
+    groups:
+      actions-all:
+        patterns: ["*"]
+    commit-message:
+      prefix: "chore(ci)"
+
+  # ── 컨테이너 베이스 이미지 (Dockerfile FROM)
+  - package-ecosystem: docker
+    directories:
+      - "/"
+      - "/frontend"
+      - "/*-service"
+    target-branch: develop
+    schedule:
+      interval: monthly
+      time: "09:00"
+      timezone: Asia/Seoul
+    open-pull-requests-limit: 0
+    ignore:
+      - dependency-name: "*"
+        update-types: ["version-update:semver-major"]
+    groups:
+      docker-all:
+        patterns: ["*"]
+    commit-message:
+      prefix: "chore(deps)"
+
+  - package-ecosystem: gomod
+    directories:
+      - "/market-stream-service"
+    target-branch: develop
+    schedule:
+      interval: monthly
+      time: "09:00"
+      timezone: Asia/Seoul
+    open-pull-requests-limit: 0
+    ignore:
+      - dependency-name: "*"
+        update-types: ["version-update:semver-major"]
+    groups:
+      go-minor-patch:
+        update-types: [minor, patch]
+    commit-message:
+      prefix: "chore(deps)"
+
+  # ── gomod·pip 생태계는 대상이 없다 — 이 저장소는 JVM + 프론트뿐이다.
+  # 폴리글랏 서비스를 배선하는 시점에 해당 블록을 추가한다.

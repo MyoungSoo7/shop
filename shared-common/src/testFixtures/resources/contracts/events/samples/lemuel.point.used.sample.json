@@ -1,0 +1,20 @@
+{
+  "userId": 42,
+  "accountId": 7,
+  "entryId": 900,
+  "amount": "5000",
+  "referenceType": "PAYMENT_TENDER",
+  "referenceId": "55",
+  "sequence": 0,
+  "lots": [
+    {
+      "lotId": 55,
+      "amount": "3000"
+    },
+    {
+      "lotId": 56,
+      "amount": "2000"
+    }
+  ],
+  "occurredAt": "2026-08-18T11:00:00Z"
+}

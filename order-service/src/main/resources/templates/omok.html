@@ -1,0 +1,370 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>오목 (Gomoku)</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;700&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --bg: #1a1a1f;
+      --board-bg: #dcb35c;
+      --board-line: #8b6914;
+      --stone-black: #1a1a1a;
+      --stone-white: #f5f5f0;
+      --text: #e8e6e3;
+      --accent: #c9a227;
+      --hover: rgba(201, 162, 39, 0.3);
+    }
+
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    body {
+      min-height: 100vh;
+      background: var(--bg);
+      font-family: 'Noto Sans KR', sans-serif;
+      color: var(--text);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      padding: 1.5rem;
+      background-image:
+        radial-gradient(ellipse at 30% 70%, rgba(201, 162, 39, 0.08) 0%, transparent 50%),
+        radial-gradient(ellipse at 70% 30%, rgba(139, 105, 20, 0.06) 0%, transparent 50%);
+    }
+
+    h1 {
+      font-size: 1.75rem;
+      font-weight: 700;
+      margin-bottom: 0.5rem;
+      color: var(--accent);
+    }
+
+    .subtitle {
+      font-size: 0.9rem;
+      opacity: 0.8;
+      margin-bottom: 1rem;
+    }
+
+    .game-wrap {
+      display: flex;
+      gap: 2rem;
+      align-items: flex-start;
+      flex-wrap: wrap;
+      justify-content: center;
+    }
+
+    .board-wrap {
+      position: relative;
+      padding: 20px;
+      background: linear-gradient(145deg, #2a2520 0%, #1f1c18 100%);
+      border-radius: 12px;
+      box-shadow:
+        0 4px 24px rgba(0, 0, 0, 0.4),
+        inset 0 1px 0 rgba(255, 255, 255, 0.05);
+      border: 1px solid rgba(201, 162, 39, 0.2);
+    }
+
+    #board {
+      display: block;
+      background: var(--board-bg);
+      border-radius: 4px;
+      cursor: pointer;
+      box-shadow: inset 0 0 20px rgba(139, 105, 20, 0.3);
+    }
+
+    .sidebar {
+      min-width: 180px;
+      display: flex;
+      flex-direction: column;
+      gap: 1rem;
+    }
+
+    .turn-indicator {
+      padding: 1rem;
+      background: rgba(255, 255, 255, 0.05);
+      border-radius: 8px;
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      text-align: center;
+    }
+
+    .turn-label {
+      font-size: 0.8rem;
+      opacity: 0.7;
+      margin-bottom: 0.25rem;
+    }
+
+    .turn-stone {
+      width: 32px;
+      height: 32px;
+      border-radius: 50%;
+      margin: 0.5rem auto;
+      box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+    }
+
+    .turn-stone.black {
+      background: radial-gradient(circle at 35% 35%, #3a3a3a, var(--stone-black));
+    }
+
+    .turn-stone.white {
+      background: radial-gradient(circle at 35% 35%, #fff, #ddd);
+      border: 1px solid #ccc;
+    }
+
+    .status {
+      padding: 0.75rem;
+      border-radius: 8px;
+      font-size: 0.95rem;
+      text-align: center;
+      min-height: 2.5rem;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .status.waiting {
+      color: var(--text);
+    }
+
+    .status.win {
+      background: rgba(34, 197, 94, 0.2);
+      color: #4ade80;
+      font-weight: 700;
+    }
+
+    .status.draw {
+      background: rgba(148, 163, 184, 0.2);
+      color: #94a3b8;
+    }
+
+    button {
+      padding: 0.75rem 1.25rem;
+      font-family: inherit;
+      font-size: 0.95rem;
+      font-weight: 700;
+      color: var(--bg);
+      background: var(--accent);
+      border: none;
+      border-radius: 8px;
+      cursor: pointer;
+      transition: transform 0.1s, box-shadow 0.2s;
+    }
+
+    button:hover {
+      transform: translateY(-1px);
+      box-shadow: 0 4px 12px rgba(201, 162, 39, 0.4);
+    }
+
+    button:active {
+      transform: translateY(0);
+    }
+  </style>
+</head>
+<body>
+  <h1>오목</h1>
+  <p class="subtitle">흑·백이 번갈아 두어 오목(다섯 알)을 먼저 만드는 쪽이 이깁니다</p>
+
+  <div class="game-wrap">
+    <div class="board-wrap">
+      <canvas id="board" width="450" height="450"></canvas>
+    </div>
+    <div class="sidebar">
+      <div class="turn-indicator">
+        <div class="turn-label">차례</div>
+        <div id="turnStone" class="turn-stone black"></div>
+        <span id="turnText">흑</span>
+      </div>
+      <div id="status" class="status waiting">흑부터 두세요</div>
+      <button type="button" id="restart">새 게임</button>
+    </div>
+  </div>
+
+  <script>
+    (function () {
+      const BOARD_SIZE = 15;
+      const CELL = 30;
+      const PADDING = CELL * 0.5;
+      const STONE_R = CELL * 0.44;
+      const CANVAS_SIZE = CELL * (BOARD_SIZE - 1) + PADDING * 2;
+
+      const canvas = document.getElementById('board');
+      const ctx = canvas.getContext('2d');
+      const statusEl = document.getElementById('status');
+      const turnStoneEl = document.getElementById('turnStone');
+      const turnTextEl = document.getElementById('turnText');
+      const restartBtn = document.getElementById('restart');
+
+      let board = [];
+      let currentPlayer = 1; // 1 = 흑, -1 = 백
+      let gameOver = false;
+      let winner = 0;
+
+      function initBoard() {
+        board = Array(BOARD_SIZE).fill(null).map(() => Array(BOARD_SIZE).fill(0));
+        currentPlayer = 1;
+        gameOver = false;
+        winner = 0;
+        updateUI();
+        draw();
+      }
+
+      function draw() {
+        const dpr = window.devicePixelRatio || 1;
+        const rect = canvas.getBoundingClientRect();
+        if (canvas.width !== rect.width * dpr || canvas.height !== rect.height * dpr) {
+          canvas.width = CANVAS_SIZE * dpr;
+          canvas.height = CANVAS_SIZE * dpr;
+          canvas.style.width = CANVAS_SIZE + 'px';
+          canvas.style.height = CANVAS_SIZE + 'px';
+          ctx.scale(dpr, dpr);
+        }
+
+        const w = CANVAS_SIZE;
+        const h = CANVAS_SIZE;
+        ctx.clearRect(0, 0, w, h);
+
+        // 바둑판 배경
+        ctx.fillStyle = '#dcb35c';
+        ctx.fillRect(0, 0, w, h);
+
+        // 격자
+        ctx.strokeStyle = '#8b6914';
+        ctx.lineWidth = 1;
+        for (let i = 0; i < BOARD_SIZE; i++) {
+          const p = PADDING + i * CELL;
+          ctx.beginPath();
+          ctx.moveTo(PADDING, p);
+          ctx.lineTo(PADDING + (BOARD_SIZE - 1) * CELL, p);
+          ctx.stroke();
+          ctx.beginPath();
+          ctx.moveTo(p, PADDING);
+          ctx.lineTo(p, PADDING + (BOARD_SIZE - 1) * CELL);
+          ctx.stroke();
+        }
+
+        // 천원·귀 점
+        const star = [3, 7, 11];
+        ctx.fillStyle = '#8b6914';
+        star.forEach(i =>
+          star.forEach(j => {
+            const x = PADDING + i * CELL;
+            const y = PADDING + j * CELL;
+            ctx.beginPath();
+            ctx.arc(x, y, 4, 0, Math.PI * 2);
+            ctx.fill();
+          })
+        );
+
+        // 돌 그리기
+        for (let i = 0; i < BOARD_SIZE; i++) {
+          for (let j = 0; j < BOARD_SIZE; j++) {
+            const v = board[i][j];
+            if (v === 0) continue;
+            const x = PADDING + j * CELL;
+            const y = PADDING + i * CELL;
+            if (v === 1) {
+              ctx.fillStyle = '#1a1a1a';
+              ctx.beginPath();
+              ctx.arc(x, y, STONE_R, 0, Math.PI * 2);
+              ctx.fill();
+              ctx.strokeStyle = '#333';
+              ctx.lineWidth = 1;
+              ctx.stroke();
+            } else {
+              ctx.fillStyle = '#f5f5f0';
+              ctx.beginPath();
+              ctx.arc(x, y, STONE_R, 0, Math.PI * 2);
+              ctx.fill();
+              ctx.strokeStyle = '#ccc';
+              ctx.lineWidth = 1;
+              ctx.stroke();
+            }
+          }
+        }
+      }
+
+      function xyToIndex(x, y) {
+        const rect = canvas.getBoundingClientRect();
+        const scaleX = (rect.right - rect.left) / CANVAS_SIZE;
+        const scaleY = (rect.bottom - rect.top) / CANVAS_SIZE;
+        const px = (x - rect.left) / scaleX;
+        const py = (y - rect.top) / scaleY;
+        const j = Math.round((px - PADDING) / CELL);
+        const i = Math.round((py - PADDING) / CELL);
+        if (i < 0 || i >= BOARD_SIZE || j < 0 || j >= BOARD_SIZE) return null;
+        return { i, j };
+      }
+
+      function checkFive(ri, rj, di, dj) {
+        const p = currentPlayer;
+        let count = 0;
+        let i = ri;
+        let j = rj;
+        while (i >= 0 && i < BOARD_SIZE && j >= 0 && j < BOARD_SIZE && board[i][j] === p) {
+          count++;
+          i += di;
+          j += dj;
+        }
+        return count;
+      }
+
+      function isFiveInRow(i, j) {
+        const dirs = [[0, 1], [1, 0], [1, 1], [1, -1]];
+        for (const [di, dj] of dirs) {
+          const count = checkFive(i, j, di, dj) + checkFive(i, j, -di, -dj) - 1;
+          if (count >= 5) return true;
+        }
+        return false;
+      }
+
+      function isDraw() {
+        return board.every(row => row.every(cell => cell !== 0));
+      }
+
+      function updateUI() {
+        statusEl.className = 'status ' + (gameOver ? (winner ? 'win' : 'draw') : 'waiting');
+        if (gameOver) {
+          if (winner === 1) statusEl.textContent = '흑 승리!';
+          else if (winner === -1) statusEl.textContent = '백 승리!';
+          else statusEl.textContent = '무승부';
+        } else {
+          statusEl.textContent = (currentPlayer === 1 ? '흑' : '백') + ' 차례';
+        }
+        turnStoneEl.className = 'turn-stone ' + (currentPlayer === 1 ? 'black' : 'white');
+        turnTextEl.textContent = currentPlayer === 1 ? '흑' : '백';
+      }
+
+      function placeStone(i, j) {
+        if (gameOver || board[i][j] !== 0) return;
+        board[i][j] = currentPlayer;
+        if (isFiveInRow(i, j)) {
+          gameOver = true;
+          winner = currentPlayer;
+        } else if (isDraw()) {
+          gameOver = true;
+        } else {
+          currentPlayer = -currentPlayer;
+        }
+        updateUI();
+        draw();
+      }
+
+      canvas.addEventListener('click', function (e) {
+        const pos = xyToIndex(e.clientX, e.clientY);
+        if (pos) placeStone(pos.i, pos.j);
+      });
+
+      restartBtn.addEventListener('click', initBoard);
+
+      initBoard();
+    })();
+  </script>
+</body>
+</html>

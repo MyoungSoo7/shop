@@ -1,0 +1,27 @@
+# Tempo 단일 노드 구성 — 로컬·시연용. 운영은 클러스터 모드 + S3/GCS 백엔드 권장.
+server:
+  http_listen_port: 3200
+
+distributor:
+  receivers:
+    otlp:
+      protocols:
+        grpc:
+          endpoint: 0.0.0.0:4317
+        http:
+          endpoint: 0.0.0.0:4318
+
+ingester:
+  max_block_duration: 5m
+
+compactor:
+  compaction:
+    block_retention: 24h    # 로컬 시연 — 24시간만 보관
+
+storage:
+  trace:
+    backend: local
+    local:
+      path: /var/tempo/blocks
+    wal:
+      path: /var/tempo/wal

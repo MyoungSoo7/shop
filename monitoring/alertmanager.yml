@@ -1,0 +1,79 @@
+global:
+  resolve_timeout: 5m
+  slack_api_url: '${SLACK_WEBHOOK_URL}'
+
+route:
+  group_by: ['alertname', 'severity']
+  group_wait: 10s
+  group_interval: 10s
+  repeat_interval: 12h
+  receiver: 'slack-alerts'
+  routes:
+    # ★ operation-service 인시던트화 — 모든 알람을 webhook 에도 전달(continue) 후 Slack 라우팅 계속.
+    - receiver: 'operation-webhook'
+      continue: true
+    - match:
+        severity: critical
+      receiver: 'slack-critical'
+      repeat_interval: 5m
+    - match:
+        severity: warning
+      receiver: 'slack-alerts'
+      repeat_interval: 1h
+
+receivers:
+  # operation-service Phase 1 — 알람 → 인시던트 적재. ${INTERNAL_API_KEY} 는
+  # SLACK_WEBHOOK_URL 과 동일하게 envsubst 선처리 필요 (compose 의 INTERNAL_API_KEY 와 동일 값).
+  - name: 'operation-webhook'
+    webhook_configs:
+      - url: 'http://operation-service:8080/api/ops/webhook/alertmanager'
+        send_resolved: true
+        http_config:
+          authorization:
+            type: Bearer
+            credentials: '${INTERNAL_API_KEY}'
+
+  - name: 'slack-alerts'
+    slack_configs:
+      - channel: '${SLACK_CHANNEL}'
+        title: ' Lemuel Alert - {{ .GroupLabels.alertname }}'
+        text: |
+          *Summary:* {{ .CommonAnnotations.summary }}
+          *Description:* {{ .CommonAnnotations.description }}
+          *Severity:* {{ .CommonLabels.severity }}
+          *Environment:* {{ .CommonLabels.environment }}
+
+          *Details:*
+          {{ range .Alerts }}
+            • *Alert:* {{ .Labels.alertname }}
+            • *Status:* {{ .Status }}
+            {{ if .Labels.job }}• *Job:* {{ .Labels.job }}{{ end }}
+            {{ if .Annotations.runbook_url }}• *Runbook:* {{ .Annotations.runbook_url }}{{ end }}
+          {{ end }}
+        send_resolved: true
+
+  - name: 'slack-critical'
+    slack_configs:
+      - channel: '#alerts-critical'
+        title: 'CRITICAL - {{ .GroupLabels.alertname }}'
+        text: |
+          *CRITICAL ALERT*
+
+          *Summary:* {{ .CommonAnnotations.summary }}
+          *Description:* {{ .CommonAnnotations.description }}
+          *Environment:* {{ .CommonLabels.environment }}
+
+          *Affected Services:*
+          {{ range .Alerts }}
+            • {{ .Labels.alertname }} ({{ .Status }})
+          {{ end }}
+
+          @channel - Immediate attention required!
+        send_resolved: true
+
+inhibit_rules:
+  - source_match:
+      severity: 'critical'
+    target_match:
+      severity: 'warning'
+    equal: ['alertname', 'environment']

@@ -1,0 +1,128 @@
+---
+# BuildKit 데몬 — 상주형(Deployment) 1 레플리카.
+#
+# 왜 상주형인가: 이 저장소의 Dockerfile 은 Gradle 의존성 캐시를
+#   RUN --mount=type=cache,target=/home/gradle/.gradle
+# 로 잡는다(Dockerfile:34, :57). 이 캐시는 buildkitd 의 로컬 스토어에 살기 때문에,
+# 데몬을 Job 마다 새로 띄우면 매 빌드가 의존성 전량 재다운로드로 시작한다.
+# 데몬을 살려두고 PVC 를 붙여야 두 번째 빌드부터 실제로 빨라진다.
+#
+# ⚠ Kaniko 로는 이 Dockerfile 을 못 쓴다 — Kaniko 는 --mount=type=cache 를 지원하지 않는다.
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: buildkit-cache
+  namespace: build
+spec:
+  accessModes: ["ReadWriteOnce"]
+  # local-path(default) = 동적 프로비저닝, Reclaim=Delete.
+  # 캐시라 유실돼도 재빌드로 복구되므로 Delete 로 충분하다. 보존하고 싶으면 solomon-local 로.
+  # ⚠ 클러스터의 SC 7종은 전부 allowVolumeExpansion=false 다 — 나중에 못 늘린다.
+  #    50Gi 는 17개 서비스 Gradle 캐시 + 레이어 기준 여유값이며, 늘리려면 PVC 를 다시 만들어야 한다.
+  storageClassName: local-path
+  resources:
+    requests:
+      storage: 50Gi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: buildkitd
+  namespace: build
+spec:
+  selector:
+    app: buildkitd
+  ports:
+    - name: grpc
+      port: 1234
+      targetPort: 1234
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: buildkitd
+  namespace: build
+spec:
+  replicas: 1
+  # PVC 가 RWO + local-path(WaitForFirstConsumer) 라 파드는 최초 스케줄된 노드에 못 박힌다.
+  # RollingUpdate 면 새 파드가 같은 PVC 를 잡지 못해 Pending 으로 멈춘다 → Recreate 필수.
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: buildkitd
+  template:
+    metadata:
+      labels:
+        app: buildkitd
+      annotations:
+        # k8s 1.30+ 는 아래 securityContext.appArmorProfile 필드가 정본이지만,
+        # 구버전 노드가 섞여도 동작하도록 레거시 어노테이션을 함께 남긴다.
+        container.apparmor.security.beta.kubernetes.io/buildkitd: unconfined
+    spec:
+      # isagal 고정 — 2026-08-13 실측 근거:
+      #   isagal 40코어(사용률 0%) / david 6코어 / louise 8코어 / lemuel·solomon 은 NoSchedule.
+      #   Gradle 빌드는 코어 수에 그대로 비례하므로 40코어 노드가 압도적으로 유리하다.
+      # ilwon(12코어)은 dedicated=management:PreferNoSchedule 이라 toleration 없이도 배치될 수 있다 —
+      # 명시 고정을 안 하면 빌드 부하가 관리 노드로 샐 수 있어 nodeSelector 를 켜 둔다.
+      # ⚠ PVC(local-path·WaitForFirstConsumer)가 최초 바인딩된 노드와 반드시 일치해야 한다.
+      #    나중에 노드를 바꾸려면 PVC 를 지우고 다시 만들어야 한다(캐시는 유실, 재빌드로 복구).
+      nodeSelector:
+        kubernetes.io/hostname: isagal
+      containers:
+        - name: buildkitd
+          image: moby/buildkit:v0.20.2-rootless
+          args:
+            - --addr
+            - unix:///run/user/1000/buildkit/buildkitd.sock
+            - --addr
+            - tcp://0.0.0.0:1234
+            # rootless 는 프로세스 샌드박스를 못 쓴다(중첩 user namespace 불가).
+            - --oci-worker-no-process-sandbox
+          # 루트리스 모드는 seccomp/apparmor 프로파일이 걸리면 user namespace 생성이 막힌다.
+          # privileged 를 피하는 대신 이 두 프로파일만 해제한다.
+          securityContext:
+            runAsUser: 1000
+            runAsGroup: 1000
+            seccompProfile:
+              type: Unconfined
+            appArmorProfile:
+              type: Unconfined
+          env:
+            # rootless overlayfs 는 커널 5.11+ 를 요구한다. 이 클러스터는 6.8~7.0 이라 조건을 만족한다
+            # (2026-08-13 실측: david/ilwon/isagal/solomon 7.0.x, lemuel/louise 6.8.x).
+            # 그래도 스냅샷터 초기화가 실패하면("failed to initialize snapshotter overlayfs") 아래를 켠다.
+            # - name: BUILDKITD_FLAGS
+            #   value: --oci-worker-snapshotter=native
+            - name: BUILDKIT_STEP_LOG_MAX_SIZE
+              value: "10485760"
+          readinessProbe:
+            exec:
+              command: ["buildctl", "debug", "workers"]
+            initialDelaySeconds: 5
+            periodSeconds: 30
+          livenessProbe:
+            exec:
+              command: ["buildctl", "debug", "workers"]
+            initialDelaySeconds: 5
+            periodSeconds: 30
+          resources:
+            # 실제 빌드 부하는 전부 이 데몬에 실린다(Job 파드는 buildctl 클라이언트일 뿐이다).
+            # memory limit 6Gi 는 임의값이 아니다 — isagal 은 총 15.7Gi 중 61% 가 이미 쓰이고 있어
+            # (2026-08-13 kubectl top 실측) 여유가 약 6Gi 다. 8Gi 로 잡으면 한계까지 쓰는 순간
+            # 노드가 메모리 압박에 빠져 같은 노드의 무관한 파드가 축출된다.
+            # 4Gi 밑으로 내리면 Gradle 이 OOMKill 로 죽는다.
+            requests:
+              cpu: "1"
+              memory: 2Gi
+            limits:
+              cpu: "8"
+              memory: 6Gi
+          volumeMounts:
+            - name: cache
+              mountPath: /home/user/.local/share/buildkit
+      volumes:
+        - name: cache
+          persistentVolumeClaim:
+            claimName: buildkit-cache

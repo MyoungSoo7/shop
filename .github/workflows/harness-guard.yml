@@ -1,0 +1,120 @@
+# Harness guard — machine-enforces money/architecture invariants + doc-drift on every PR.
+# Plugin-independent (uses only scripts/harness/*), so it holds even where the copilot
+# plugin / MCP is absent. Complements ci.yml (build/test/coverage), does not replace it.
+name: harness-guard
+
+on:
+  pull_request:
+    branches: [develop, main]
+  push:
+    branches: [develop, main]
+
+# 가드는 부작용이 없으므로 PR·push 모두 최신 커밋만 검증하면 된다.
+concurrency:
+  group: harness-guard-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  guard:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0 # need base for diff
+
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          # 단일 출처: 리포 루트 .nvmrc (node-version-gate 가 frontend/Dockerfile 과 major 일치 강제).
+          # 이 잡만 22 로 남아 있었다 — 게이트를 돌리는 러너가 정작 로스터 밖이었다.
+          node-version-file: .nvmrc
+
+      - name: Run harness tests
+        run: node --test scripts/harness/test/*.test.mjs
+
+      - name: Compute changed files
+        id: diff
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            BASE_REF="${{ github.base_ref }}"
+            git fetch --no-tags origin "+refs/heads/${BASE_REF}:refs/remotes/origin/${BASE_REF}"
+            BASE="$(git merge-base HEAD "refs/remotes/origin/$BASE_REF")"
+            test -n "$BASE"
+            git cat-file -e "$BASE^{commit}"
+            git diff --name-only --diff-filter=ACMR "$BASE" HEAD > changed.txt
+            git diff --name-only --diff-filter=D "$BASE" HEAD > deleted.txt
+          elif [ "${{ github.event_name }}" = "push" ]; then
+            BEFORE="${{ github.event.before }}"
+            if [[ ! "$BEFORE" =~ ^[0-9a-fA-F]{40}$ ]]; then
+              echo "invalid push before SHA: $BEFORE" >&2
+              exit 1
+            fi
+            if [ "$BEFORE" = "0000000000000000000000000000000000000000" ]; then
+              git ls-files > changed.txt
+              : > deleted.txt
+            else
+              git cat-file -e "$BEFORE^{commit}"
+              git diff --name-only --diff-filter=ACMR "$BEFORE" HEAD > changed.txt
+              git diff --name-only --diff-filter=D "$BEFORE" HEAD > deleted.txt
+            fi
+          else
+            echo "unsupported event: ${{ github.event_name }}" >&2
+            exit 1
+          fi
+          echo "changed files:"
+          cat changed.txt
+
+      - name: Money / architecture guard (changed files)
+        run: node scripts/harness/guard.mjs --list changed.txt
+
+      # 삭제는 changed.txt(ACMR)에 담기지 않는다 — 하네스 경로가 지워졌는지 별도로 검사한다.
+      # PR #210 에 섞여 .claude/.codex/docs/harness 270 파일이 지워진 사고를 막는 지점.
+      - name: Harness deletion guard (deleted files)
+        run: node scripts/harness/guard.mjs --deleted-list deleted.txt
+
+      - name: Verify manifest tracking
+        shell: bash
+        run: |
+          set -euo pipefail
+          node -e "for (const path of require('./scripts/harness/manifest.json').requiredTrackedFiles) process.stdout.write(path + '\0')" |
+            xargs -0 git ls-files --error-unmatch -- >/dev/null
+
+      # 설정 키의 '정의' 와 '사용' 이 짝이 맞는지 전수 대조한다. 이 종류의 결함은 아무 신호도
+      # 내지 않아서 — 테스트는 통과하고 앱은 뜨고 파일엔 값이 또렷이 적혀 있다 — 사람 리뷰로는
+      # 잡히지 않는다. 2026-08-20 첫 감사에서 나온 8건 중에는 운영 업로드 한도가 로드되지 않는
+      # 프로파일에만 있어 5MB 라고 적힌 채 1MB 로 돌던 건, 외부 API 호출 간격을 선언만 하고
+      # 읽지 않아 무간격으로 연타하던 건이 있었다. 둘 다 몇 달을 살아남았다.
+      # 리포 밖 의존(helm-deploy)이 없어야 게이트가 자족적이므로 --helm 은 붙이지 않는다.
+      - name: Orphan config-parameter guard
+        shell: bash
+        run: |
+          set -euo pipefail
+          # 버전을 고정한다(githubactions:S8544). 핀이 없으면 러너가 매 실행 최신 pyyaml 을
+          # 끌어오고, 가드가 어제와 같은 코드를 오늘 다르게 판정할 수 있다 — 게이트가 스스로
+          # 흔들리면 게이트가 아니다. 공급망 관점에서도 무단 교체가 들어올 창구다.
+          # 표기는 이 저장소의 기존 핀(semgrep==1.173.0 · pytest==9.1.1)과 같다.
+          # 러너에 pyyaml 이 이미 있으면 설치 자체를 건너뛴다 — 그 경로의 버전까지는 고정하지
+          # 않는다(ubuntu 이미지 동봉본을 그대로 쓰는 편이 빠르고, 파서 동작에 차이가 없다).
+          python3 -c "import yaml" 2>/dev/null ||
+            pip3 install --quiet --disable-pip-version-check --only-binary :all: "pyyaml==6.0.3"
+          python3 scripts/config/orphan_audit.py --check
+
+      - name: Verify clean working tree
+        run: git diff --exit-code
+
+      # 러너는 매 실행 폐기되고 .claude/harness/logs 는 gitignore 대상이라, 여기서 걷어내지
+      # 않으면 가드가 몇 번 돌았고 무엇을 막았는지가 영구히 사라진다. 규칙을 고친 뒤
+      # "효과가 있었나"를 사후에 판정하려면 실행 이력이 남아야 한다. 게이트가 아니므로 always().
+      - name: Harness telemetry report
+        if: always()
+        run: node scripts/harness/telemetry-report.mjs || true
+
+      - name: Upload harness telemetry
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: harness-telemetry-${{ github.run_id }}-${{ github.run_attempt }}
+          path: .claude/harness/logs/
+          if-no-files-found: ignore
+          retention-days: 30

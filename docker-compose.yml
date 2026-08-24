@@ -1,0 +1,460 @@
+services:
+  postgres:
+    image: postgres:17-alpine
+    container_name: lemuel-postgres
+    # 쿼리 단위 실측 도구 (DB 성능 감사 ④): pg_stat_statements 누적 통계 + auto_explain 이
+    # 200ms 초과 쿼리의 실제 실행계획(EXPLAIN ANALYZE 상당)을 서버 로그로 남긴다.
+    # 인덱스 유무는 추정이 아니라 실행계획으로 판정한다 — pg_stat_statements 뷰는 필요 DB 에서
+    # CREATE EXTENSION 후 사용(opslab 은 필요 시 수동).
+    command:
+      - "postgres"
+      - "-c"
+      - "shared_preload_libraries=pg_stat_statements,auto_explain"
+      - "-c"
+      - "pg_stat_statements.track=all"
+      - "-c"
+      - "auto_explain.log_min_duration=200ms"
+      - "-c"
+      - "auto_explain.log_analyze=on"
+      - "-c"
+      - "auto_explain.log_buffers=on"
+      - "-c"
+      - "auto_explain.log_nested_statements=on"
+    env_file:
+      - path: .env
+        required: false
+    environment:
+      POSTGRES_DB: inter
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+    ports:
+      - "127.0.0.1:5433:5432"
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB"]
+      interval: 10s
+      timeout: 3s
+      retries: 10
+
+  # ★ DB-per-service: operation-service 전용 PostgreSQL (운영 관제 — 인시던트/이상탐지)
+  operation-postgres:
+    image: postgres:17-alpine
+    container_name: lemuel-operation-db
+    env_file:
+      - path: .env
+        required: false
+    environment:
+      POSTGRES_DB: lemuel_operation
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+    ports:
+      - "127.0.0.1:5439:5432"
+    volumes:
+      - operation-postgres-data:/var/lib/postgresql/data
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB"]
+      interval: 10s
+      timeout: 3s
+      retries: 10
+
+  # board·education 은 operation-service 의 슬라이스라 별도 DB 가 없다 —
+  # lemuel_operation 안의 board·education 스키마를 쓴다.
+
+  elasticsearch:
+    image: docker.elastic.co/elasticsearch/elasticsearch:8.17.0
+    container_name: lemuel-elasticsearch
+    env_file:
+      - path: .env
+        required: false
+    environment:
+      discovery.type: single-node
+      xpack.security.enabled: "true"
+      ELASTIC_PASSWORD: ${ELASTICSEARCH_PASSWORD}
+      xpack.security.http.ssl.enabled: "false"
+      xpack.security.transport.ssl.enabled: "false"
+      ES_JAVA_OPTS: "-Xms512m -Xmx512m"
+    ports:
+      - "127.0.0.1:9200:9200"
+      - "127.0.0.1:9300:9300"
+    volumes:
+      - elasticsearch-data:/usr/share/elasticsearch/data
+    restart: unless-stopped
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "curl -fsS -u $$ELASTICSEARCH_USER:$$ELASTICSEARCH_PASSWORD http://127.0.0.1:9200/_cluster/health?wait_for_status=yellow&timeout=5s >/dev/null || exit 1",
+        ]
+      interval: 10s
+      timeout: 5s
+      retries: 20
+
+  redpanda:
+    image: docker.redpanda.com/redpandadata/redpanda:v24.2.7
+    container_name: lemuel-redpanda
+    command:
+      - redpanda start
+      - --smp 1
+      - --overprovisioned
+      - --node-id 0
+      - --kafka-addr PLAINTEXT://0.0.0.0:29092,OUTSIDE://0.0.0.0:9092
+      - --advertise-kafka-addr PLAINTEXT://redpanda:29092,OUTSIDE://localhost:9092
+      - --pandaproxy-addr 0.0.0.0:18082
+      - --advertise-pandaproxy-addr localhost:18082
+      - --rpc-addr 0.0.0.0:33145
+      - --advertise-rpc-addr redpanda:33145
+    ports:
+      - "127.0.0.1:9092:9092"
+      - "127.0.0.1:29092:29092"
+      - "127.0.0.1:18082:18082"
+    volumes:
+      - redpanda-data:/var/lib/redpanda/data
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "rpk cluster health --exit-when-healthy || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 20
+
+  redis:
+    image: redis:7-alpine
+    container_name: lemuel-redis
+    command: ["redis-server", "--appendonly", "yes"]
+    ports:
+      - "127.0.0.1:6380:6379"
+    volumes:
+      - redis-data:/data
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 10
+
+  # PgBouncer — 트랜잭션 풀링. 가상 스레드가 켜져 있어 앱은 수많은 커넥션을 원하지만
+  # PostgreSQL max_connections 는 100 이 한계. PgBouncer 가 많은 앱 커넥션을 적은 PG 백엔드로
+  # 멀티플렉싱해 동시 처리량(TPS)을 끌어올린다. 앱은 postgres:5432 대신 pgbouncer:6432 로 접속.
+  pgbouncer:
+    image: edoburu/pgbouncer:latest
+    container_name: lemuel-pgbouncer
+    env_file:
+      - path: .env
+        required: false
+    environment:
+      DB_HOST: postgres
+      DB_PORT: "5432"
+      DB_NAME: inter
+      DB_USER: ${POSTGRES_USER}
+      DB_PASSWORD: ${POSTGRES_PASSWORD}
+      LISTEN_PORT: "6432" # pgbouncer 리슨 포트를 6432 로 (기본 5432). 매핑·헬스체크·앱 접속(pgbouncer:6432)과 일치
+      AUTH_TYPE: scram-sha-256
+      POOL_MODE: transaction # 트랜잭션 단위로 백엔드 커넥션 반납 → 멀티플렉싱
+      MAX_CLIENT_CONN: "1000" # 앱 측 동시 커넥션 상한 (가상 스레드 대응)
+      DEFAULT_POOL_SIZE: "25" # PG 로 나가는 실제 백엔드 커넥션 수 (서비스당)
+      MIN_POOL_SIZE: "5"
+      RESERVE_POOL_SIZE: "5"
+      SERVER_RESET_QUERY: DISCARD ALL
+    ports:
+      - "127.0.0.1:6432:6432"
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "pg_isready -h 127.0.0.1 -p 6432 -U $$DB_USER -d $$DB_NAME || exit 1",
+        ]
+      interval: 10s
+      timeout: 3s
+      retries: 10
+
+  order-service:
+    build:
+      context: .
+      args:
+        MODULE: order-service
+    image: ghcr.io/myoungsoo7/lemuel-order:latest
+    container_name: lemuel-order
+    env_file:
+      - path: .env
+        required: false
+    environment:
+      SPRING_PROFILES_ACTIVE: prod
+      # PgBouncer(transaction pooling) 경유. prepareThreshold=0 → 서버사이드 prepared statement 비활성
+      # (transaction 풀링 호환). reWriteBatchedInserts=true → JDBC 배치 INSERT 단일 문장 재작성(처리량↑).
+      SPRING_DATASOURCE_URL: jdbc:postgresql://pgbouncer:6432/inter?prepareThreshold=0&reWriteBatchedInserts=true
+      SPRING_DATASOURCE_USERNAME: ${POSTGRES_USER}
+      SPRING_DATASOURCE_PASSWORD: ${POSTGRES_PASSWORD}
+      DB_POOL_MAX: "50" # PgBouncer 가 흡수하므로 앱 풀을 넉넉히
+      APP_KAFKA_ENABLED: "true"
+      SPRING_KAFKA_BOOTSTRAP_SERVERS: redpanda:29092
+      CART_STORE: redis
+      SPRING_DATA_REDIS_HOST: redis
+      SPRING_DATA_REDIS_PORT: "6379"
+      MANAGEMENT_HEALTH_REDIS_ENABLED: "true"
+      APP_CACHE_TWO_TIER_ENABLED: "true" # L1 Caffeine + L2 Redis (공유 캐시 + Pub/Sub 무효화)
+      JWT_ISSUER: ${JWT_ISSUER}
+      JWT_SECRET: ${JWT_SECRET}
+      JWT_TTL_SECONDS: ${JWT_TTL_SECONDS}
+      # 내부 API 공유 시크릿 — /internal/** 를 부르는 쪽과 값이 같아야 통과한다(InternalApiKeyFilter).
+      INTERNAL_API_KEY: ${INTERNAL_API_KEY:-lemuel-internal-dev-key}
+      # 데모/면접용 자동로그인 활성화 — 로그인 화면의 USER/MANAGER/ADMIN/게스트 버튼(/auth/dev/**) 동작.
+      # 데모 계정(demo-{role}@lemuel.local)은 최초 클릭 시 자동 생성됨. 운영(k8s)에선 끈다.
+      LEMUEL_DEMO_ENABLED: ${LEMUEL_DEMO_ENABLED:-true}
+      JAVA_OPTS: "-XX:+UseContainerSupport -XX:MaxRAMPercentage=75.0 -XX:InitialRAMPercentage=50.0"
+      SERVER_PORT: 8080
+      MANAGEMENT_SERVER_PORT: 8080
+      MANAGEMENT_OTLP_TRACING_ENDPOINT: http://tempo:4318/v1/traces
+      MANAGEMENT_TRACING_SAMPLING_PROBABILITY: "1.0"
+    ports:
+      - "127.0.0.1:8088:8080"
+    restart: unless-stopped
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "curl -fsS http://localhost:8080/actuator/health || exit 1",
+        ]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+      start_period: 60s
+    depends_on:
+      pgbouncer:
+        condition: service_healthy
+      redpanda:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+  operation-service:
+    build:
+      context: .
+      args:
+        MODULE: operation-service
+    image: ghcr.io/myoungsoo7/lemuel-operation:latest
+    container_name: lemuel-operation
+    env_file:
+      - path: .env
+        required: false
+    environment:
+      SPRING_PROFILES_ACTIVE: prod
+      # 자체 DB(lemuel_operation) — 운영 관제 인시던트 저장소. 타 서비스와 코드·DB 의존 0.
+      SPRING_DATASOURCE_URL: jdbc:postgresql://operation-postgres:5432/lemuel_operation?reWriteBatchedInserts=true
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      # JWT 시크릿은 order-service 와 동일해야 운영자 토큰 검증 가능
+      JWT_ISSUER: ${JWT_ISSUER}
+      JWT_SECRET: ${JWT_SECRET}
+      JWT_TTL_SECONDS: ${JWT_TTL_SECONDS}
+      # Alertmanager webhook Bearer 토큰 — alertmanager.practice.yml 의 credentials 와 동일해야 한다.
+      INTERNAL_API_KEY: ${INTERNAL_API_KEY:-lemuel-internal-dev-key}
+      # Phase 2 — 신호 수집. 도메인 성공 이벤트 구독(분모) + Prometheus 폴링(인프라 게이지).
+      APP_KAFKA_ENABLED: "true"
+      SPRING_KAFKA_BOOTSTRAP_SERVERS: redpanda:29092
+      OPS_PROMETHEUS_ENABLED: "true"
+      OPS_PROMETHEUS_URL: http://prometheus:9090
+      # board 슬라이스(board-service 흡수) — 첨부 저장 위치. 이 경로에 볼륨을 마운트하지 않으면
+      # 컨테이너를 다시 만들 때 첨부 파일만 사라지고 DB 행은 남아 다운로드가 404 로 떨어진다.
+      APP_BOARD_ATTACHMENT_BASE_DIR: /var/lib/lemuel/board-attachments
+      CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost:3000}
+      JAVA_OPTS: "-XX:+UseContainerSupport -XX:MaxRAMPercentage=75.0 -XX:InitialRAMPercentage=50.0"
+      SERVER_PORT: 8080
+      MANAGEMENT_SERVER_PORT: 8080
+    volumes:
+      - board-attachment-data:/var/lib/lemuel/board-attachments
+    ports:
+      - "127.0.0.1:8092:8080"
+    restart: unless-stopped
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "curl -fsS http://localhost:8080/actuator/health || exit 1",
+        ]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+      start_period: 60s
+    depends_on:
+      operation-postgres:
+        condition: service_healthy
+      redpanda:
+        condition: service_healthy
+
+  gateway-service:
+    build:
+      context: .
+      args:
+        MODULE: gateway-service
+    image: ghcr.io/myoungsoo7/lemuel-gateway:latest
+    container_name: lemuel-gateway
+    env_file:
+      - path: .env
+        required: false
+    environment:
+      SPRING_PROFILES_ACTIVE: prod
+      ORDER_SERVICE_URI: http://order-service:8080
+      OPERATION_SERVICE_URI: http://operation-service:8080
+      JAVA_OPTS: "-XX:+UseContainerSupport -XX:MaxRAMPercentage=75.0 -XX:InitialRAMPercentage=50.0"
+    ports:
+      - "127.0.0.1:8080:8080"
+    restart: unless-stopped
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "curl -fsS http://localhost:8080/actuator/health || exit 1",
+        ]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
+    depends_on:
+      order-service:
+        condition: service_healthy
+
+  frontend:
+    image: nginx:1.25-alpine
+    container_name: lemuel-frontend
+    volumes:
+      # 2026-08-01: frontend/dist 는 더 이상 git 에 추적되지 않는다(빌드 산출물).
+      # 이 컴포즈를 쓰기 전에 반드시 `cd frontend && npm ci && npm run build` 를 한 번
+      # 돌려야 한다. 안 하면 이 마운트가 빈 디렉터리가 되어 nginx 가 404 만 낸다.
+      # (프로덕션은 frontend/Dockerfile 이 이미지 안에서 빌드하므로 영향 없다)
+      - ./frontend/dist:/usr/share/nginx/html:ro
+      # compose 전용 conf — gateway 재생성 시 stale DNS 로 전 API 500 나는 문제를
+      # 도커 내장 DNS 재해석으로 방지 (k8s 이미지는 기존 nginx.conf 사용)
+      - ./frontend/nginx.compose.conf:/etc/nginx/conf.d/default.conf:ro
+    ports:
+      - "127.0.0.1:3000:80"
+    restart: unless-stopped
+    depends_on:
+      - gateway-service
+
+  # kafka-exporter — Redpanda(Kafka) 컨슈머 그룹의 파티션별 lag·오프셋을 Prometheus 메트릭으로 노출.
+  # 앱 actuator 가 내보내는 client-side lag(kafka_consumer_fetch_manager_records_lag) 과 달리
+  # 브로커 관점의 정확한 파티션별 lag(kafka_consumergroup_lag) 을 제공 → Grafana lag 대시보드의 소스.
+  kafka-exporter:
+    image: danielqsj/kafka-exporter:v1.8.0
+    container_name: lemuel-kafka-exporter
+    command:
+      - "--kafka.server=redpanda:29092" # 브로커 내부 주소 (compose 네트워크)
+      - "--web.listen-address=:9308"
+    ports:
+      - "127.0.0.1:9308:9308" # /metrics (실습 중 직접 확인용)
+    restart: unless-stopped
+    depends_on:
+      redpanda:
+        condition: service_healthy
+
+  # postgres-exporter — PostgreSQL 통계(데드락·커넥션·트랜잭션)를 Prometheus 메트릭으로 노출.
+  # operation-service 가 pg_stat_database_deadlocks 를 폴링해 DB_DEADLOCK 신호 게이지로 적재한다.
+  # 대표로 opslab(order) DB 를 관측 — 필요 시 서비스별 exporter 를 늘린다.
+  postgres-exporter:
+    image: quay.io/prometheuscommunity/postgres-exporter:v0.16.0
+    container_name: lemuel-postgres-exporter
+    environment:
+      DATA_SOURCE_NAME: "postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/inter?sslmode=disable"
+    ports:
+      - "127.0.0.1:9187:9187"
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  # redis-exporter — Redis 가용성(redis_up)·메모리·연결을 Prometheus 메트릭으로 노출.
+  # operation-service 가 redis_up 을 폴링해 REDIS_FAILURE 신호 게이지로 적재한다.
+  redis-exporter:
+    image: oliver006/redis_exporter:v1.62.0
+    container_name: lemuel-redis-exporter
+    environment:
+      REDIS_ADDR: "redis://redis:6379"
+    ports:
+      - "127.0.0.1:9121:9121"
+    restart: unless-stopped
+    depends_on:
+      redis:
+        condition: service_healthy
+
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: lemuel-prometheus
+    command:
+      - "--config.file=/etc/prometheus/prometheus.yml"
+      - "--storage.tsdb.path=/prometheus"
+      - "--web.enable-lifecycle" # POST /-/reload 로 핫 리로드 허용 (실습 편의)
+    ports:
+      - "127.0.0.1:9090:9090"
+    volumes:
+      - ./monitoring/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - ./monitoring/alert-rules.yml:/etc/prometheus/alert-rules.yml:ro # rule_files 가 참조 — 마운트 필수
+    restart: unless-stopped
+    depends_on:
+      - alertmanager
+
+  # Alertmanager — Prometheus 알림 수신·그룹핑·silence. 실습용 null 리시버(외부 미전송) 설정 사용.
+  # 실제 Slack 연동을 실습하려면 마운트를 ./monitoring/alertmanager.yml 로 교체 (envsubst 선처리 필요).
+  alertmanager:
+    image: prom/alertmanager:v0.27.0
+    container_name: lemuel-alertmanager
+    command:
+      - "--config.file=/etc/alertmanager/alertmanager.yml"
+      - "--storage.path=/alertmanager"
+    ports:
+      - "127.0.0.1:9093:9093"
+    volumes:
+      - ./monitoring/alertmanager.practice.yml:/etc/alertmanager/alertmanager.yml:ro
+    restart: unless-stopped
+
+  # 분산 트레이싱 백엔드 — OTLP 수신 → Tempo 저장 → Grafana 에서 trace 검색.
+  # order-service / operation-service 가 OTEL_EXPORTER_OTLP_ENDPOINT 로 발행.
+  tempo:
+    image: grafana/tempo:2.5.0
+    container_name: lemuel-tempo
+    command: ["-config.file=/etc/tempo.yaml"]
+    volumes:
+      - ./monitoring/tempo.yaml:/etc/tempo.yaml:ro
+      - tempo-data:/var/tempo
+    ports:
+      - "127.0.0.1:3200:3200" # Tempo HTTP query API
+      - "127.0.0.1:4317:4317" # OTLP gRPC
+      - "127.0.0.1:4318:4318" # OTLP HTTP
+    restart: unless-stopped
+
+  grafana:
+    image: grafana/grafana:11.2.0
+    container_name: lemuel-grafana
+    environment:
+      GF_AUTH_ANONYMOUS_ENABLED: "true"
+      GF_AUTH_ANONYMOUS_ORG_ROLE: Admin
+      GF_FEATURE_TOGGLES_ENABLE: "traceqlEditor"
+    volumes:
+      - ./monitoring/grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./monitoring/grafana/dashboards:/var/lib/grafana/dashboards:ro
+      - grafana-data:/var/lib/grafana
+    ports:
+      - "127.0.0.1:3001:3000"
+    depends_on:
+      - prometheus
+      - tempo
+    restart: unless-stopped
+
+volumes:
+  postgres-data:
+  # ADR 0038 — financial/economics/market/commondata 4개 볼륨을 하나로 합쳤다.
+  # 구 볼륨(lemuel_financial 등)은 남아 있어도 참조되지 않는다: docker volume rm 으로 수동 정리.
+  operation-postgres-data:
+  # ADR 0043 — board·education DB 볼륨은 operation 으로 흡수돼 제거됐다(구 볼륨은 수동 정리).
+  # 첨부 볼륨은 operation-service 가 이어받아 계속 쓴다.
+  board-attachment-data:
+  elasticsearch-data:
+  redpanda-data:
+  redis-data:
+  tempo-data:
+  grafana-data:

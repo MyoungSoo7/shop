@@ -1,0 +1,53 @@
+# Snyk (https://snyk.io) policy file
+# 보안 취약점 관리 정책
+
+version: v1.25.0
+
+# 특정 취약점 무시 설정 (필요시)
+# ignore:
+#   SNYK-JAVA-ORGSPRINGFRAMEWORK-12345:
+#     - '*':
+#         reason: 'False positive or accepted risk'
+#         expires: '2025-12-31T00:00:00.000Z'
+
+# 패치 설정
+patch: {}
+
+# 취약점 탐지 설정
+exclude:
+  global:
+    # 개발 환경 전용 의존성 제외
+    - node_modules/
+    - build/
+    - target/
+    - dist/
+    - .gradle/
+    - .git/
+
+# 라이선스 정책
+license:
+  # 허용할 라이선스
+  allowed:
+    - MIT
+    - Apache-2.0
+    - BSD-2-Clause
+    - BSD-3-Clause
+    - ISC
+    - CC0-1.0
+  # 금지할 라이선스
+  # disallowed:
+  #   - GPL-2.0
+  #   - GPL-3.0
+
+# 취약점 심각도 임계값
+# low, medium, high, critical
+failThreshold: high
+
+# 언어별 설정
+language-settings:
+  java:
+    # Gradle 프로젝트 스캔
+    packageManager: gradle
+  javascript:
+    # npm 프로젝트 스캔
+    packageManager: npm

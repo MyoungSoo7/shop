@@ -1,0 +1,2 @@
+github.lms.lemuel.common.autoconfigure.JacksonCompatAutoConfiguration
+github.lms.lemuel.common.autoconfigure.ObservabilityAopAutoConfiguration
