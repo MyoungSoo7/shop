@@ -61,11 +61,12 @@ jobs:
           git diff "origin/${BASE_REF}...HEAD" > full.diff
           DIFF=$(head -c 60000 full.diff)
 
-          # 모델·요청 포맷은 이 저장소 ai-service 가 실운영으로 검증한 좌표와 동일
+          # 모델·요청 포맷은 원본 저장소(settlement)의 ai-service 가 실운영으로 검증한 좌표와 동일
+          # — 그 서비스는 이 저장소에 없다. 좌표만 물려받았다.
           # (Generative Language API generateContent — system_instruction + contents).
           # 2.5 계열은 thinking 이 출력 예산을 먹으므로 maxOutputTokens 를 넉넉히 잡는다.
           PAYLOAD=$(jq -n --arg diff "$DIFF" '{
-            system_instruction: { parts: [{ text: "You review pull request diffs for a Java/Spring hexagonal MSA settlement platform. Report concrete defects only: correctness, money handling (BigDecimal/rounding), MSA boundary violations, authorization/IDOR, missing tests. Skip style nits. If nothing substantive is wrong, say so in one line." }] },
+            system_instruction: { parts: [{ text: "You review pull request diffs for a Java/Spring hexagonal MSA e-commerce (shopping mall) platform. Report concrete defects only: correctness, money handling (BigDecimal/rounding), MSA boundary violations, authorization/IDOR, missing tests. Skip style nits. If nothing substantive is wrong, say so in one line." }] },
             contents: [{ role: "user", parts: [{ text: ("Review this diff. Be concise and specific — cite file paths.\n\n" + $diff) }] }],
             generationConfig: { maxOutputTokens: 8000 }
           }')

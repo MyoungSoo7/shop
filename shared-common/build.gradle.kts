@@ -164,7 +164,7 @@ publishing {
         if (ghActor != null && ghToken != null) {
             maven {
                 name = "GitHubPackages"
-                url = uri("https://maven.pkg.github.com/MyoungSoo7/settlement")
+                url = uri("https://maven.pkg.github.com/MyoungSoo7/shop")
                 credentials {
                     username = ghActor
                     password = ghToken

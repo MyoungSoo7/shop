@@ -1,9 +1,9 @@
 {
   "id": "/",
-  "name": "Lemuel Settlement",
-  "short_name": "Settlement",
-  "description": "Lemuel 정산 시스템 대시보드",
-  "categories": ["business", "finance", "productivity"],
+  "name": "Lemuel Shop",
+  "short_name": "Shop",
+  "description": "Lemuel 쇼핑몰 — 주문·결제·배송",
+  "categories": ["shopping", "business", "productivity"],
   "start_url": "/",
   "scope": "/",
   "display": "standalone",
@@ -46,9 +46,9 @@
       "icons": [{ "src": "/icon-192.png", "sizes": "192x192", "type": "image/png" }]
     },
     {
-      "name": "정산 조회",
-      "short_name": "정산",
-      "url": "/settlement/search",
+      "name": "내 잔액",
+      "short_name": "잔액",
+      "url": "/my/balances",
       "icons": [{ "src": "/icon-192.png", "sizes": "192x192", "type": "image/png" }]
     }
   ]
