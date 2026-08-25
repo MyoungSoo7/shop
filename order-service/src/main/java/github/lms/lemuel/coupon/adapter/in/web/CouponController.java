@@ -3,6 +3,7 @@ package github.lms.lemuel.coupon.adapter.in.web;
 import github.lms.lemuel.coupon.adapter.in.web.dto.*;
 import github.lms.lemuel.coupon.application.port.in.CouponUseCase;
 import github.lms.lemuel.coupon.domain.Coupon;
+import github.lms.lemuel.coupon.domain.DiscountTargetLine;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.responses.ApiResponse;
@@ -91,10 +92,16 @@ public class CouponController {
     }
 
     /**
-     * 쿠폰 유효성 검증
+     * 쿠폰 유효성 검증 — <b>금액만</b> 아는 경로.
      * GET /coupons/{code}/validate?userId=&amount=
+     *
+     * <p>상품을 특정하지 않으므로 전체 적용({@code ALL}) 쿠폰만 여기서 계산된다. 상품·카테고리
+     * 전용 쿠폰은 "어느 상품이 담겼는지" 를 알아야 할인액이 정해지므로 적용 불가로 응답한다 —
+     * 장바구니 기준 계산은 {@code POST /orders/coupon-preview} 가 한다.
      */
-    @Operation(summary = "쿠폰 유효성 검증", description = "쿠폰 코드와 사용자/주문 금액을 기반으로 사용 가능 여부 및 할인액을 계산한다.")
+    @Operation(summary = "쿠폰 유효성 검증(금액 기준)",
+            description = "금액만으로 검증한다. 전체 적용 쿠폰 전용 — 상품·카테고리 전용 쿠폰은 "
+                    + "장바구니가 필요하므로 POST /orders/coupon-preview 를 쓴다.")
     @ApiResponses({
             @ApiResponse(responseCode = "200", description = "검증 결과"),
             @ApiResponse(responseCode = "404", description = "쿠폰을 찾을 수 없음")
@@ -105,7 +112,10 @@ public class CouponController {
             @Parameter(description = "사용자 ID", required = true) @RequestParam @Positive(message = "userId는 양수여야 합니다") Long userId,
             @Parameter(description = "주문 총액", required = true) @RequestParam @Positive(message = "주문 금액은 0보다 커야 합니다") BigDecimal amount
     ) {
-        CouponUseCase.ValidateResult result = couponUseCase.validateCoupon(code, userId, amount);
+        // 상품을 특정할 수 없는 한 줄짜리 장바구니. ALL 쿠폰만 매칭되고 전용 쿠폰은
+        // eligibleBase = 0 이라 "쓸 수 있는 상품이 없습니다" 로 돌아온다.
+        CouponUseCase.ValidateResult result = couponUseCase.validateCoupon(
+                code, userId, List.of(new DiscountTargetLine(null, null, amount)));
         return ResponseEntity.ok(new CouponValidateResponse(
                 result.valid(),
                 result.message(),

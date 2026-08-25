@@ -1,6 +1,8 @@
 package github.lms.lemuel.order.application.service;
 
 import github.lms.lemuel.coupon.application.port.in.CouponUseCase;
+import github.lms.lemuel.coupon.domain.Coupon;
+import github.lms.lemuel.coupon.domain.DiscountTargetLine;
 import github.lms.lemuel.order.application.port.in.CreateMultiItemOrderUseCase;
 import github.lms.lemuel.order.application.port.out.LoadUserForOrderPort;
 import github.lms.lemuel.order.application.port.out.PublishOrderEventPort;
@@ -27,7 +29,9 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 
 /**
  * 다건 주문 생성 서비스.
@@ -99,6 +103,7 @@ public class CreateMultiItemOrderService implements CreateMultiItemOrderUseCase 
                 .orElseThrow(() -> new UserNotExistsException(userId));
 
         List<OrderItem> items = new ArrayList<>(lines.size());
+        Map<Long, Long> categoryByProductId = new HashMap<>(lines.size());
         for (Line line : lines) {
             Product product = loadProductPort.findById(line.productId())
                     .orElseThrow(() -> new ProductNotFoundException(line.productId()));
@@ -135,21 +140,33 @@ public class CreateMultiItemOrderService implements CreateMultiItemOrderUseCase 
 
             items.add(OrderItem.newItem(line.productId(), line.variantId(), sku,
                     productName, unitPrice, line.quantity(), options));
+            // 쿠폰 대상 판정에 쓸 카테고리 — 상품 마스터에서 읽는다. 클라이언트가 보낸 값을 쓰면
+            // "카테고리 전용 쿠폰"의 대상을 클라이언트가 정하게 된다.
+            categoryByProductId.putIfAbsent(product.getId(), product.getCategoryId());
         }
 
-        // 소계 기준 쿠폰 검증 → 할인 금액 산출 (검증 실패 시 예외 → 트랜잭션 롤백)
+        // 쿠폰 검증 → 할인 금액 산출 (검증 실패 시 예외 → 트랜잭션 롤백).
+        // 소계가 아니라 라인 목록을 넘긴다 — 쿠폰의 적용 대상(전체/상품/카테고리)이 여기서 강제된다.
         BigDecimal subtotal = items.stream()
                 .map(OrderItem::getLineAmount)
                 .reduce(BigDecimal.ZERO, BigDecimal::add);
         boolean hasCoupon = couponCode != null && !couponCode.isBlank();
         BigDecimal discount = BigDecimal.ZERO;
+        List<OrderItem> discountBearingItems = items;
         if (hasCoupon) {
-            CouponUseCase.ValidateResult result =
-                    couponUseCase.validateCoupon(couponCode, userId, subtotal);
+            CouponUseCase.ValidateResult result = couponUseCase.validateCoupon(
+                    couponCode, userId, toTargetLines(items, categoryByProductId));
             if (!result.valid()) {
                 throw new CouponApplicationException(result.message());
             }
             discount = result.discountAmount();
+            // 할인을 짊어질 라인 = 쿠폰 대상에 맞는 라인. 판정은 CouponService 가 쓴 것과 같은
+            // 도메인 규칙(Coupon.appliesTo → CouponTarget.matches)이라 둘이 어긋날 수 없다.
+            Coupon coupon = result.coupon();
+            discountBearingItems = items.stream()
+                    .filter(item -> coupon.appliesTo(item.getProductId(),
+                            categoryByProductId.get(item.getProductId())))
+                    .toList();
         }
 
         // 배송비 산정 — 셀러별 조건부 무료배송 판정은 쿠폰 할인 전 라인 금액 기준이다
@@ -162,7 +179,7 @@ public class CreateMultiItemOrderService implements CreateMultiItemOrderUseCase 
                         .toList()
         ).totalFee();
 
-        Order order = Order.createMultiItem(userId, items, discount, shippingFee);
+        Order order = Order.createMultiItem(userId, items, discount, shippingFee, discountBearingItems);
         Order saved = saveOrderPort.save(order);
 
         // 쿠폰 사용 기록 — 같은 트랜잭션. 한도 초과/1인 1매 중복이면 예외 → 주문·재고 차감까지 전부 롤백
@@ -180,6 +197,20 @@ public class CreateMultiItemOrderService implements CreateMultiItemOrderUseCase 
 
         sendNotificationPort.sendOrderConfirmation(userEmail, saved);
         return saved;
+    }
+
+    /**
+     * 주문 라인 → 쿠폰 대상 판정용 라인. 쿠폰 모듈이 상품 테이블을 읽지 않도록, 상품 마스터에서
+     * 해석한 (상품, 카테고리, 금액) 만 값으로 넘긴다.
+     */
+    private static List<DiscountTargetLine> toTargetLines(List<OrderItem> items,
+                                                          Map<Long, Long> categoryByProductId) {
+        return items.stream()
+                .map(item -> new DiscountTargetLine(
+                        item.getProductId(),
+                        categoryByProductId.get(item.getProductId()),
+                        item.getLineAmount()))
+                .toList();
     }
 
     /**

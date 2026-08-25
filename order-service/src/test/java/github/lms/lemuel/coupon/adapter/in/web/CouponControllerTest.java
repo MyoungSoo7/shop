@@ -4,6 +4,7 @@ import github.lms.lemuel.common.config.jwt.JwtUtil;
 import github.lms.lemuel.coupon.application.port.in.CouponUseCase;
 import github.lms.lemuel.coupon.domain.Coupon;
 import github.lms.lemuel.coupon.domain.CouponType;
+import github.lms.lemuel.coupon.domain.DiscountTargetLine;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -69,9 +70,12 @@ class CouponControllerTest {
     @Test
     @DisplayName("GET /coupons/{code}/validate returns discount result")
     void validateCoupon() throws Exception {
-        when(couponUseCase.validateCoupon("SAVE10", 1L, new BigDecimal("10000")))
+        // 금액만 아는 경로라 컨트롤러는 상품 미상(null,null) 한 줄짜리 장바구니로 위임한다.
+        when(couponUseCase.validateCoupon("SAVE10", 1L,
+                List.of(new DiscountTargetLine(null, null, new BigDecimal("10000")))))
                 .thenReturn(new CouponUseCase.ValidateResult(true, "ok",
-                        new BigDecimal("1000"), new BigDecimal("9000"), coupon("SAVE10")));
+                        new BigDecimal("1000"), new BigDecimal("9000"),
+                        new BigDecimal("10000"), coupon("SAVE10")));
 
         mockMvc.perform(get("/coupons/SAVE10/validate")
                         .param("userId", "1")

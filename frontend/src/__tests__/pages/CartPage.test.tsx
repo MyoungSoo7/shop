@@ -37,7 +37,7 @@ vi.mock('@/api/order', () => ({ orderApi: { createOrder: vi.fn() } }));
 vi.mock('@/api/payment', () => ({
   paymentApi: { createPayment: vi.fn(), authorizePayment: vi.fn(), capturePayment: vi.fn() },
 }));
-vi.mock('@/api/coupon', () => ({ couponApi: { validate: vi.fn(), use: vi.fn() } }));
+vi.mock('@/api/coupon', () => ({ couponApi: { preview: vi.fn(), use: vi.fn() } }));
 
 const mockedOrder = vi.mocked(orderApi);
 const mockedPayment = vi.mocked(paymentApi);
@@ -166,11 +166,13 @@ describe('CartPage — 일반 결제', () => {
   });
 
   it('쿠폰을 적용하면 할인가로 결제하고 사용 기록을 남긴다', async () => {
-    mockedCoupon.validate.mockResolvedValue({
+    mockedCoupon.preview.mockResolvedValue({
       valid: true,
+      message: '',
+      subtotal: 20000,
       discountAmount: 2000,
+      eligibleAmount: 20000,
       finalAmount: 18000,
-      message: null,
     } as never);
     mockedCoupon.use.mockResolvedValue(undefined as never);
     renderPage();
@@ -191,11 +193,13 @@ describe('CartPage — 일반 결제', () => {
   });
 
   it('쿠폰 사용 기록 실패는 주문 결과를 뒤집지 않는다', async () => {
-    mockedCoupon.validate.mockResolvedValue({
+    mockedCoupon.preview.mockResolvedValue({
       valid: true,
+      message: '',
+      subtotal: 20000,
       discountAmount: 2000,
+      eligibleAmount: 20000,
       finalAmount: 18000,
-      message: null,
     } as never);
     mockedCoupon.use.mockRejectedValue(new Error('down'));
     renderPage();

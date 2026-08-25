@@ -7,6 +7,7 @@ import org.junit.jupiter.api.DisplayName;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
+import java.util.List;
 
 import static org.assertj.core.api.Assertions.*;
 
@@ -229,14 +230,59 @@ class CouponTest {
                 .hasMessageContaining("targetId");
     }
 
-    @Test @DisplayName("부분 환불 할인 계산")
-    void calculateDiscountForRefund() {
-        Coupon coupon = Coupon.create("F", CouponType.FIXED, new BigDecimal("10000"),
+    @Test @DisplayName("eligibleBase: 전체 적용 쿠폰은 장바구니 소계 전부가 기준")
+    void eligibleBase_allCoupon() {
+        Coupon coupon = Coupon.create("ALL10", CouponType.PERCENTAGE, new BigDecimal("10"),
                 BigDecimal.ZERO, null, 10, null);
-        // 전체 주문 50000에서 10000 할인, 환불 대상 25000
-        BigDecimal refundDiscount = coupon.calculateDiscountForRefund(
-                new BigDecimal("50000"), new BigDecimal("25000"));
-        // 10000 * 25000 / 50000 = 5000
-        assertThat(refundDiscount).isEqualByComparingTo("5000");
+        assertThat(coupon.eligibleBase(List.of(
+                new DiscountTargetLine(100L, 7L, new BigDecimal("10000")),
+                new DiscountTargetLine(999L, 8L, new BigDecimal("90000")))))
+                .isEqualByComparingTo("100000");
+    }
+
+    @Test @DisplayName("eligibleBase: 상품 전용 쿠폰은 그 상품 라인만 기준 — 여기가 안 걸리면 장바구니 전체가 깎인다")
+    void eligibleBase_productCoupon() {
+        Coupon coupon = Coupon.create("P10", CouponType.PERCENTAGE, new BigDecimal("10"),
+                BigDecimal.ZERO, null, 10, null);
+        coupon.configureTarget("PRODUCT", 100L);
+        List<DiscountTargetLine> cart = List.of(
+                new DiscountTargetLine(100L, 7L, new BigDecimal("10000")),
+                new DiscountTargetLine(999L, 8L, new BigDecimal("90000")));
+        assertThat(coupon.eligibleBase(cart)).isEqualByComparingTo("10000");
+        // 10% 는 소계 100,000 의 10,000 이 아니라 대상 10,000 의 1,000 이다.
+        assertThat(coupon.calculateDiscount(coupon.eligibleBase(cart))).isEqualByComparingTo("1000");
+    }
+
+    @Test @DisplayName("eligibleBase: 카테고리 전용 쿠폰은 같은 카테고리 라인을 모두 합산")
+    void eligibleBase_categoryCoupon() {
+        Coupon coupon = Coupon.create("C10", CouponType.PERCENTAGE, new BigDecimal("10"),
+                BigDecimal.ZERO, null, 10, null);
+        coupon.configureTarget("CATEGORY", 7L);
+        assertThat(coupon.eligibleBase(List.of(
+                new DiscountTargetLine(100L, 7L, new BigDecimal("10000")),
+                new DiscountTargetLine(101L, 7L, new BigDecimal("20000")),
+                new DiscountTargetLine(999L, 8L, new BigDecimal("90000")))))
+                .isEqualByComparingTo("30000");
+    }
+
+    @Test @DisplayName("eligibleBase: 대상 상품이 하나도 없으면 0 — 호출부가 '적용 불가' 로 다뤄야 하는 신호")
+    void eligibleBase_noMatchIsZero() {
+        Coupon coupon = Coupon.create("P10", CouponType.PERCENTAGE, new BigDecimal("10"),
+                BigDecimal.ZERO, null, 10, null);
+        coupon.configureTarget("PRODUCT", 100L);
+        assertThat(coupon.eligibleBase(List.of(
+                new DiscountTargetLine(999L, 8L, new BigDecimal("90000")))))
+                .isEqualByComparingTo("0");
+    }
+
+    @Test @DisplayName("정액 쿠폰은 대상 금액보다 많이 깎지 않는다 — 넘치면 라인 순액이 음수가 된다")
+    void fixedCouponCannotExceedEligibleBase() {
+        Coupon coupon = Coupon.create("F50000", CouponType.FIXED, new BigDecimal("50000"),
+                BigDecimal.ZERO, null, 10, null);
+        coupon.configureTarget("PRODUCT", 100L);
+        BigDecimal base = coupon.eligibleBase(List.of(
+                new DiscountTargetLine(100L, 7L, new BigDecimal("10000")),
+                new DiscountTargetLine(999L, 8L, new BigDecimal("90000"))));
+        assertThat(coupon.calculateDiscount(base)).isEqualByComparingTo("10000");
     }
 }

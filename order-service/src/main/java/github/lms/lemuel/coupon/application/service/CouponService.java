@@ -4,6 +4,7 @@ import github.lms.lemuel.coupon.application.port.in.CouponUseCase;
 import github.lms.lemuel.coupon.application.port.out.LoadCouponPort;
 import github.lms.lemuel.coupon.application.port.out.SaveCouponPort;
 import github.lms.lemuel.coupon.domain.Coupon;
+import github.lms.lemuel.coupon.domain.DiscountTargetLine;
 import github.lms.lemuel.coupon.domain.exception.CouponInvariantViolationException;
 import github.lms.lemuel.coupon.domain.exception.InvalidCouponStateException;
 import lombok.RequiredArgsConstructor;
@@ -46,39 +47,61 @@ public class CouponService implements CouponUseCase {
 
     @Override
     @Transactional(readOnly = true)
-    public ValidateResult validateCoupon(String code, Long userId, BigDecimal orderAmount) {
+    public ValidateResult validateCoupon(String code, Long userId, List<DiscountTargetLine> lines) {
+        BigDecimal subtotal = lines.stream()
+                .map(DiscountTargetLine::amount)
+                .reduce(BigDecimal.ZERO, BigDecimal::add);
+
         Coupon coupon = loadCouponPort.findByCode(code.toUpperCase().trim())
                 .orElse(null);
 
         if (coupon == null) {
-            return new ValidateResult(false, "존재하지 않는 쿠폰 코드입니다.", BigDecimal.ZERO, orderAmount, null);
+            return invalid("존재하지 않는 쿠폰 코드입니다.", subtotal);
         }
 
         // 이미 사용한 쿠폰인지 확인
         if (loadCouponPort.hasUserUsedCoupon(coupon.getId(), userId)) {
-            return new ValidateResult(false, "이미 사용한 쿠폰입니다.", BigDecimal.ZERO, orderAmount, null);
+            return invalid("이미 사용한 쿠폰입니다.", subtotal);
         }
 
+        // 최소 주문 금액은 소계 전체 기준이다 — "3만원 이상 구매 시 A상품 10%" 가 흔한 형태다.
         try {
-            coupon.validate(orderAmount, LocalDateTime.now(clock));
+            coupon.validate(subtotal, LocalDateTime.now(clock));
         } catch (InvalidCouponStateException e) {
-            return new ValidateResult(false, e.getMessage(), BigDecimal.ZERO, orderAmount, null);
+            return invalid(e.getMessage(), subtotal);
         }
 
-        BigDecimal discount = coupon.calculateDiscount(orderAmount);
-        BigDecimal finalAmount = orderAmount.subtract(discount);
+        // 할인은 대상에 맞는 라인 합만 깎는다. 여기가 이전에 소계 전체였고, 그래서 상품 전용
+        // 쿠폰이 장바구니를 통째로 깎았다.
+        BigDecimal eligible = coupon.eligibleBase(lines);
+        if (eligible.signum() == 0) {
+            // 0 원 할인으로 통과시키면 고객은 쿠폰이 먹혔다고 믿은 채 사용 이력만 소모한다.
+            return invalid("이 쿠폰을 사용할 수 있는 상품이 장바구니에 없습니다.", subtotal);
+        }
 
-        log.info("쿠폰 검증 성공: code={}, userId={}, discount={}", code, userId, discount);
-        return new ValidateResult(true, "쿠폰이 적용되었습니다.", discount, finalAmount, coupon);
+        BigDecimal discount = coupon.calculateDiscount(eligible);
+        BigDecimal finalAmount = subtotal.subtract(discount);
+
+        log.info("쿠폰 검증 성공: code={}, userId={}, target={}, 소계={}, 대상금액={}, discount={}",
+                code, userId, coupon.getTargetType(), subtotal, eligible, discount);
+        return new ValidateResult(true, "쿠폰이 적용되었습니다.", discount, finalAmount, eligible, coupon);
+    }
+
+    private static ValidateResult invalid(String message, BigDecimal subtotal) {
+        return new ValidateResult(false, message, BigDecimal.ZERO, subtotal, BigDecimal.ZERO, null);
     }
 
     @Override
     @Transactional(readOnly = true)
     public List<ValidateResult> getAvailableCoupons(Long userId, BigDecimal orderAmount,
                                                     Long productId, Long categoryId) {
+        // 상품 상세에서 "이 상품에 쓸 수 있는 쿠폰" 을 보여주는 목록 경로 — 장바구니가 아니라
+        // 상품 하나가 문맥이라, 그 상품 한 줄짜리 장바구니로 검증한다.
+        List<DiscountTargetLine> singleLine =
+                List.of(new DiscountTargetLine(productId, categoryId, orderAmount));
         return loadCouponPort.findAll().stream()
                 .filter(c -> c.appliesTo(productId, categoryId))
-                .map(c -> validateCoupon(c.getCode(), userId, orderAmount))
+                .map(c -> validateCoupon(c.getCode(), userId, singleLine))
                 .filter(ValidateResult::valid)
                 .toList();
     }

@@ -36,6 +36,34 @@ describe('couponApi', () => {
     expect(result.message).toBe('최소 주문금액 미달');
   });
 
+  it('미리보기는 장바구니 라인을 그대로 주문 경로로 보낸다', async () => {
+    vi.mocked(api.post).mockResolvedValueOnce({
+      data: {
+        valid: true,
+        message: '',
+        subtotal: 100000,
+        discountAmount: 1000,
+        eligibleAmount: 10000,
+        finalAmount: 99000,
+      },
+    });
+
+    const lines = [
+      { productId: 100, quantity: 1 },
+      { productId: 999, quantity: 1 },
+    ];
+    const result = await couponApi.preview(7, 'P10', lines);
+
+    expect(api.post).toHaveBeenCalledWith('/orders/coupon-preview', {
+      userId: 7,
+      lines,
+      couponCode: 'P10',
+    });
+    // 상품 전용 쿠폰이면 할인이 걸린 금액(eligibleAmount)이 소계보다 작다.
+    expect(result.eligibleAmount).toBe(10000);
+    expect(result.discountAmount).toBe(1000);
+  });
+
   it('쿠폰 사용을 기록한다', async () => {
     vi.mocked(api.post).mockResolvedValueOnce({ data: undefined });
 

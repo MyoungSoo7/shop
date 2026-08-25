@@ -8,6 +8,7 @@ import github.lms.lemuel.order.application.port.in.CreateMultiItemOrderUseCase;
 import github.lms.lemuel.order.application.port.in.CreateOrderUseCase;
 import github.lms.lemuel.order.application.port.in.GetOrderUseCase;
 import github.lms.lemuel.order.application.port.in.IdempotentMultiItemOrderUseCase;
+import github.lms.lemuel.order.application.port.in.PreviewCouponUseCase;
 import github.lms.lemuel.order.domain.Order;
 import github.lms.lemuel.web.security.ResourceOwnership;
 import io.swagger.v3.oas.annotations.Operation;
@@ -44,6 +45,7 @@ public class OrderController {
     private final GetOrderUseCase getOrderUseCase;
     private final ChangeOrderStatusUseCase changeOrderStatusUseCase;
     private final CancelOrderItemsUseCase cancelOrderItemsUseCase;
+    private final PreviewCouponUseCase previewCouponUseCase;
     private final github.lms.lemuel.order.application.port.in.WithdrawOrderRequestUseCase withdrawOrderRequestUseCase;
 
     @Operation(summary = "주문 생성 (단건)", description = "단일 상품 주문 — 레거시 호환 경로.")
@@ -77,6 +79,26 @@ public class OrderController {
                 .toList();
         Order order = createMultiItemOrderUseCase.create(request.userId(), lines, request.couponCode(), idempotencyKey);
         return ResponseEntity.status(HttpStatus.CREATED).body(OrderResponse.from(order));
+    }
+
+    @Operation(summary = "쿠폰 미리보기 (장바구니 기준)",
+            description = "주문을 만들지 않고 할인액만 계산한다. 주문 생성과 같은 라인 입력을 받아 같은 상품 마스터에서 "
+                    + "단가·카테고리를 해석하므로, 여기서 보이는 할인액이 결제에 그대로 적용된다. "
+                    + "상품·카테고리 전용 쿠폰은 이 경로로만 정확히 계산된다.")
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "계산 결과(쿠폰 사용 불가도 200 + valid=false)"),
+            @ApiResponse(responseCode = "404", description = "상품을 찾을 수 없음")
+    })
+    @PostMapping("/coupon-preview")
+    public ResponseEntity<PreviewCouponUseCase.Preview> previewCoupon(
+            @Valid @RequestBody MultiItemOrderRequest request) {
+        // 남의 쿠폰 보유 여부를 캐볼 수 없게 본인(또는 관리자)만 조회한다.
+        ResourceOwnership.requireSelfOrAdmin(request.userId());
+        List<CreateMultiItemOrderUseCase.Line> lines = request.lines().stream()
+                .map(l -> new CreateMultiItemOrderUseCase.Line(l.productId(), l.variantId(), l.quantity()))
+                .toList();
+        return ResponseEntity.ok(
+                previewCouponUseCase.preview(request.userId(), request.couponCode(), lines));
     }
 
     public record MultiItemOrderRequest(

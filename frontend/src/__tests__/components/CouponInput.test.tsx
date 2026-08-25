@@ -6,13 +6,16 @@ import { couponApi } from '@/api/coupon';
 
 vi.mock('@/api/coupon', () => ({
   couponApi: {
-    validate: vi.fn(),
+    preview: vi.fn(),
   },
 }));
 
+// 금액이 아니라 라인을 넘긴다 — 상품 전용 쿠폰의 할인액은 무엇이 담겼는지에 달려 있다.
+const lines = [{ productId: 100, quantity: 1 }];
+
 const props = {
   userId: 7,
-  orderAmount: 30000,
+  lines,
   onApply: vi.fn(),
   onRemove: vi.fn(),
 };
@@ -37,10 +40,10 @@ describe('CouponInput — 적용 전', () => {
   });
 
   it('유효한 쿠폰이면 onApply 를 호출하고 입력을 비운다', async () => {
-    vi.mocked(couponApi.validate).mockResolvedValueOnce({
+    vi.mocked(couponApi.preview).mockResolvedValueOnce({
       valid: true,
       discountAmount: 3000,
-      message: null,
+      message: '',
     } as never);
     render(<CouponInput {...props} />);
 
@@ -48,7 +51,7 @@ describe('CouponInput — 적용 전', () => {
     await userEvent.click(screen.getByRole('button', { name: '적용' }));
 
     await waitFor(() => expect(props.onApply).toHaveBeenCalled());
-    expect(couponApi.validate).toHaveBeenCalledWith('WELCOME10', 7, 30000);
+    expect(couponApi.preview).toHaveBeenCalledWith(7, 'WELCOME10', lines);
     expect(props.onApply).toHaveBeenCalledWith(
       expect.objectContaining({ discountAmount: 3000 }),
       'WELCOME10',
@@ -57,7 +60,7 @@ describe('CouponInput — 적용 전', () => {
   });
 
   it('무효한 쿠폰이면 서버 사유를 보여 준다', async () => {
-    vi.mocked(couponApi.validate).mockResolvedValueOnce({
+    vi.mocked(couponApi.preview).mockResolvedValueOnce({
       valid: false,
       discountAmount: 0,
       message: '최소 주문금액 미달',
@@ -72,7 +75,7 @@ describe('CouponInput — 적용 전', () => {
   });
 
   it('조회가 실패하면 일반 오류 문구를 보여 준다', async () => {
-    vi.mocked(couponApi.validate).mockRejectedValueOnce(new Error('network'));
+    vi.mocked(couponApi.preview).mockRejectedValueOnce(new Error('network'));
     render(<CouponInput {...props} />);
 
     await userEvent.type(screen.getByPlaceholderText(/쿠폰 코드 입력/), 'x1');
@@ -82,20 +85,37 @@ describe('CouponInput — 적용 전', () => {
   });
 
   it('Enter 로도 적용된다', async () => {
-    vi.mocked(couponApi.validate).mockResolvedValueOnce({
+    vi.mocked(couponApi.preview).mockResolvedValueOnce({
       valid: true,
       discountAmount: 1000,
-      message: null,
+      message: '',
     } as never);
     render(<CouponInput {...props} />);
 
     await userEvent.type(screen.getByPlaceholderText(/쿠폰 코드 입력/), 'welcome10{Enter}');
 
-    await waitFor(() => expect(couponApi.validate).toHaveBeenCalled());
+    await waitFor(() => expect(couponApi.preview).toHaveBeenCalled());
+  });
+
+  it('장바구니에 대상 상품이 없으면 서버가 준 사유를 그대로 보여 준다', async () => {
+    vi.mocked(couponApi.preview).mockResolvedValueOnce({
+      valid: false,
+      discountAmount: 0,
+      message: '이 쿠폰을 사용할 수 있는 상품이 장바구니에 없습니다.',
+    } as never);
+    render(<CouponInput {...props} />);
+
+    await userEvent.type(screen.getByPlaceholderText(/쿠폰 코드 입력/), 'p10');
+    await userEvent.click(screen.getByRole('button', { name: '적용' }));
+
+    expect(
+      await screen.findByText('이 쿠폰을 사용할 수 있는 상품이 장바구니에 없습니다.'),
+    ).toBeInTheDocument();
+    expect(props.onApply).not.toHaveBeenCalled();
   });
 
   it('다시 입력하면 직전 오류 문구가 사라진다', async () => {
-    vi.mocked(couponApi.validate).mockResolvedValueOnce({
+    vi.mocked(couponApi.preview).mockResolvedValueOnce({
       valid: false,
       discountAmount: 0,
       message: '만료된 쿠폰',

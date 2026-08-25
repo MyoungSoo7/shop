@@ -296,6 +296,28 @@ export interface CouponValidateResponse {
   finalAmount: number;
 }
 
+/** 쿠폰 미리보기에 넘기는 장바구니 한 줄. 주문 생성의 라인과 같은 형식이다. */
+export interface CouponPreviewLine {
+  productId: number;
+  variantId?: number | null;
+  quantity: number;
+}
+
+/**
+ * 장바구니 기준 쿠폰 계산 결과.
+ *
+ * `eligibleAmount` 는 할인이 실제로 걸린 금액(대상 라인들의 합)이다. 전체 적용 쿠폰이면
+ * `subtotal` 과 같고, 상품·카테고리 전용 쿠폰이면 그보다 작다.
+ */
+export interface CouponPreviewResponse {
+  valid: boolean;
+  message: string;
+  subtotal: number;
+  discountAmount: number;
+  eligibleAmount: number;
+  finalAmount: number;
+}
+
 export interface CouponCreateRequest {
   code: string;
   type: CouponType;

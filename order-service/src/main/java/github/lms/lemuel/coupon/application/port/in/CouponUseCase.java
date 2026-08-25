@@ -2,6 +2,7 @@ package github.lms.lemuel.coupon.application.port.in;
 
 import github.lms.lemuel.coupon.domain.Coupon;
 import github.lms.lemuel.coupon.domain.CouponType;
+import github.lms.lemuel.coupon.domain.DiscountTargetLine;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
@@ -12,10 +13,18 @@ public interface CouponUseCase {
     Coupon createCoupon(CreateCouponCommand command);
 
     /**
-     * 쿠폰 검증: 코드, 사용자 중복 사용 여부, 주문 금액 조건 확인
-     * 유효하면 할인 금액을 포함한 Coupon 반환
+     * 쿠폰 검증: 코드, 사용자 중복 사용 여부, 주문 금액 조건, <b>적용 대상</b> 확인.
+     * 유효하면 할인 금액과 {@link Coupon} 을 함께 돌려준다.
+     *
+     * <p>장바구니를 줄 단위로 받는 이유는 대상 때문이다. 이전에는 소계 하나만 받아서
+     * {@code coupon.calculateDiscount(소계)} 를 불렀고, {@code targetType} 은 목록 필터
+     * ({@link #getAvailableCoupons})에서만 쓰여 <b>결제 시점에는 아무 효력이 없었다</b> —
+     * 특정 상품 전용 10% 쿠폰이 장바구니 전체를 10% 깎았다(실측: 1,000 이어야 할 할인이 10,000).
+     *
+     * <p>최소 주문 금액은 여전히 <b>소계 전체</b> 기준이다("3만원 이상 구매 시 A상품 10%").
+     * 할인 계산만 대상 라인 합({@link Coupon#eligibleBase})을 기준으로 한다.
      */
-    ValidateResult validateCoupon(String code, Long userId, BigDecimal orderAmount);
+    ValidateResult validateCoupon(String code, Long userId, List<DiscountTargetLine> lines);
 
     /**
      * 쿠폰 사용 처리: 사용 횟수 증가 + 사용 내역 기록
@@ -57,11 +66,20 @@ public interface CouponUseCase {
         }
     }
 
+    /**
+     * @param discountAmount 실제 깎이는 금액
+     * @param finalAmount    소계 − 할인 (배송비 전)
+     * @param eligibleAmount 할인 계산의 기준이 된 금액 = 대상에 맞는 라인들의 합.
+     *                       {@code ALL} 쿠폰이면 소계와 같다. 주문은 이 금액이 걸린 라인들에만
+     *                       할인을 안분해야 한다 — 전체에 안분하면 대상 밖 라인이 깎이지 않은 값을
+     *                       치르고도 할인 몫을 짊어져 부분 취소 환불이 어긋난다
+     */
     record ValidateResult(
             boolean valid,
             String message,
             BigDecimal discountAmount,
             BigDecimal finalAmount,
+            BigDecimal eligibleAmount,
             Coupon coupon
     ) {}
 }

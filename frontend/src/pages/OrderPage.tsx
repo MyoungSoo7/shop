@@ -9,7 +9,7 @@ import { paymentApi } from '@/api/payment';
 import { productApi } from '@/api/product';
 import { reviewApi } from '@/api/review';
 import { couponApi } from '@/api/coupon';
-import { OrderResponse, PaymentResponse, ProductResponse, ReviewResponse, CouponValidateResponse } from '@/types';
+import { OrderResponse, PaymentResponse, ProductResponse, ReviewResponse, CouponPreviewResponse } from '@/types';
 import { useCart } from '@/contexts/useCart';
 import Card from '@/components/Card';
 import Spinner from '@/components/Spinner';
@@ -52,7 +52,7 @@ const OrderFormTab: React.FC = () => {
   const [step, setStep] = useState<'input' | 'order-created' | 'payment-ready' | 'completed'>('input');
 
   // 쿠폰
-  const [couponResult, setCouponResult] = useState<CouponValidateResponse | null>(null);
+  const [couponResult, setCouponResult] = useState<CouponPreviewResponse | null>(null);
   const [appliedCouponCode, setAppliedCouponCode] = useState<string | undefined>(undefined);
 
   // 옵션 파셋 필터
@@ -381,7 +381,7 @@ const OrderFormTab: React.FC = () => {
                 <label className="block text-sm font-medium text-gray-700 mb-1.5">쿠폰 코드</label>
                 <CouponInput
                   userId={userId}
-                  orderAmount={selectedProduct.price}
+                  lines={[{ productId: selectedProduct.id, quantity: 1 }]}
                   onApply={(result, code) => { setCouponResult(result); setAppliedCouponCode(code); }}
                   onRemove={() => { setCouponResult(null); setAppliedCouponCode(undefined); }}
                   appliedCode={appliedCouponCode}

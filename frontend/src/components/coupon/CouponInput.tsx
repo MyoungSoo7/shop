@@ -1,18 +1,25 @@
 import React, { useState } from 'react';
 import { couponApi } from '@/api/coupon';
-import { CouponValidateResponse } from '@/types';
+import { CouponPreviewLine, CouponPreviewResponse } from '@/types';
 
 interface CouponInputProps {
   userId: number;
-  orderAmount: number;
-  onApply: (result: CouponValidateResponse, code: string) => void;
+  /**
+   * 쿠폰을 적용할 장바구니 라인들.
+   *
+   * 금액 합계가 아니라 라인을 넘기는 이유: 상품·카테고리 전용 쿠폰의 할인액은 "무엇이 담겼는지"
+   * 를 알아야 정해진다. 금액만 넘기면 상품 전용 쿠폰이 장바구니 전체를 깎은 값을 보여주게 되고,
+   * 화면과 결제가 어긋난다.
+   */
+  lines: CouponPreviewLine[];
+  onApply: (result: CouponPreviewResponse, code: string) => void;
   onRemove: () => void;
   appliedCode?: string;
 }
 
 const CouponInput: React.FC<CouponInputProps> = ({
   userId,
-  orderAmount,
+  lines,
   onApply,
   onRemove,
   appliedCode,
@@ -26,7 +33,7 @@ const CouponInput: React.FC<CouponInputProps> = ({
     setLoading(true);
     setError(null);
     try {
-      const result = await couponApi.validate(code.trim(), userId, orderAmount);
+      const result = await couponApi.preview(userId, code.trim(), lines);
       if (result.valid) {
         onApply(result, code.trim().toUpperCase());
         setCode('');

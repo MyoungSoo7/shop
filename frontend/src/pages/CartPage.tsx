@@ -1,10 +1,10 @@
-import React, { useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useCart, CartItem } from '@/contexts/useCart';
 import { orderApi } from '@/api/order';
 import { paymentApi } from '@/api/payment';
 import { couponApi } from '@/api/coupon';
-import { CouponValidateResponse } from '@/types';
+import { CouponPreviewResponse } from '@/types';
 import Spinner from '@/components/Spinner';
 import CouponInput from '@/components/coupon/CouponInput';
 import { errorDetail } from '@/lib/apiError';
@@ -112,10 +112,16 @@ const CartPage: React.FC = () => {
   const [processingIdx, setProcessingIdx] = useState(0);
   const [results, setResults] = useState<OrderResult[]>([]);
   const [error, setError] = useState<string | null>(null);
-  const [couponResult, setCouponResult] = useState<CouponValidateResponse | null>(null);
+  const [couponResult, setCouponResult] = useState<CouponPreviewResponse | null>(null);
   const [appliedCouponCode, setAppliedCouponCode] = useState<string | undefined>(undefined);
 
   const discountedTotal = couponResult ? couponResult.finalAmount : totalAmount;
+
+  // 쿠폰 미리보기에 넘길 라인 — 단가·카테고리는 서버가 상품 마스터에서 해석한다.
+  const couponLines = useMemo(
+    () => items.map(({ product, quantity }) => ({ productId: product.id, quantity })),
+    [items],
+  );
 
   /* ── 일반 결제 (CARD / BANK_TRANSFER / VIRTUAL_ACCOUNT) ── */
   const handleNormalCheckout = async () => {
@@ -401,7 +407,7 @@ const CartPage: React.FC = () => {
                 <label className="block text-sm font-medium text-gray-700 mb-1.5">쿠폰 코드</label>
                 <CouponInput
                   userId={USER_ID}
-                  orderAmount={totalAmount}
+                  lines={couponLines}
                   onApply={(result, code) => { setCouponResult(result); setAppliedCouponCode(code); }}
                   onRemove={() => { setCouponResult(null); setAppliedCouponCode(undefined); }}
                   appliedCode={appliedCouponCode}

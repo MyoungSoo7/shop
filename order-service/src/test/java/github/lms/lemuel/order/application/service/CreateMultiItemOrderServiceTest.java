@@ -2,6 +2,9 @@ package github.lms.lemuel.order.application.service;
 import github.lms.lemuel.product.domain.exception.ProductInvariantViolationException;
 
 import github.lms.lemuel.coupon.application.port.in.CouponUseCase;
+import github.lms.lemuel.coupon.domain.Coupon;
+import github.lms.lemuel.coupon.domain.CouponType;
+import github.lms.lemuel.coupon.domain.DiscountTargetLine;
 import github.lms.lemuel.order.application.port.in.CreateMultiItemOrderUseCase;
 import github.lms.lemuel.order.application.port.out.LoadUserForOrderPort;
 import github.lms.lemuel.order.application.port.out.SaveOrderPort;
@@ -54,6 +57,21 @@ class CreateMultiItemOrderServiceTest {
                 .thenReturn(github.lms.lemuel.shipping.domain.ShippingFeeAssessment.none());
     }
 
+    /**
+     * 검증 통과 결과 — 전체 적용({@code ALL}) 쿠폰을 실어 보낸다.
+     *
+     * <p>{@code coupon} 을 null 로 두면 안 된다: 서비스는 이 쿠폰으로 "할인을 짊어질 라인"을
+     * 골라내므로(대상 밖 라인이 할인 몫을 지면 부분 취소 환불이 어긋난다), 결과의 쿠폰이
+     * 계산에 실제로 쓰인다.
+     */
+    private static CouponUseCase.ValidateResult validResult(String discount, String finalAmount,
+                                                            String eligible) {
+        Coupon coupon = Coupon.create("ALL", CouponType.FIXED, new BigDecimal(discount),
+                BigDecimal.ZERO, null, 100, null);
+        return new CouponUseCase.ValidateResult(true, "ok", new BigDecimal(discount),
+                new BigDecimal(finalAmount), new BigDecimal(eligible), coupon);
+    }
+
     private Product mockProduct(Long id, String name, BigDecimal price) {
         Product p = Product.create(name, "설명", price, 100);
         // use reflection or mock
@@ -102,8 +120,7 @@ class CreateMultiItemOrderServiceTest {
         when(loadProductPort.findById(10L)).thenReturn(Optional.of(product));
         when(saveOrderPort.save(any())).thenAnswer(inv -> inv.getArgument(0));
         when(couponUseCase.validateCoupon(eq("SALE"), eq(1L), any()))
-                .thenReturn(new CouponUseCase.ValidateResult(true, "ok", new BigDecimal("5000"),
-                        new BigDecimal("15000"), null));
+                .thenReturn(validResult("5000", "15000", "20000"));
 
         service.create(1L, List.of(new CreateMultiItemOrderUseCase.Line(10L, null, 2)), "SALE");
 
@@ -161,16 +178,16 @@ class CreateMultiItemOrderServiceTest {
         });
         // 소계 20,000 (10,000 x 2) 기준 2,000원 할인
         when(couponUseCase.validateCoupon(eq("SAVE2000"), eq(1L), any()))
-                .thenReturn(new CouponUseCase.ValidateResult(
-                        true, "ok", new BigDecimal("2000"), new BigDecimal("18000"), null));
+                .thenReturn(validResult("2000", "18000", "20000"));
 
         var lines = List.of(new CreateMultiItemOrderUseCase.Line(10L, null, 2));
         Order result = service.create(1L, lines, "SAVE2000");
 
         // amount = 소계 20,000 - 할인 2,000 = 18,000
         assertThat(result.getAmount()).isEqualByComparingTo("18000");
-        // 검증은 소계(20,000) 기준으로 호출
-        verify(couponUseCase).validateCoupon("SAVE2000", 1L, new BigDecimal("20000"));
+        // 검증에는 소계 하나가 아니라 라인 목록이 넘어간다 — 쿠폰 대상이 여기서 판정되기 때문이다.
+        verify(couponUseCase).validateCoupon("SAVE2000", 1L,
+                List.of(new DiscountTargetLine(10L, null, new BigDecimal("20000"))));
         // 사용 기록은 저장된 orderId 로, 같은 흐름에서 호출
         verify(couponUseCase).useCoupon("SAVE2000", 1L, 500L);
     }
@@ -182,7 +199,8 @@ class CreateMultiItemOrderServiceTest {
         when(loadProductPort.findById(10L)).thenReturn(Optional.of(product));
         when(couponUseCase.validateCoupon(eq("EXPIRED"), eq(1L), any()))
                 .thenReturn(new CouponUseCase.ValidateResult(
-                        false, "만료된 쿠폰입니다.", BigDecimal.ZERO, new BigDecimal("10000"), null));
+                        false, "만료된 쿠폰입니다.", BigDecimal.ZERO, new BigDecimal("10000"),
+                        BigDecimal.ZERO, null));
 
         var lines = List.of(new CreateMultiItemOrderUseCase.Line(10L, null, 1));
         assertThatThrownBy(() -> service.create(1L, lines, "EXPIRED"))
@@ -201,8 +219,7 @@ class CreateMultiItemOrderServiceTest {
         when(loadProductPort.findById(10L)).thenReturn(Optional.of(product));
         when(saveOrderPort.save(any())).thenAnswer(inv -> inv.getArgument(0));
         when(couponUseCase.validateCoupon(eq("LIMIT"), eq(1L), any()))
-                .thenReturn(new CouponUseCase.ValidateResult(
-                        true, "ok", new BigDecimal("1000"), new BigDecimal("9000"), null));
+                .thenReturn(validResult("1000", "9000", "10000"));
         doThrow(new IllegalStateException("쿠폰 사용 한도를 초과했습니다."))
                 .when(couponUseCase).useCoupon(eq("LIMIT"), eq(1L), any());
 

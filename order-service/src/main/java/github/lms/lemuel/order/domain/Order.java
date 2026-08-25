@@ -109,6 +109,20 @@ public class Order {
      */
     public static Order createMultiItem(Long userId, List<OrderItem> items,
                                         BigDecimal discountAmount, BigDecimal shippingFee) {
+        return createMultiItem(userId, items, discountAmount, shippingFee, items);
+    }
+
+    /**
+     * 할인이 <b>일부 라인에만</b> 걸리는 주문 — 상품·카테고리 전용 쿠폰.
+     *
+     * @param discountBearingItems 쿠폰이 실제로 깎은 라인들. {@code items} 의 부분집합이어야 하고,
+     *                             할인액은 이 라인들에만 안분된다. 전체에 안분하면 쿠폰이 걸리지도
+     *                             않은 라인이 할인 몫을 짊어져, 그 라인만 취소했을 때 낸 돈보다
+     *                             적게 돌려받는다
+     */
+    public static Order createMultiItem(Long userId, List<OrderItem> items,
+                                        BigDecimal discountAmount, BigDecimal shippingFee,
+                                        List<OrderItem> discountBearingItems) {
         if (items == null || items.isEmpty()) {
             throw new OrderInvariantViolationException("다건 주문은 최소 1 개 이상의 아이템이 필요합니다");
         }
@@ -139,7 +153,19 @@ public class Order {
         order.shippingFee = shipping;
         order.validateUserId();
         order.validateAmount();
-        allocateDiscount(items, discount, subtotal);
+
+        // 할인을 짊어지는 라인들 — 전용 쿠폰이면 items 의 부분집합이다.
+        List<OrderItem> bearing = discountBearingItems == null ? items : discountBearingItems;
+        BigDecimal bearingSubtotal = bearing.stream()
+                .map(OrderItem::getLineAmount)
+                .reduce(BigDecimal.ZERO, BigDecimal::add);
+        if (discount.signum() > 0 && discount.compareTo(bearingSubtotal) > 0) {
+            // 여기 걸리면 쿠폰이 자기가 걸리는 금액보다 많이 깎았다는 뜻이다. 그대로 두면
+            // 어떤 라인의 순액이 음수가 된다 — 취소하면 고객이 돈을 내는 주문이 만들어진다.
+            throw new OrderInvariantViolationException(
+                    "할인 금액(" + discount + ") 이 할인 대상 라인 합(" + bearingSubtotal + ") 을 넘을 수 없습니다");
+        }
+        allocateDiscount(bearing, discount, bearingSubtotal);
         order.items.addAll(items);
         return order;
     }
@@ -153,11 +179,11 @@ public class Order {
      * 총액에서 역산하지 않고 주문서에 적어 두는 이유는 또 있다 — 쿠폰은 나중에 수정·삭제되므로,
      * 환불 시점에 쿠폰을 다시 읽어 계산하면 그때의 쿠폰이 그때의 주문을 재해석하게 된다.
      *
-     * <p><b>비례 배분이 맞는 근거.</b> 할인액은 {@code CouponService.validateCoupon} 이 주문
-     * 소계 전체에 대해 산출한다 — 쿠폰의 {@code CouponTarget}(ALL/PRODUCT/CATEGORY) 은 그 계산에
-     * 들어가지 않고 목록 노출 필터로만 쓰인다. 즉 실제로 깎인 돈은 주문 전체에 걸려 있으므로,
-     * 전체 비례 배분이 <b>실제 청구액과 일치하는</b> 유일한 배분이다. 대상 제한을 결제 단계에서
-     * 강제하게 되는 날에는 이 함수도 함께 바뀌어야 한다(매칭 라인에만 붙는다).
+     * <p><b>무엇에 비례하나.</b> 넘어오는 {@code items} 는 주문의 전체 라인이 아니라 <b>쿠폰이
+     * 실제로 깎은 라인들</b>이고, {@code subtotal} 은 그 라인들의 합이다. {@code ALL} 쿠폰이면 둘 다
+     * 주문 전체와 같지만, 상품·카테고리 전용 쿠폰이면 매칭된 라인만 들어온다 — 배분의 기준은 언제나
+     * "실제로 깎인 돈이 걸려 있는 범위" 이고, 그래야 각 라인의 순액이 그 라인에 청구된 금액과 같다.
+     * 대상 밖 라인은 몫이 0 으로 남아 정가 그대로 환불된다(정가를 다 낸 라인이므로 그것이 맞다).
      *
      * <p><b>잔돈.</b> 원 단위 아래는 버리고(FLOOR), 버려서 생긴 잔돈은 소수 분리(largest
      * remainder) 로 소수부가 큰 라인부터 1 원씩 얹는다. 잔돈을 한 라인에 몰면 소액 라인이 여러 개인

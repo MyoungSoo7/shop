@@ -7,6 +7,7 @@ import github.lms.lemuel.coupon.application.port.out.LoadCouponPort;
 import github.lms.lemuel.coupon.application.port.out.SaveCouponPort;
 import github.lms.lemuel.coupon.domain.Coupon;
 import github.lms.lemuel.coupon.domain.CouponType;
+import github.lms.lemuel.coupon.domain.DiscountTargetLine;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -43,6 +44,11 @@ class CouponServiceTest {
         service = new CouponService(loadCouponPort, saveCouponPort, clock);
     }
 
+    /** 상품을 특정하지 않는 한 줄짜리 장바구니 — 대상이 쟁점이 아닌 검증 경로용. */
+    private static List<DiscountTargetLine> cart(BigDecimal amount) {
+        return List.of(new DiscountTargetLine(null, null, amount));
+    }
+
     @Test @DisplayName("createCoupon: 쿠폰 생성")
     void createCoupon() {
         var cmd = new CouponUseCase.CreateCouponCommand(
@@ -58,7 +64,7 @@ class CouponServiceTest {
     @Test @DisplayName("validateCoupon: 존재하지 않는 쿠폰")
     void validateCoupon_notFound() {
         when(loadCouponPort.findByCode("INVALID")).thenReturn(Optional.empty());
-        var result = service.validateCoupon("invalid", 1L, BigDecimal.TEN);
+        var result = service.validateCoupon("invalid", 1L, cart(BigDecimal.TEN));
         assertThat(result.valid()).isFalse();
         assertThat(result.message()).contains("존재하지 않는");
     }
@@ -69,7 +75,7 @@ class CouponServiceTest {
         when(coupon.getId()).thenReturn(1L);
         when(loadCouponPort.findByCode("USED")).thenReturn(Optional.of(coupon));
         when(loadCouponPort.hasUserUsedCoupon(1L, 1L)).thenReturn(true);
-        var result = service.validateCoupon("USED", 1L, BigDecimal.TEN);
+        var result = service.validateCoupon("USED", 1L, cart(BigDecimal.TEN));
         assertThat(result.valid()).isFalse();
         assertThat(result.message()).contains("이미 사용");
     }

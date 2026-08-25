@@ -28,7 +28,7 @@ vi.mock('@/api/review', () => ({
   reviewApi: { getProductReviews: vi.fn() },
 }));
 vi.mock('@/api/coupon', () => ({
-  couponApi: { validate: vi.fn(), use: vi.fn() },
+  couponApi: { preview: vi.fn(), use: vi.fn() },
 }));
 
 // 파셋 헬퍼(toggle/count)는 순수 함수라 실제 구현을 그대로 쓰고 네트워크 호출만 가짜로 바꾼다.
@@ -160,11 +160,13 @@ describe('OrderPage — 상품 선택 후', () => {
   });
 
   it('쿠폰을 적용하면 할인 금액과 최종가를 반영한다', async () => {
-    mockedCoupon.validate.mockResolvedValue({
+    mockedCoupon.preview.mockResolvedValue({
       valid: true,
+      message: '',
+      subtotal: 20000,
       discountAmount: 2000,
+      eligibleAmount: 20000,
       finalAmount: 18000,
-      message: null,
     } as never);
     await selectProduct();
 
@@ -250,11 +252,13 @@ describe('OrderPage — 주문·결제 흐름', () => {
   });
 
   it('쿠폰이 적용된 주문은 할인가로 생성하고 쿠폰 사용을 기록한다', async () => {
-    mockedCoupon.validate.mockResolvedValue({
+    mockedCoupon.preview.mockResolvedValue({
       valid: true,
+      message: '',
+      subtotal: 20000,
       discountAmount: 2000,
+      eligibleAmount: 20000,
       finalAmount: 18000,
-      message: null,
     } as never);
     mockedCoupon.use.mockResolvedValue(undefined as never);
     mockedOrder.createOrder.mockResolvedValue(order({ amount: 18000 }));
@@ -276,11 +280,13 @@ describe('OrderPage — 주문·결제 흐름', () => {
   });
 
   it('쿠폰 사용 기록이 실패해도 주문은 유지된다', async () => {
-    mockedCoupon.validate.mockResolvedValue({
+    mockedCoupon.preview.mockResolvedValue({
       valid: true,
+      message: '',
+      subtotal: 20000,
       discountAmount: 2000,
+      eligibleAmount: 20000,
       finalAmount: 18000,
-      message: null,
     } as never);
     mockedCoupon.use.mockRejectedValue(new Error('down'));
     mockedOrder.createOrder.mockResolvedValue(order({ amount: 18000 }));

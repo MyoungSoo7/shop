@@ -3,8 +3,8 @@ import github.lms.lemuel.coupon.domain.exception.CouponInvariantViolationExcepti
 import github.lms.lemuel.coupon.domain.exception.InvalidCouponStateException;
 
 import java.math.BigDecimal;
-import java.math.RoundingMode;
 import java.time.LocalDateTime;
+import java.util.List;
 
 /**
  * Coupon Domain Entity (순수 POJO)
@@ -110,7 +110,14 @@ public class Coupon {
     }
 
     /**
-     * 할인 금액 계산
+     * 할인 금액 계산.
+     *
+     * <p>넘기는 금액은 주문 총액이 아니라 <b>이 쿠폰이 실제로 걸리는 금액</b>이다
+     * ({@link #eligibleBase}). {@code ALL} 쿠폰이면 둘이 같지만, 상품·카테고리 전용 쿠폰에서는
+     * 다르다 — 총액을 넘기면 전용 쿠폰이 장바구니 전체를 깎는다.
+     *
+     * <p>결과가 기준 금액을 넘지 않는 것은 타입이 보장한다: {@code FIXED} 는 {@code min(할인값, 기준)},
+     * {@code PERCENTAGE} 는 100% 상한 + 절사. 상한({@code maxDiscountAmount})은 낮추기만 한다.
      */
     public BigDecimal calculateDiscount(BigDecimal orderAmount) {
         BigDecimal discount = type.rawDiscount(discountValue, orderAmount); // 타입별 계산을 Strategy 에 위임
@@ -131,17 +138,18 @@ public class Coupon {
     }
 
     /**
-     * 부분 환불 시 해당 부분에 적용된 할인 금액 계산
-     * (전체 할인 금액 * (환불 대상 금액 / 전체 주문 금액))
+     * 이 쿠폰이 실제로 깎는 금액의 <b>기준</b> — 장바구니 줄 중 대상에 맞는 줄들의 금액 합.
+     *
+     * <p>{@code ALL} 쿠폰이면 소계 전체와 같다. 상품·카테고리 전용 쿠폰이면 매칭되는 줄만 더한다.
+     * 0 이면 "이 장바구니에는 쓸 수 있는 상품이 없다"는 뜻이고, 그때 할인은 0 이 아니라
+     * <b>쿠폰 적용 불가</b>로 다뤄야 한다 — 0 원 할인으로 조용히 통과시키면 고객은 쿠폰을 썼다고
+     * 믿은 채 사용 이력만 소모한다.
      */
-    public BigDecimal calculateDiscountForRefund(BigDecimal originalOrderAmount, BigDecimal refundOriginalAmount) {
-        if (originalOrderAmount.compareTo(BigDecimal.ZERO) == 0) return BigDecimal.ZERO;
-        
-        BigDecimal totalDiscount = calculateDiscount(originalOrderAmount);
-        
-        // (totalDiscount * refundOriginalAmount) / originalOrderAmount
-        return totalDiscount.multiply(refundOriginalAmount)
-                .divide(originalOrderAmount, 0, RoundingMode.FLOOR);
+    public BigDecimal eligibleBase(List<DiscountTargetLine> lines) {
+        return lines.stream()
+                .filter(line -> appliesTo(line.productId(), line.categoryId()))
+                .map(DiscountTargetLine::amount)
+                .reduce(BigDecimal.ZERO, BigDecimal::add);
     }
 
     /**

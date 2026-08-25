@@ -44,6 +44,7 @@ class OrderControllerTest {
     @MockitoBean ChangeOrderStatusUseCase changeOrderStatusUseCase;
     @MockitoBean github.lms.lemuel.order.application.port.in.CancelOrderItemsUseCase cancelOrderItemsUseCase;
     @MockitoBean github.lms.lemuel.order.application.port.in.WithdrawOrderRequestUseCase withdrawOrderRequestUseCase;
+    @MockitoBean github.lms.lemuel.order.application.port.in.PreviewCouponUseCase previewCouponUseCase;
 
     /** JWT 주체를 SecurityContext 에 직접 세팅(addFilters=false 슬라이스 대응). */
     private static void login(long uid, String role) {
@@ -96,6 +97,35 @@ class OrderControllerTest {
         when(getOrderUseCase.getOrdersByUserId(1L, null, null, null)).thenReturn(List.of());
         mockMvc.perform(get("/orders/user/1"))
                 .andExpect(status().isOk());
+    }
+
+    @Test @DisplayName("POST /orders/coupon-preview - 장바구니 기준 할인액을 돌려준다") void couponPreview() throws Exception {
+        login(1L, "USER");
+        when(previewCouponUseCase.preview(eq(1L), eq("P10"), any())).thenReturn(
+                new github.lms.lemuel.order.application.port.in.PreviewCouponUseCase.Preview(
+                        true, "쿠폰이 적용되었습니다.", new BigDecimal("100000"),
+                        new BigDecimal("1000"), new BigDecimal("10000"), new BigDecimal("99000")));
+
+        mockMvc.perform(post("/orders/coupon-preview")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"userId\":1,\"couponCode\":\"P10\",\"lines\":["
+                                + "{\"productId\":100,\"quantity\":1},{\"productId\":999,\"quantity\":1}]}"))
+                .andExpect(status().isOk())
+                // 소계의 10% 가 아니라 대상 라인 10,000 의 10%.
+                .andExpect(jsonPath("$.discountAmount").value(1000))
+                .andExpect(jsonPath("$.eligibleAmount").value(10000));
+    }
+
+    @Test @DisplayName("POST /orders/coupon-preview - 타인 userId 는 403 (남의 쿠폰 보유 여부 탐지 차단)")
+    void couponPreview_otherForbidden() throws Exception {
+        login(2L, "USER");
+
+        mockMvc.perform(post("/orders/coupon-preview")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"userId\":1,\"couponCode\":\"P10\",\"lines\":[{\"productId\":100,\"quantity\":1}]}"))
+                .andExpect(status().isForbidden());
+
+        verify(previewCouponUseCase, never()).preview(anyLong(), any(), any());
     }
 
     @Test @DisplayName("POST /orders/{id}/items/cancel - 타인 주문은 403 (IDOR)") void cancelItems_otherForbidden() throws Exception {
