@@ -3,9 +3,11 @@ import { Link } from 'react-router-dom';
 import { useCart, CartItem } from '@/contexts/useCart';
 import { orderApi } from '@/api/order';
 import { paymentApi } from '@/api/payment';
-import { CouponPreviewResponse, MultiItemOrderResponse } from '@/types';
+import { CouponPreviewResponse, MultiItemOrderResponse, ShippingAddressRequest } from '@/types';
 import Spinner from '@/components/Spinner';
 import CouponInput from '@/components/coupon/CouponInput';
+import ShippingAddressForm from '@/components/shipping/ShippingAddressForm';
+import { emptyShippingAddress, isShippingAddressComplete } from '@/lib/shippingAddress';
 import { errorDetail } from '@/lib/apiError';
 
 const USER_ID = 1;
@@ -111,6 +113,8 @@ const CartPage: React.FC = () => {
   const [error, setError] = useState<string | null>(null);
   const [couponResult, setCouponResult] = useState<CouponPreviewResponse | null>(null);
   const [appliedCouponCode, setAppliedCouponCode] = useState<string | undefined>(undefined);
+  const [shippingAddress, setShippingAddress] = useState<ShippingAddressRequest>(emptyShippingAddress);
+  const addressReady = isShippingAddressComplete(shippingAddress);
 
   // 화면에 보여줄 예상 금액. 확정 금액은 주문을 만든 서버 응답에서 온다.
   const discountedTotal = couponResult ? couponResult.finalAmount : totalAmount;
@@ -134,7 +138,7 @@ const CartPage: React.FC = () => {
       // 장바구니 전체가 주문 1건. 쿠폰 사용 기록·재고 차감도 서버가 같은 트랜잭션에서 하므로
       // 여기서 couponApi.use 를 부르면 안 된다(두 번 소진된다).
       const created = await orderApi.createMultiItemOrder(
-        USER_ID, orderLines, appliedCouponCode ?? null, newIdempotencyKey());
+        USER_ID, orderLines, shippingAddress, appliedCouponCode ?? null, newIdempotencyKey());
 
       setProcessingMsg('결제 승인 중...');
       const payment = await paymentApi.createPayment({ orderId: created.id, paymentMethod });
@@ -160,7 +164,7 @@ const CartPage: React.FC = () => {
     let created: MultiItemOrderResponse;
     try {
       created = await orderApi.createMultiItemOrder(
-        USER_ID, orderLines, appliedCouponCode ?? null, newIdempotencyKey());
+        USER_ID, orderLines, shippingAddress, appliedCouponCode ?? null, newIdempotencyKey());
     } catch (err) {
       setError(`주문 생성 실패: ${errorDetail(err, '알 수 없는 오류')}`);
       setCheckoutStep('cart');
@@ -375,6 +379,10 @@ const CartPage: React.FC = () => {
           {/* 주문 요약 */}
           <div className="lg:col-span-1 space-y-4">
             <div className="bg-white rounded-2xl shadow-sm border border-gray-200 p-6">
+              <ShippingAddressForm value={shippingAddress} onChange={setShippingAddress} />
+            </div>
+
+            <div className="bg-white rounded-2xl shadow-sm border border-gray-200 p-6">
               <h2 className="font-bold text-gray-900 mb-4">주문 요약</h2>
 
               {/* 소계 */}
@@ -460,10 +468,18 @@ const CartPage: React.FC = () => {
                 </div>
               )}
 
+              {/* 배송지 미입력 안내 — 서버도 400 으로 거절하지만 눌러보고 알게 하지는 않는다 */}
+              {!addressReady && (
+                <p className="mb-3 text-xs text-gray-500">
+                  받는 분·연락처·우편번호·주소를 입력해야 주문할 수 있습니다.
+                </p>
+              )}
+
               {/* 주문 버튼 */}
               <button
                 onClick={handleCheckout}
-                className={`w-full py-3 rounded-xl font-semibold transition-colors ${
+                disabled={!addressReady}
+                className={`w-full py-3 rounded-xl font-semibold transition-colors disabled:opacity-40 disabled:cursor-not-allowed ${
                   paymentMethod === 'TOSS_PAYMENTS'
                     ? 'bg-sky-500 text-white hover:bg-sky-600'
                     : 'bg-blue-600 text-white hover:bg-blue-700'

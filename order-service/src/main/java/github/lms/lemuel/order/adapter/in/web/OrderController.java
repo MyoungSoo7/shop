@@ -83,7 +83,13 @@ public class OrderController {
         List<CreateMultiItemOrderUseCase.Line> lines = request.lines().stream()
                 .map(l -> new CreateMultiItemOrderUseCase.Line(l.productId(), l.variantId(), l.quantity()))
                 .toList();
-        Order order = createMultiItemOrderUseCase.create(request.userId(), lines, request.couponCode(), idempotencyKey);
+        // 배송지는 이 경로에서 필수다. 요청 레코드에서 @NotNull 로 막지 않는 이유는 같은 레코드를
+        // /coupon-preview 가 쓰기 때문이다 — 할인액만 계산하는 조회에 배송지를 요구할 이유가 없다.
+        if (request.shippingAddress() == null) {
+            throw new IllegalArgumentException("배송지(shippingAddress)는 필수입니다");
+        }
+        Order order = createMultiItemOrderUseCase.create(request.userId(), lines, request.couponCode(),
+                request.shippingAddress().toSnapshot(), idempotencyKey);
         return ResponseEntity.status(HttpStatus.CREATED).body(MultiItemOrderResponse.from(order));
     }
 
@@ -110,12 +116,31 @@ public class OrderController {
     public record MultiItemOrderRequest(
             @jakarta.validation.constraints.NotNull Long userId,
             @jakarta.validation.constraints.NotEmpty List<LineRequest> lines,
-            String couponCode) {}
+            String couponCode,
+            @Valid ShippingAddressRequest shippingAddress) {}
 
     public record LineRequest(
             @jakarta.validation.constraints.NotNull Long productId,
             Long variantId,
             @jakarta.validation.constraints.Min(1) int quantity) {}
+
+    /**
+     * 주문 시점 배송지. 주문 생성(POST /orders/multi)에서는 필수이고, 같은 레코드를 쓰는
+     * 쿠폰 미리보기에서는 보내지 않는다.
+     */
+    public record ShippingAddressRequest(
+            @jakarta.validation.constraints.NotBlank String recipientName,
+            @jakarta.validation.constraints.NotBlank String phone,
+            @jakarta.validation.constraints.NotBlank String postalCode,
+            @jakarta.validation.constraints.NotBlank String address1,
+            String address2,
+            String deliveryMemo) {
+
+        github.lms.lemuel.order.domain.ShippingAddressSnapshot toSnapshot() {
+            return new github.lms.lemuel.order.domain.ShippingAddressSnapshot(
+                    recipientName, phone, postalCode, address1, address2, deliveryMemo);
+        }
+    }
 
     @Operation(summary = "주문 단건 조회", description = "주문 ID로 주문을 조회한다.")
     @ApiResponses({

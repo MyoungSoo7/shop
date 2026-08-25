@@ -53,6 +53,15 @@ export default function () {
     const payload = JSON.stringify({
         userId: userId,
         lines: pickRandomLines(),
+        // 배송지는 필수다 — 빠지면 서버가 400 으로 거절해서 부하 자체가 안 걸린다.
+        shippingAddress: {
+            recipientName: `부하테스트-${userId}`,
+            phone: '010-0000-0000',
+            postalCode: '06236',
+            address1: '서울시 강남구 테헤란로 1',
+            address2: `${userId}호`,
+            deliveryMemo: null,
+        },
     });
 
     const headers = { 'Content-Type': 'application/json' };

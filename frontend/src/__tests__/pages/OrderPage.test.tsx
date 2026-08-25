@@ -91,9 +91,37 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 
-const selectProduct = async () => {
+/**
+ * 배송지는 주문서에 굳는 값이라 서버가 필수로 요구한다(없으면 400). 화면도 다 채우기 전에는
+ * 주문 버튼을 잠근다.
+ */
+const fillAddress = async () => {
+  await userEvent.type(screen.getByLabelText('받는 분'), '홍길동');
+  await userEvent.type(screen.getByLabelText('연락처'), '010-1234-5678');
+  await userEvent.type(screen.getByLabelText('우편번호'), '06236');
+  await userEvent.type(screen.getByLabelText('주소'), '서울시 강남구 테헤란로 1');
+};
+
+/** fillAddress 가 채운 그대로. 선택 항목은 빈 문자열로 남는다. */
+const FILLED_ADDRESS = {
+  recipientName: '홍길동',
+  phone: '010-1234-5678',
+  postalCode: '06236',
+  address1: '서울시 강남구 테헤란로 1',
+  address2: '',
+  deliveryMemo: '',
+};
+
+/** 상품만 고른다 — 배송지는 비어 있어 주문 버튼이 잠긴 상태. */
+const selectProductOnly = async () => {
   render(<OrderPage />);
   await userEvent.click(await screen.findByText('티셔츠'));
+};
+
+/** 주문을 낼 수 있는 상태(상품 + 배송지)까지 만든다. */
+const selectProduct = async () => {
+  await selectProductOnly();
+  await fillAddress();
 };
 
 describe('OrderPage — 상품 목록', () => {
@@ -200,7 +228,7 @@ describe('OrderPage — 주문·결제 흐름', () => {
     expect(await screen.findByText('주문이 생성되었습니다')).toBeInTheDocument();
     // 금액은 보내지 않는다 — 라인만 보내고 서버가 확정한다.
     expect(mockedOrder.createMultiItemOrder).toHaveBeenCalledWith(
-      1, [{ productId: 1, quantity: 1 }], null, expect.any(String),
+      1, [{ productId: 1, quantity: 1 }], FILLED_ADDRESS, null, expect.any(String),
     );
 
     await userEvent.click(screen.getByRole('button', { name: '결제 진행하기' }));
@@ -283,7 +311,7 @@ describe('OrderPage — 주문·결제 흐름', () => {
 
     await waitFor(() =>
       expect(mockedOrder.createMultiItemOrder).toHaveBeenCalledWith(
-        1, [{ productId: 1, quantity: 1 }], 'WELCOME10', expect.any(String),
+        1, [{ productId: 1, quantity: 1 }], FILLED_ADDRESS, 'WELCOME10', expect.any(String),
       ),
     );
     // 서버가 같은 트랜잭션에서 기록한다. 여기서 또 부르면 쿠폰이 두 번 소진된다.
@@ -312,6 +340,23 @@ describe('OrderPage — 주문·결제 흐름', () => {
     expect(await screen.findByText('주문이 생성되었습니다')).toBeInTheDocument();
     expect(screen.getByText('₩21,000')).toBeInTheDocument();
     expect(screen.getByText('배송비 ₩3,000 포함')).toBeInTheDocument();
+  });
+});
+
+describe('OrderPage — 배송지', () => {
+  it('상품만 고르고 배송지가 비면 주문 버튼이 잠긴다', async () => {
+    await selectProductOnly();
+
+    expect(screen.getByRole('button', { name: '배송지를 입력해주세요' })).toBeDisabled();
+    expect(mockedOrder.createMultiItemOrder).not.toHaveBeenCalled();
+  });
+
+  it('배송지를 채우면 주문 버튼이 열린다', async () => {
+    await selectProductOnly();
+
+    await fillAddress();
+
+    expect(screen.getByRole('button', { name: '주문하기' })).toBeEnabled();
   });
 });
 

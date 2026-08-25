@@ -12,6 +12,16 @@ vi.mock('@/api/axios', () => ({
 
 const order = { id: 100, userId: 7, status: 'CREATED', totalAmount: 30000 };
 
+/** 결제 화면이 채워 보내는 배송지. 서버가 없으면 400 이라 모든 다건 주문 호출에 붙는다. */
+const address = {
+  recipientName: '홍길동',
+  phone: '010-1234-5678',
+  postalCode: '06236',
+  address1: '서울시 강남구 테헤란로 1',
+  address2: '3층',
+  deliveryMemo: '부재시 경비실',
+};
+
 describe('orderApi', () => {
   beforeEach(() => vi.resetAllMocks());
 
@@ -28,11 +38,16 @@ describe('orderApi', () => {
     vi.mocked(api.post).mockResolvedValueOnce({ data: { ...order, amount: 27000 } });
 
     const result = await orderApi.createMultiItemOrder(
-      7, [{ productId: 1, quantity: 3 }], 'WELCOME10', 'key-1');
+      7, [{ productId: 1, quantity: 3 }], address, 'WELCOME10', 'key-1');
 
     expect(api.post).toHaveBeenCalledWith(
       '/orders/multi',
-      { userId: 7, lines: [{ productId: 1, quantity: 3 }], couponCode: 'WELCOME10' },
+      {
+        userId: 7,
+        lines: [{ productId: 1, quantity: 3 }],
+        couponCode: 'WELCOME10',
+        shippingAddress: address,
+      },
       { headers: { 'Idempotency-Key': 'key-1' } },
     );
     expect(result.amount).toBe(27000);
@@ -41,11 +56,16 @@ describe('orderApi', () => {
   it('쿠폰·멱등 키가 없으면 couponCode 는 null 이고 헤더는 붙지 않는다', async () => {
     vi.mocked(api.post).mockResolvedValueOnce({ data: order });
 
-    await orderApi.createMultiItemOrder(7, [{ productId: 1, quantity: 1 }]);
+    await orderApi.createMultiItemOrder(7, [{ productId: 1, quantity: 1 }], address);
 
     expect(api.post).toHaveBeenCalledWith(
       '/orders/multi',
-      { userId: 7, lines: [{ productId: 1, quantity: 1 }], couponCode: null },
+      {
+        userId: 7,
+        lines: [{ productId: 1, quantity: 1 }],
+        couponCode: null,
+        shippingAddress: address,
+      },
       undefined,
     );
   });

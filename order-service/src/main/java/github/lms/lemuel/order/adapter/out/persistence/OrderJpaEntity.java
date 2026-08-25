@@ -47,6 +47,28 @@ public class OrderJpaEntity {
     @Column(name = "stock_restored", nullable = false)
     private boolean stockRestored;
 
+    /*
+     * 주문 시점 배송지 스냅샷 — 전부 nullable 이다. 스냅샷 도입 이전 주문에는 값이 없고,
+     * 배송지 변경은 shipments 쪽에만 반영되므로 이 컬럼들은 주문 시점 값으로 고정된다.
+     */
+    @Column(name = "recipient_name", length = 100)
+    private String recipientName;
+
+    @Column(name = "recipient_phone", length = 30)
+    private String recipientPhone;
+
+    @Column(name = "postal_code", length = 10)
+    private String postalCode;
+
+    @Column(name = "address1", length = 200)
+    private String address1;
+
+    @Column(name = "address2", length = 200)
+    private String address2;
+
+    @Column(name = "delivery_memo", length = 500)
+    private String deliveryMemo;
+
     @Column(name = "created_at", nullable = false, updatable = false)
     private LocalDateTime createdAt;
 

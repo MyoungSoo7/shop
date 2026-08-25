@@ -6,6 +6,7 @@ import github.lms.lemuel.order.application.port.out.DistributedLockPort;
 import github.lms.lemuel.order.application.port.out.LoadOrderPort;
 import github.lms.lemuel.order.application.port.out.OrderIdempotencyPort;
 import github.lms.lemuel.order.domain.Order;
+import github.lms.lemuel.order.domain.ShippingAddressSnapshot;
 import github.lms.lemuel.order.domain.exception.OrderNotFoundException;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.dao.DataIntegrityViolationException;
@@ -59,9 +60,10 @@ public class IdempotentMultiItemOrderService implements IdempotentMultiItemOrder
 
     @Override
     public Order create(Long userId, List<CreateMultiItemOrderUseCase.Line> lines,
-                        String couponCode, String idempotencyKey) {
+                        String couponCode, ShippingAddressSnapshot shippingAddress,
+                        String idempotencyKey) {
         if (idempotencyKey == null || idempotencyKey.isBlank()) {
-            return delegate.create(userId, lines, couponCode); // 키 없으면 기존 동작(하위 호환)
+            return delegate.create(userId, lines, couponCode, shippingAddress); // 키 없으면 기존 동작(하위 호환)
         }
 
         return lockPort.executeWithLock(LOCK_NAMESPACE + idempotencyKey, LOCK_WAIT, LOCK_LEASE, () -> {
@@ -73,7 +75,7 @@ public class IdempotentMultiItemOrderService implements IdempotentMultiItemOrder
                         return loadOrderPort.findById(existing.get())
                                 .orElseThrow(() -> new OrderNotFoundException(existing.get()));
                     }
-                    Order created = delegate.create(userId, lines, couponCode);
+                    Order created = delegate.create(userId, lines, couponCode, shippingAddress);
                     idempotencyPort.save(idempotencyKey, created.getId()); // dup 키면 제약 위반 → 트랜잭션 롤백
                     return created;
                 });

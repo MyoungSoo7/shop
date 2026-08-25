@@ -111,8 +111,13 @@ class CreateMultiItemOrderIT {
 
     private CreateMultiItemOrderService orderService;
 
+    /** 배송 생성 포트가 실제로 불렸는지 기록 — "주문만 남고 배송이 없는" 상태를 잡는 관찰점. */
+    private final java.util.List<String> createdShipments =
+            java.util.Collections.synchronizedList(new java.util.ArrayList<>());
+
     @BeforeEach
     void setup() {
+        createdShipments.clear();
         var decVariant = new DecreaseVariantStockService(variantAdapter, variantAdapter,
                 new TransactionTemplate(txManager), new SimpleMeterRegistry());
         var decProduct = new DecreaseProductStockService(productAdapter, productAdapter,
@@ -135,7 +140,9 @@ class CreateMultiItemOrderIT {
         orderService = new CreateMultiItemOrderService(loadUser, productAdapter, variantAdapter,
                 decVariant, decProduct, orderAdapter, notify, publish, couponService, describeOptions,
                 // 배송비는 이 IT 의 검증 범위 밖 — 부과 없음으로 고정
-                lines -> github.lms.lemuel.shipping.domain.ShippingFeeAssessment.none());
+                lines -> github.lms.lemuel.shipping.domain.ShippingFeeAssessment.none(),
+                // 배송 생성 기록용 스텁 — 배송지를 넘긴 케이스에서 호출 여부를 본다
+                (orderId, address) -> createdShipments.add(orderId + ":" + address.recipientName()));
     }
 
     @Test
@@ -176,6 +183,27 @@ class CreateMultiItemOrderIT {
         assertThat(couponAdapter.hasUserUsedCoupon(couponId, userId))
                 .as("쿠폰 사용 기록 생성").isTrue();
         assertThat(orderAdapter.findById(saved.getId())).as("주문 영속").isPresent();
+    }
+
+    @Test
+    @DisplayName("배송지 스냅샷: 주문 행에 굳어 저장되고 다시 읽어도 그대로, 같은 트랜잭션에서 배송 생성이 호출된다")
+    void shippingAddressSnapshot_persistsAndTriggersShipment() {
+        long n = System.nanoTime();
+        Long userId = seedUser("buyer3-" + n + "@test.com");
+        Long productId = commit(() -> productAdapter.save(
+                Product.create("상품3-" + n, "설명", new BigDecimal("10000"), 100)).getId());
+
+        var address = new github.lms.lemuel.order.domain.ShippingAddressSnapshot(
+                "홍길동", "010-1234-5678", "06236", "서울시 강남구 테헤란로 1", "3층", "부재시 경비실");
+        var lines = List.of(new CreateMultiItemOrderUseCase.Line(productId, null, 1));
+
+        Order saved = inNewTx(() -> orderService.create(userId, lines, null, address));
+
+        // 주문서에 굳는 값이라 회원 주소록이 바뀌어도 흔들리면 안 된다 → 주문 행에서 그대로 읽혀야 한다
+        Order reloaded = orderAdapter.findById(saved.getId()).orElseThrow();
+        assertThat(reloaded.getShippingAddress()).isEqualTo(address);
+
+        assertThat(createdShipments).containsExactly(saved.getId() + ":홍길동");
     }
 
     @Test

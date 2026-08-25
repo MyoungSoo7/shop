@@ -125,6 +125,19 @@ export interface MultiItemOrderLine {
   netAmount: number;
 }
 
+/**
+ * 주문서에 굳는 배송지. 회원 주소록이 나중에 바뀌어도 이 주문의 값은 흔들리지 않는다
+ * (그래서 배송 컨텍스트의 살아있는 주소와 별개로 주문 행에 복사해 둔다).
+ */
+export interface ShippingAddressRequest {
+  recipientName: string;
+  phone: string;
+  postalCode: string;
+  address1: string;
+  address2?: string | null;
+  deliveryMemo?: string | null;
+}
+
 /** POST /orders/multi 응답. amount = subtotal - discountAmount + shippingFee (서버가 확정). */
 export interface MultiItemOrderResponse {
   id: number;
@@ -135,6 +148,8 @@ export interface MultiItemOrderResponse {
   discountAmount: number;
   shippingFee: number;
   createdAt: string;
+  /** 레거시 주문(배송지 도입 전)에는 없다. */
+  shippingAddress?: ShippingAddressRequest | null;
   items: MultiItemOrderLine[];
 }
 

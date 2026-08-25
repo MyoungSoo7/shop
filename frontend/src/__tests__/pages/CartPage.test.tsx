@@ -64,6 +64,27 @@ const item = (over: Record<string, unknown> = {}, quantity = 1): CartItem =>
 const renderPage = () => render(<MemoryRouter><CartPage /></MemoryRouter>);
 
 /**
+ * 배송지는 주문서에 굳는 값이라 서버가 필수로 요구한다(없으면 400). 화면도 다 채우기 전에는
+ * 주문 버튼을 잠그므로, 결제 흐름 테스트는 먼저 이걸 채워야 한다.
+ */
+const fillAddress = async () => {
+  await userEvent.type(screen.getByLabelText('받는 분'), '홍길동');
+  await userEvent.type(screen.getByLabelText('연락처'), '010-1234-5678');
+  await userEvent.type(screen.getByLabelText('우편번호'), '06236');
+  await userEvent.type(screen.getByLabelText('주소'), '서울시 강남구 테헤란로 1');
+};
+
+/** fillAddress 가 채운 그대로. 선택 항목은 빈 문자열로 남는다. */
+const FILLED_ADDRESS = {
+  recipientName: '홍길동',
+  phone: '010-1234-5678',
+  postalCode: '06236',
+  address1: '서울시 강남구 테헤란로 1',
+  address2: '',
+  deliveryMemo: '',
+};
+
+/**
  * 서버가 돌려주는 다건 주문. 금액을 서버가 확정한다는 게 이 경로의 요점이라, 테스트에서도
  * 화면이 보낸 값이 아니라 <b>여기 적힌 값</b>이 화면에 그대로 나와야 한다.
  */
@@ -158,6 +179,7 @@ describe('CartPage — 일반 결제', () => {
       ],
     }) as never);
     renderPage();
+    await fillAddress();
 
     await userEvent.click(screen.getByRole('button', { name: '2개 상품 전체 주문하기' }));
 
@@ -171,12 +193,13 @@ describe('CartPage — 일반 결제', () => {
   it('금액이 아니라 라인(무엇을 몇 개)만 보낸다', async () => {
     cartItems = [item({ id: 1 }, 3)];
     renderPage();
+    await fillAddress();
 
     await userEvent.click(screen.getByRole('button', { name: '1개 상품 전체 주문하기' }));
 
     await waitFor(() =>
       expect(mockedOrder.createMultiItemOrder).toHaveBeenCalledWith(
-        1, [{ productId: 1, quantity: 3 }], null, expect.any(String),
+        1, [{ productId: 1, quantity: 3 }], FILLED_ADDRESS, null, expect.any(String),
       ),
     );
   });
@@ -184,6 +207,7 @@ describe('CartPage — 일반 결제', () => {
   it('주문이 실패하면 사유를 남기고 카트를 비우지 않는다', async () => {
     mockedOrder.createMultiItemOrder.mockRejectedValue({ response: { data: { message: '재고 부족' } } });
     renderPage();
+    await fillAddress();
 
     await userEvent.click(screen.getByRole('button', { name: '1개 상품 전체 주문하기' }));
 
@@ -205,6 +229,7 @@ describe('CartPage — 일반 결제', () => {
       amount: 18000, discountAmount: 2000,
     }) as never);
     renderPage();
+    await fillAddress();
     await userEvent.type(screen.getByPlaceholderText(/쿠폰 코드 입력/), 'welcome10');
     await userEvent.click(screen.getByRole('button', { name: '적용' }));
     await screen.findByText('쿠폰 적용됨:');
@@ -213,7 +238,7 @@ describe('CartPage — 일반 결제', () => {
 
     await waitFor(() =>
       expect(mockedOrder.createMultiItemOrder).toHaveBeenCalledWith(
-        1, [{ productId: 1, quantity: 1 }], 'WELCOME10', expect.any(String),
+        1, [{ productId: 1, quantity: 1 }], FILLED_ADDRESS, 'WELCOME10', expect.any(String),
       ),
     );
     // 서버가 같은 트랜잭션에서 기록한다. 여기서 또 부르면 쿠폰이 두 번 소진된다.
@@ -225,6 +250,7 @@ describe('CartPage — 일반 결제', () => {
       amount: 21000, subtotal: 20000, discountAmount: 2000, shippingFee: 3000,
     }) as never);
     renderPage();
+    await fillAddress();
 
     await userEvent.click(screen.getByRole('button', { name: '1개 상품 전체 주문하기' }));
 
@@ -238,6 +264,7 @@ describe('CartPage — 일반 결제', () => {
 describe('CartPage — 토스페이먼츠', () => {
   const chooseToss = async () => {
     renderPage();
+    await fillAddress();
     await userEvent.selectOptions(screen.getByRole('combobox'), 'TOSS_PAYMENTS');
   };
 
@@ -299,5 +326,35 @@ describe('CartPage — 토스페이먼츠', () => {
 
     expect(await screen.findByText('사용자가 취소했습니다')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /토스페이먼츠로/ })).toBeInTheDocument();
+  });
+});
+
+describe('CartPage — 배송지', () => {
+  it('배송지가 비면 주문 버튼이 잠기고 안내가 뜬다 (도입 전엔 낼 자리조차 없었다)', () => {
+    renderPage();
+
+    expect(screen.getByRole('button', { name: '1개 상품 전체 주문하기' })).toBeDisabled();
+    expect(
+      screen.getByText('받는 분·연락처·우편번호·주소를 입력해야 주문할 수 있습니다.'),
+    ).toBeInTheDocument();
+  });
+
+  it('필수 4항목을 채우면 주문 버튼이 열린다', async () => {
+    renderPage();
+
+    await fillAddress();
+
+    expect(screen.getByRole('button', { name: '1개 상품 전체 주문하기' })).toBeEnabled();
+  });
+
+  it('필수 항목이 하나라도 비면 여전히 잠긴다 (우편번호 누락)', async () => {
+    renderPage();
+
+    await userEvent.type(screen.getByLabelText('받는 분'), '홍길동');
+    await userEvent.type(screen.getByLabelText('연락처'), '010-1234-5678');
+    await userEvent.type(screen.getByLabelText('주소'), '서울시 강남구 테헤란로 1');
+
+    expect(screen.getByRole('button', { name: '1개 상품 전체 주문하기' })).toBeDisabled();
+    expect(mockedOrder.createMultiItemOrder).not.toHaveBeenCalled();
   });
 });

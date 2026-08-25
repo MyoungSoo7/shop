@@ -2,6 +2,7 @@ package github.lms.lemuel.order.adapter.in.web.response;
 
 import github.lms.lemuel.order.domain.Order;
 import github.lms.lemuel.order.domain.OrderItem;
+import github.lms.lemuel.order.domain.ShippingAddressSnapshot;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
@@ -27,7 +28,30 @@ public record MultiItemOrderResponse(
         BigDecimal discountAmount,
         BigDecimal shippingFee,
         LocalDateTime createdAt,
+        ShippingAddress shippingAddress,
         List<Line> items) {
+
+    /**
+     * 주문 시점에 굳은 배송지. 배송지 없이 만들어진 <b>과거 주문은 null</b> 이다 —
+     * 이 필드가 생기기 전 주문은 주소를 아예 갖고 있지 않다.
+     */
+    public record ShippingAddress(
+            String recipientName,
+            String phone,
+            String postalCode,
+            String address1,
+            String address2,
+            String deliveryMemo) {
+
+        static ShippingAddress from(ShippingAddressSnapshot snapshot) {
+            if (snapshot == null) {
+                return null;
+            }
+            return new ShippingAddress(snapshot.recipientName(), snapshot.phone(),
+                    snapshot.postalCode(), snapshot.address1(), snapshot.address2(),
+                    snapshot.deliveryMemo());
+        }
+    }
 
     /**
      * 주문 라인 한 줄. {@code allocatedDiscount} 는 이 라인이 짊어진 할인 몫으로, 부분 취소가
@@ -68,6 +92,7 @@ public record MultiItemOrderResponse(
                 discount,
                 order.getShippingFee(),
                 order.getCreatedAt(),
+                ShippingAddress.from(order.getShippingAddress()),
                 order.getItems().stream().map(Line::from).toList());
     }
 }

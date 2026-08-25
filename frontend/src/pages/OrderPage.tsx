@@ -8,13 +8,15 @@ import { orderApi } from '@/api/order';
 import { paymentApi } from '@/api/payment';
 import { productApi } from '@/api/product';
 import { reviewApi } from '@/api/review';
-import { MultiItemOrderResponse, PaymentResponse, ProductResponse, ReviewResponse, CouponPreviewResponse } from '@/types';
+import { MultiItemOrderResponse, PaymentResponse, ProductResponse, ReviewResponse, CouponPreviewResponse, ShippingAddressRequest } from '@/types';
 import { useCart } from '@/contexts/useCart';
 import Card from '@/components/Card';
 import Spinner from '@/components/Spinner';
 import StarRating from '@/components/review/StarRating';
 import ReviewList from '@/components/review/ReviewList';
 import CouponInput from '@/components/coupon/CouponInput';
+import ShippingAddressForm from '@/components/shipping/ShippingAddressForm';
+import { emptyShippingAddress, isShippingAddressComplete } from '@/lib/shippingAddress';
 import { apiErrorMessage, errorDetail } from '@/lib/apiError';
 
 const PRODUCTS_PER_PAGE = 5;
@@ -61,6 +63,10 @@ const OrderFormTab: React.FC = () => {
   // 쿠폰
   const [couponResult, setCouponResult] = useState<CouponPreviewResponse | null>(null);
   const [appliedCouponCode, setAppliedCouponCode] = useState<string | undefined>(undefined);
+
+  // 배송지 — 주문서에 굳는 값이라 주문 생성 요청에 함께 실어 보낸다(서버가 없으면 400).
+  const [shippingAddress, setShippingAddress] = useState<ShippingAddressRequest>(emptyShippingAddress);
+  const addressReady = isShippingAddressComplete(shippingAddress);
 
   // 옵션 파셋 필터
   const [facets, setFacets] = useState<Facet[]>([]);
@@ -124,6 +130,7 @@ const OrderFormTab: React.FC = () => {
 
   const handleCreateOrder = async () => {
     if (!selectedProduct) { setError('상품을 선택해주세요.'); return; }
+    if (!addressReady) { setError('배송지를 입력해주세요.'); return; }
     setLoading(true);
     setError(null);
     try {
@@ -133,6 +140,7 @@ const OrderFormTab: React.FC = () => {
       const orderRes = await orderApi.createMultiItemOrder(
         userId,
         [{ productId: selectedProduct.id, quantity: 1 }],
+        shippingAddress,
         appliedCouponCode ?? null,
         newIdempotencyKey(),
       );
@@ -432,6 +440,9 @@ const OrderFormTab: React.FC = () => {
               </div>
             )}
 
+            {/* 배송지 */}
+            <ShippingAddressForm value={shippingAddress} onChange={setShippingAddress} />
+
             {/* 결제 수단 */}
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1.5">결제 수단</label>
@@ -462,10 +473,14 @@ const OrderFormTab: React.FC = () => {
             ) : (
               <button
                 onClick={handleCreateOrder}
-                disabled={!selectedProduct}
+                disabled={!selectedProduct || !addressReady}
                 className="w-full bg-blue-600 text-white py-3 rounded-lg font-semibold hover:bg-blue-700 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
               >
-                {selectedProduct ? '주문하기' : '상품을 먼저 선택해주세요'}
+                {!selectedProduct
+                  ? '상품을 먼저 선택해주세요'
+                  : !addressReady
+                    ? '배송지를 입력해주세요'
+                    : '주문하기'}
               </button>
             )}
           </div>

@@ -147,12 +147,35 @@ public class SecurityConfig {
                         .requestMatchers("/orders/admin/all").hasAnyRole("ADMIN", "MANAGER")
                         .requestMatchers("/orders/admin/**").hasAnyRole("ADMIN", "MANAGER")
                         .requestMatchers("/users/admin/all").hasRole("ADMIN")
+                        // 배송 상태 전이 — 출고/집화/배송완료/반품은 운영자 조작이다. 특히 반품은
+                        // 재고를 되돌리므로 고객이 부를 수 있으면 재고 수량이 조작된다.
+                        // (POST /orders/{id}/shipment 는 배송 생성, 그 하위는 상태 전이.)
+                        .requestMatchers(HttpMethod.POST, "/orders/*/shipment").hasAnyRole("ADMIN", "MANAGER")
+                        .requestMatchers(HttpMethod.POST, "/orders/*/shipment/**").hasAnyRole("ADMIN", "MANAGER")
+                        // 배송 조회·배송지 변경은 주문한 본인의 일이라 로그인만 요구하고, "누구의 주문인가"는
+                        // 컨트롤러가 주문 소유자와 대조한다(경로 변수 orderId 로는 역할만으론 못 가른다).
+                        // 매처가 없던 시절엔 anyRequest().authenticated() 로 떨어져 아무 로그인 사용자나
+                        // 남의 수취인 이름·연락처·주소를 읽고 배송지를 바꿀 수 있었다.
+                        .requestMatchers(HttpMethod.GET, "/orders/*/shipment").authenticated()
+                        .requestMatchers(HttpMethod.PATCH, "/orders/*/shipment/address").authenticated()
                         // 관리자 전용 카테고리 API
                         .requestMatchers("/admin/categories/**").hasRole("ADMIN")
                         // 옵션 축/값 카탈로그 — 백필이 상품 옵션 구조를 대량 생성하므로 ADMIN 만.
                         .requestMatchers("/admin/option-catalog/**").hasRole("ADMIN")
                         // 진열 편성 — 무엇이 화면 앞에 오는지를 정하는 콘솔이라 ADMIN 만.
                         .requestMatchers("/admin/display-sections/**").hasRole("ADMIN")
+                        /*
+                         * 아래 4개는 컨트롤러에 @PreAuthorize("hasRole('ADMIN')") 가 붙어 있어 막혀
+                         * 보이지만, 이 애플리케이션에는 @EnableMethodSecurity 가 없다. 메서드 보안이
+                         * 켜져 있지 않으면 @PreAuthorize 는 아무 판정도 하지 않는 주석과 같다 —
+                         * 실제 인가는 오직 이 매처 목록이 한다. 매처가 없으면 anyRequest().authenticated()
+                         * 로 떨어져 로그인만 한 사용자가 권한 부여(rbac)·메뉴 편성·상품 이미지·공통코드를
+                         * 조작할 수 있었다. (권한 부여 콘솔은 그 자체가 권한 상승 경로다.)
+                         */
+                        .requestMatchers("/admin/rbac/**").hasRole("ADMIN")
+                        .requestMatchers("/admin/menus/**").hasRole("ADMIN")
+                        .requestMatchers("/admin/products/**").hasRole("ADMIN")
+                        .requestMatchers("/admin/common-codes/**").hasRole("ADMIN")
                         // 송장 일괄 업로드 - 다건 출고를 한 번에 반영. dryRun 기본값이라 파라미터 누락 호출은 미리보기로 떨어진다.
                         .requestMatchers("/admin/shipments/**").hasAnyRole("ADMIN", "MANAGER")
                         // 셀러 배송비 정책 — 고객에게 청구되는 금액을 직접 바꾸므로 운송장 콘솔과 달리 ADMIN 만.

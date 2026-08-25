@@ -6,6 +6,7 @@ import github.lms.lemuel.order.application.port.in.CreateOrderUseCase;
 import github.lms.lemuel.order.application.port.in.GetOrderUseCase;
 import github.lms.lemuel.order.application.port.in.IdempotentMultiItemOrderUseCase;
 import github.lms.lemuel.order.domain.Order;
+import github.lms.lemuel.order.domain.ShippingAddressSnapshot;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -81,14 +82,23 @@ class OrderControllerMoreTest {
                                 2L, null, "SKU-2", "바지", new BigDecimal("30000"), 1)),
                 new BigDecimal("5000"), new BigDecimal("3000"));
         o.assignId(7L);
+        o.attachShippingAddress(new ShippingAddressSnapshot("홍길동", "010-1234-5678", "06236",
+                "서울시 강남구 테헤란로 1", "3층", "부재시 경비실"));
         return o;
     }
+
+    /** 배송지 JSON 조각 — /orders/multi 는 배송지 없이는 주문을 받지 않는다. */
+    private static final String ADDRESS_JSON = """
+            "shippingAddress":{"recipientName":"홍길동","phone":"010-1234-5678",
+                               "postalCode":"06236","address1":"서울시 강남구 테헤란로 1",
+                               "address2":"3층","deliveryMemo":"부재시 경비실"}
+            """;
 
     @Test
     @DisplayName("POST /orders/multi: Idempotency-Key 와 함께 다건 주문 생성")
     void createMultiItemOrder() throws Exception {
         login(1L, "USER");
-        when(createMultiItemOrderUseCase.create(eq(1L), any(), eq("SAVE10"), eq("idem-1")))
+        when(createMultiItemOrderUseCase.create(eq(1L), any(), eq("SAVE10"), any(), eq("idem-1")))
                 .thenReturn(order());
 
         mockMvc.perform(post("/orders/multi")
@@ -96,26 +106,43 @@ class OrderControllerMoreTest {
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
                                 {"userId":1,"lines":[{"productId":1,"variantId":null,"quantity":2}],
-                                 "couponCode":"SAVE10"}
-                                """))
+                                 "couponCode":"SAVE10",""" + ADDRESS_JSON + "}"))
                 .andExpect(status().isCreated())
                 .andExpect(jsonPath("$.id").value(7));
-        verify(createMultiItemOrderUseCase).create(eq(1L), any(), eq("SAVE10"), eq("idem-1"));
+        // 배송지가 요청 그대로 유스케이스에 전달되는지 — 여기서 끊기면 주문서에 주소가 안 남는다.
+        verify(createMultiItemOrderUseCase).create(eq(1L), any(), eq("SAVE10"),
+                eq(new ShippingAddressSnapshot("홍길동", "010-1234-5678", "06236",
+                        "서울시 강남구 테헤란로 1", "3층", "부재시 경비실")),
+                eq("idem-1"));
+    }
+
+    @Test
+    @DisplayName("POST /orders/multi: 배송지가 없으면 주문을 만들지 않는다 (어디로 보낼지 모르는 주문 방지)")
+    void createMultiItemOrder_rejectsMissingAddress() throws Exception {
+        login(1L, "USER");
+
+        mockMvc.perform(post("/orders/multi")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"userId":1,"lines":[{"productId":1,"variantId":null,"quantity":2}]}
+                                """))
+                .andExpect(status().isBadRequest());
+        verify(createMultiItemOrderUseCase, org.mockito.Mockito.never())
+                .create(anyLong(), any(), any(), any(), any());
     }
 
     @Test
     @DisplayName("POST /orders/multi: 라인과 금액 구성(소계·할인·배송비)을 함께 돌려준다")
     void createMultiItemOrder_returnsBreakdown() throws Exception {
         login(1L, "USER");
-        when(createMultiItemOrderUseCase.create(eq(1L), any(), any(), any()))
+        when(createMultiItemOrderUseCase.create(eq(1L), any(), any(), any(), any()))
                 .thenReturn(multiItemOrder());
 
         mockMvc.perform(post("/orders/multi")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
                                 {"userId":1,"lines":[{"productId":1,"variantId":null,"quantity":2},
-                                                     {"productId":2,"variantId":null,"quantity":1}]}
-                                """))
+                                                     {"productId":2,"variantId":null,"quantity":1}],""" + ADDRESS_JSON + "}"))
                 .andExpect(status().isCreated())
                 // 20000 + 30000 - 5000 + 3000
                 .andExpect(jsonPath("$.subtotal").value(50000))
@@ -125,7 +152,10 @@ class OrderControllerMoreTest {
                 .andExpect(jsonPath("$.items.length()").value(2))
                 .andExpect(jsonPath("$.items[0].productName").value("티셔츠"))
                 .andExpect(jsonPath("$.items[0].quantity").value(2))
-                .andExpect(jsonPath("$.items[0].lineAmount").value(20000));
+                .andExpect(jsonPath("$.items[0].lineAmount").value(20000))
+                // 확정된 주문서를 그대로 화면에 보여줄 수 있어야 한다 — 주소를 다시 조회하지 않도록.
+                .andExpect(jsonPath("$.shippingAddress.recipientName").value("홍길동"))
+                .andExpect(jsonPath("$.shippingAddress.postalCode").value("06236"));
     }
 
     @Test
@@ -137,11 +167,10 @@ class OrderControllerMoreTest {
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
                                 {"userId":1,"lines":[{"productId":1,"variantId":null,"quantity":1}],
-                                 "couponCode":"SAVE10"}
-                                """))
+                                 "couponCode":"SAVE10",""" + ADDRESS_JSON + "}"))
                 .andExpect(status().isForbidden());
         verify(createMultiItemOrderUseCase, org.mockito.Mockito.never())
-                .create(anyLong(), any(), any(), any());
+                .create(anyLong(), any(), any(), any(), any());
     }
 
     @Test

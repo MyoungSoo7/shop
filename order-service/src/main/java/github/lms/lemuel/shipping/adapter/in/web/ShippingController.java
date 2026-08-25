@@ -1,18 +1,33 @@
 package github.lms.lemuel.shipping.adapter.in.web;
 
 import github.lms.lemuel.shipping.application.port.in.ShippingUseCase;
+import github.lms.lemuel.shipping.application.port.out.LoadOrderOwnerPort;
 import github.lms.lemuel.shipping.application.port.out.LoadShipmentPort;
 import github.lms.lemuel.shipping.domain.Shipment;
 import github.lms.lemuel.shipping.domain.ShippingAddress;
+import github.lms.lemuel.web.security.ResourceOwnership;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.constraints.NotBlank;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.access.AccessDeniedException;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.LinkedHashMap;
 import java.util.Map;
 
+/**
+ * 배송 조회·변경 웹 어댑터.
+ *
+ * <p><b>권한이 두 갈래로 갈린다.</b> 조회({@code GET})와 배송지 변경({@code PATCH /address})은
+ * 주문한 본인이 하는 일이라 <i>소유권 대조</i>로 열고, 출고·상태 전이({@code /ship}·{@code /in-transit}
+ * ·{@code /delivered}·{@code /returned})와 배송 생성은 운영자만 한다. 특히 {@code /returned} 는
+ * 재고를 되돌리므로 고객이 부를 수 있으면 재고가 조작된다.
+ *
+ * <p>예전엔 이 컨트롤러에 권한 선언이 하나도 없었다. {@code SecurityConfig} 는 경로를 하나씩
+ * 열거하는 방식이라 여기에 매처가 없으면 {@code anyRequest().authenticated()} 로 떨어지는데,
+ * 그건 <b>아무 로그인 사용자나</b> 남의 주문 수취인 이름·연락처·주소를 읽고 배송지를 바꿀 수 있다는 뜻이었다.
+ */
 @Tag(name = "Shipping", description = "배송 생성 / 출고 / 추적 / 반품")
 @RestController
 @RequestMapping("/orders/{orderId}/shipment")
@@ -20,16 +35,19 @@ public class ShippingController {
 
     private final ShippingUseCase useCase;
     private final LoadShipmentPort loadPort;
+    private final LoadOrderOwnerPort loadOrderOwnerPort;
     private final github.lms.lemuel.shipping.application.port.in.SafetyNumberUseCase safetyNumberUseCase;
 
     public ShippingController(ShippingUseCase useCase, LoadShipmentPort loadPort,
+                              LoadOrderOwnerPort loadOrderOwnerPort,
                               github.lms.lemuel.shipping.application.port.in.SafetyNumberUseCase safetyNumberUseCase) {
         this.useCase = useCase;
         this.loadPort = loadPort;
+        this.loadOrderOwnerPort = loadOrderOwnerPort;
         this.safetyNumberUseCase = safetyNumberUseCase;
     }
 
-    @Operation(summary = "주문에 대한 배송 생성 (PENDING)")
+    @Operation(summary = "주문에 대한 배송 생성 (PENDING) — 운영자 전용")
     @PostMapping
     public ResponseEntity<ShipmentResponse> create(@PathVariable Long orderId,
                                                     @RequestBody AddressRequest req) {
@@ -41,6 +59,7 @@ public class ShippingController {
             description = "안심번호가 배정된 주문은 수취인 연락처가 가상번호로 대체돼 나간다(phoneMasked=true).")
     @GetMapping
     public ResponseEntity<ShipmentResponse> get(@PathVariable Long orderId) {
+        requireOrderOwnerOrAdmin(orderId);
         String safetyNumber = safetyNumberUseCase.findForOrder(orderId)
                 .map(github.lms.lemuel.shipping.domain.SafetyNumber::getVirtualNumber)
                 .orElse(null);
@@ -54,7 +73,27 @@ public class ShippingController {
     @PatchMapping("/address")
     public ResponseEntity<ShipmentResponse> changeAddress(@PathVariable Long orderId,
                                                            @RequestBody AddressRequest req) {
+        requireOrderOwnerOrAdmin(orderId);
         return ResponseEntity.ok(ShipmentResponse.from(useCase.changeAddress(orderId, req.toAddress())));
+    }
+
+    /**
+     * 이 배송이 걸린 주문의 소유자인지 대조한다. ADMIN·MANAGER 는 운영 지원을 위해 우회한다
+     * ({@link ResourceOwnership} 의 저장소 공통 정책).
+     *
+     * <p>소유자를 알 수 없으면 <b>거부</b>한다 — 없는 주문과 남의 주문을 같은 403 으로 돌려주는 편이
+     * 낫다. 404 와 403 을 나눠 주면 번호를 훑어 실재하는 주문을 찾아낼 수 있기 때문이다.
+     */
+    private void requireOrderOwnerOrAdmin(Long orderId) {
+        if (ResourceOwnership.isAdminOrManager(
+                org.springframework.security.core.context.SecurityContextHolder.getContext().getAuthentication())) {
+            return;
+        }
+        Long ownerUserId = loadOrderOwnerPort.findOwnerUserId(orderId);
+        if (ownerUserId == null) {
+            throw new AccessDeniedException("배송 소유자를 확인할 수 없습니다. orderId=" + orderId);
+        }
+        ResourceOwnership.requireSelfOrAdmin(ownerUserId);
     }
 
     @Operation(summary = "출고 처리 — 운송장 번호 발급",

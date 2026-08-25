@@ -4,6 +4,7 @@ import {
   OrderCreateRequest,
   OrderLineRequest,
   OrderResponse,
+  ShippingAddressRequest,
 } from '@/types';
 
 export const orderApi = {
@@ -27,17 +28,21 @@ export const orderApi = {
    * 배송비를 확정하고, 재고 차감과 쿠폰 사용 기록까지 같은 트랜잭션에서 처리한다. 따라서 호출한
    * 쪽은 쿠폰 사용을 따로 기록하면 안 된다 — 두 번 소진된다.
    *
+   * 배송지는 선택이 아니다 — 서버가 없는 요청을 400 으로 거절한다. 타입에서도 필수로 두어
+   * 배송지 없는 결제 화면이 다시 생기지 않게 한다(도입 전에는 운영자가 손으로 채워 넣었다).
+   *
    * @param idempotencyKey 같은 키의 재요청은 새 주문을 만들지 않고 기존 주문을 돌려준다.
    */
   createMultiItemOrder: async (
     userId: number,
     lines: OrderLineRequest[],
+    shippingAddress: ShippingAddressRequest,
     couponCode?: string | null,
     idempotencyKey?: string,
   ): Promise<MultiItemOrderResponse> => {
     const response = await api.post<MultiItemOrderResponse>(
       '/orders/multi',
-      { userId, lines, couponCode: couponCode ?? null },
+      { userId, lines, couponCode: couponCode ?? null, shippingAddress },
       idempotencyKey ? { headers: { 'Idempotency-Key': idempotencyKey } } : undefined,
     );
     return response.data;

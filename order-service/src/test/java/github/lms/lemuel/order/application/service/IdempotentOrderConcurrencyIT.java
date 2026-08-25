@@ -142,7 +142,9 @@ class IdempotentOrderConcurrencyIT {
                 decVariant, decProduct, orderAdapter, notify, publish, coupon,
                 // 옵션 스냅샷·배송비는 이 IT 의 검증 범위 밖 — 무해한 스텁
                 variantId -> java.util.List.of(),
-                lines -> github.lms.lemuel.shipping.domain.ShippingFeeAssessment.none());
+                lines -> github.lms.lemuel.shipping.domain.ShippingFeeAssessment.none(),
+                // 배송 생성도 범위 밖 — 이 IT 는 배송지 없이 주문하므로 호출되지 않는다
+                (orderId, address) -> { });
         return new IdempotentMultiItemOrderService(delegate, lock, idempotencyAdapter, orderAdapter,
                 new TransactionTemplate(txManager));
     }

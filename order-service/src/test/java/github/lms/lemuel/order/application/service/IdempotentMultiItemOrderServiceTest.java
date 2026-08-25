@@ -63,12 +63,12 @@ class IdempotentMultiItemOrderServiceTest {
     @DisplayName("Idempotency-Key 없으면 기존 생성 흐름으로 위임(락·멱등 미사용)")
     void blankKey_delegatesDirectly() {
         Order created = orderWithId(100L);
-        when(delegate.create(1L, lines, null)).thenReturn(created);
+        when(delegate.create(1L, lines, null, null)).thenReturn(created);
 
         Order result = service.create(1L, lines, null, "  ");
 
         assertThat(result).isSameAs(created);
-        verify(delegate).create(1L, lines, null);
+        verify(delegate).create(1L, lines, null, null);
         verify(idempotencyPort, never()).save(any(), any());
     }
 
@@ -77,7 +77,7 @@ class IdempotentMultiItemOrderServiceTest {
     void newKey_createsAndRecords() {
         Order created = orderWithId(100L);
         when(idempotencyPort.findOrderId("K")).thenReturn(Optional.empty());
-        when(delegate.create(1L, lines, null)).thenReturn(created);
+        when(delegate.create(1L, lines, null, null)).thenReturn(created);
 
         Order result = service.create(1L, lines, null, "K");
 
@@ -95,7 +95,7 @@ class IdempotentMultiItemOrderServiceTest {
         Order result = service.create(1L, lines, null, "K");
 
         assertThat(result).isSameAs(existing);
-        verify(delegate, never()).create(any(), any(), any());
+        verify(delegate, never()).create(any(), any(), any(), any());
         verify(idempotencyPort, never()).save(any(), any());
     }
 
@@ -106,7 +106,7 @@ class IdempotentMultiItemOrderServiceTest {
         Order winner = mock(Order.class);
         // 트랜잭션 안: 처음엔 미존재 → 생성 → save 가 제약 위반. 복원 읽기에서는 승자가 보임.
         when(idempotencyPort.findOrderId("K")).thenReturn(Optional.empty(), Optional.of(100L));
-        when(delegate.create(1L, lines, null)).thenReturn(created);
+        when(delegate.create(1L, lines, null, null)).thenReturn(created);
         doThrow(new DataIntegrityViolationException("dup")).when(idempotencyPort).save("K", 100L);
         when(loadOrderPort.findById(100L)).thenReturn(Optional.of(winner));
 
@@ -114,5 +114,20 @@ class IdempotentMultiItemOrderServiceTest {
 
         assertThat(result).isSameAs(winner);
         verify(loadOrderPort).findById(eq(100L));
+    }
+
+    @Test
+    @DisplayName("배송지는 멱등 래퍼를 그대로 통과해 위임 대상에 전달된다")
+    void address_passesThroughToDelegate() {
+        var address = new github.lms.lemuel.order.domain.ShippingAddressSnapshot(
+                "홍길동", "010-1234-5678", "06236", "서울시 강남구 테헤란로 1", "3층", null);
+        Order created = orderWithId(100L);
+        when(idempotencyPort.findOrderId("K")).thenReturn(Optional.empty());
+        when(delegate.create(1L, lines, null, address)).thenReturn(created);
+
+        Order result = service.create(1L, lines, null, address, "K");
+
+        assertThat(result).isSameAs(created);
+        verify(delegate).create(1L, lines, null, address);
     }
 }

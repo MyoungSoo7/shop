@@ -34,6 +34,7 @@ public class Order {
     private BigDecimal shippingFee = BigDecimal.ZERO;  // 결제에 포함된 배송비(기본 0). 환불 정책 계산에 사용.
     private boolean shipped = false;                   // 배송 시작(IN_TRANSIT/DELIVERED 도달) 여부 — 상태 전이와 무관하게 보존.
     private boolean stockRestored = false;             // 재고 원복 완료 — 이중 원복 방지(멱등 플래그).
+    private ShippingAddressSnapshot shippingAddress;   // 주문 시점 배송지 스냅샷(레거시 주문은 null).
     private final List<OrderItem> items = new ArrayList<>();
 
     // 정본 생성자 — 생성/복원 팩토리(create/createMultiItem/rehydrate)만 통과(Settlement 와 동형).
@@ -533,6 +534,31 @@ public class Order {
 
     public boolean isShipped() {
         return shipped;
+    }
+
+    /**
+     * 주문 시점 배송지 스냅샷. 이 값이 없는 주문({@code null})은 배송지를 받기 전에 만들어진
+     * 레거시 주문이거나, 배송이 필요 없는 경로로 생성된 주문이다.
+     */
+    public ShippingAddressSnapshot getShippingAddress() {
+        return shippingAddress;
+    }
+
+    /**
+     * 배송지 스냅샷을 붙인다 — 주문 생성 시 한 번, 그리고 영속 레코드 복원 시 한 번.
+     *
+     * <p>덮어쓰기를 막는 이유가 스냅샷의 존재 이유다. 배송지 <b>변경</b>은 배송(shipment) 쪽에서
+     * 일어나고, 주문서에 남은 이 값은 "처음 어디로 요청했는가" 로 고정되어야 분쟁 시 대조가 된다.
+     * {@code null} 은 무시한다(스냅샷 없는 레거시 주문의 복원 경로).
+     */
+    public void attachShippingAddress(ShippingAddressSnapshot address) {
+        if (address == null) {
+            return;
+        }
+        if (this.shippingAddress != null) {
+            throw new OrderInvariantViolationException("주문 배송지 스냅샷은 다시 지정할 수 없습니다");
+        }
+        this.shippingAddress = address;
     }
 
     /**

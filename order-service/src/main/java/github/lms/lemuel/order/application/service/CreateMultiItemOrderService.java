@@ -4,6 +4,7 @@ import github.lms.lemuel.coupon.application.port.in.CouponUseCase;
 import github.lms.lemuel.coupon.domain.Coupon;
 import github.lms.lemuel.coupon.domain.DiscountTargetLine;
 import github.lms.lemuel.order.application.port.in.CreateMultiItemOrderUseCase;
+import github.lms.lemuel.order.application.port.out.CreateShipmentPort;
 import github.lms.lemuel.order.application.port.out.LoadUserForOrderPort;
 import github.lms.lemuel.order.application.port.out.PublishOrderEventPort;
 import github.lms.lemuel.order.application.port.out.SaveOrderPort;
@@ -11,6 +12,7 @@ import github.lms.lemuel.order.application.port.out.SendOrderNotificationPort;
 import github.lms.lemuel.order.domain.Order;
 import github.lms.lemuel.order.domain.OrderItem;
 import github.lms.lemuel.order.domain.OrderItemOption;
+import github.lms.lemuel.order.domain.ShippingAddressSnapshot;
 import github.lms.lemuel.order.domain.exception.UserNotExistsException;
 import github.lms.lemuel.product.application.port.in.DecreaseProductStockUseCase;
 import github.lms.lemuel.product.application.port.in.DescribeVariantOptionsUseCase;
@@ -70,6 +72,7 @@ public class CreateMultiItemOrderService implements CreateMultiItemOrderUseCase 
     private final CouponUseCase couponUseCase;
     private final DescribeVariantOptionsUseCase describeVariantOptionsUseCase;
     private final AssessShippingFeeUseCase assessShippingFeeUseCase;
+    private final CreateShipmentPort createShipmentPort;
 
     public CreateMultiItemOrderService(LoadUserForOrderPort loadUserPort,
                                        LoadProductPort loadProductPort,
@@ -81,7 +84,8 @@ public class CreateMultiItemOrderService implements CreateMultiItemOrderUseCase 
                                        PublishOrderEventPort publishOrderEventPort,
                                        CouponUseCase couponUseCase,
                                        DescribeVariantOptionsUseCase describeVariantOptionsUseCase,
-                                       AssessShippingFeeUseCase assessShippingFeeUseCase) {
+                                       AssessShippingFeeUseCase assessShippingFeeUseCase,
+                                       CreateShipmentPort createShipmentPort) {
         this.loadUserPort = loadUserPort;
         this.loadProductPort = loadProductPort;
         this.loadVariantPort = loadVariantPort;
@@ -93,11 +97,14 @@ public class CreateMultiItemOrderService implements CreateMultiItemOrderUseCase 
         this.couponUseCase = couponUseCase;
         this.describeVariantOptionsUseCase = describeVariantOptionsUseCase;
         this.assessShippingFeeUseCase = assessShippingFeeUseCase;
+        this.createShipmentPort = createShipmentPort;
     }
 
     @Override
-    public Order create(Long userId, List<Line> lines, String couponCode) {
-        log.info("다건 주문 생성: userId={}, lines={}, coupon={}", userId, lines.size(), couponCode);
+    public Order create(Long userId, List<Line> lines, String couponCode,
+                        ShippingAddressSnapshot shippingAddress) {
+        log.info("다건 주문 생성: userId={}, lines={}, coupon={}, 배송지={}",
+                userId, lines.size(), couponCode, shippingAddress != null ? "있음" : "없음");
 
         String userEmail = loadUserPort.findEmailById(userId)
                 .orElseThrow(() -> new UserNotExistsException(userId));
@@ -180,7 +187,15 @@ public class CreateMultiItemOrderService implements CreateMultiItemOrderUseCase 
         ).totalFee();
 
         Order order = Order.createMultiItem(userId, items, discount, shippingFee, discountBearingItems);
+        // 배송지는 저장 전에 붙인다 — 주문서에 굳는 값이라 INSERT 와 같은 행에 들어가야 한다.
+        order.attachShippingAddress(shippingAddress);
         Order saved = saveOrderPort.save(order);
+
+        // 배송(PENDING)도 같은 트랜잭션에서 만든다. 주문만 남고 배송이 없으면 운영자가 그 주문을
+        // 따로 찾아 주소를 손으로 채워야 하고, 그 사이 주문은 "어디로 보낼지 모르는 상태"로 존재한다.
+        if (shippingAddress != null) {
+            createShipmentPort.createForOrder(saved.getId(), shippingAddress);
+        }
 
         // 쿠폰 사용 기록 — 같은 트랜잭션. 한도 초과/1인 1매 중복이면 예외 → 주문·재고 차감까지 전부 롤백
         if (hasCoupon) {

@@ -49,6 +49,7 @@ class CreateMultiItemOrderServiceTest {
     @Mock CouponUseCase couponUseCase;
     @Mock github.lms.lemuel.product.application.port.in.DescribeVariantOptionsUseCase describeVariantOptionsUseCase;
     @Mock github.lms.lemuel.shipping.application.port.in.AssessShippingFeeUseCase assessShippingFeeUseCase;
+    @Mock github.lms.lemuel.order.application.port.out.CreateShipmentPort createShipmentPort;
     @InjectMocks CreateMultiItemOrderService service;
 
     @org.junit.jupiter.api.BeforeEach
@@ -259,5 +260,42 @@ class CreateMultiItemOrderServiceTest {
         assertThatThrownBy(() -> service.create(1L, lines))
                 .isInstanceOf(ProductInvariantViolationException.class)
                 .hasMessageContaining("variant 가 product 에 속하지 않음");
+    }
+
+    private static github.lms.lemuel.order.domain.ShippingAddressSnapshot address() {
+        return new github.lms.lemuel.order.domain.ShippingAddressSnapshot(
+                "홍길동", "010-1234-5678", "06236", "서울시 강남구 테헤란로 1", "3층", "부재시 경비실");
+    }
+
+    @Test @DisplayName("create: 배송지는 저장 전에 주문에 굳고, 같은 트랜잭션에서 배송이 생성된다")
+    void create_attachesAddressBeforeSaveAndCreatesShipment() {
+        when(loadUserPort.findEmailById(1L)).thenReturn(Optional.of("user@test.com"));
+        Product product = mockProduct(10L, "상품A", new BigDecimal("10000"));
+        when(loadProductPort.findById(10L)).thenReturn(Optional.of(product));
+        // save 시점에 이미 배송지가 붙어 있어야 INSERT 와 같은 행에 들어간다
+        when(saveOrderPort.save(any())).thenAnswer(inv -> {
+            Order given = inv.getArgument(0);
+            assertThat(given.getShippingAddress()).isEqualTo(address());
+            return given;
+        });
+
+        var lines = List.of(new CreateMultiItemOrderUseCase.Line(10L, null, 1));
+        Order result = service.create(1L, lines, null, address());
+
+        assertThat(result.getShippingAddress()).isEqualTo(address());
+        verify(createShipmentPort).createForOrder(any(), eq(address()));
+    }
+
+    @Test @DisplayName("create: 배송지가 없으면(레거시 호출) 배송을 만들지 않는다")
+    void create_withoutAddress_doesNotCreateShipment() {
+        when(loadUserPort.findEmailById(1L)).thenReturn(Optional.of("user@test.com"));
+        Product product = mockProduct(10L, "상품A", new BigDecimal("10000"));
+        when(loadProductPort.findById(10L)).thenReturn(Optional.of(product));
+        when(saveOrderPort.save(any())).thenAnswer(inv -> inv.getArgument(0));
+
+        Order result = service.create(1L, List.of(new CreateMultiItemOrderUseCase.Line(10L, null, 1)));
+
+        assertThat(result.getShippingAddress()).isNull();
+        verifyNoInteractions(createShipmentPort);
     }
 }
