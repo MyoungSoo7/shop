@@ -16,18 +16,43 @@
  * 않았는지 확인해야 해서 오히려 필요하다.
  */
 import { readFileSync, readdirSync, existsSync } from 'node:fs';
-import { join, basename } from 'node:path';
+import { join, basename, dirname } from 'node:path';
+import { fileURLToPath } from 'node:url';
+
+/** 이 파일 기준 저장소 루트 — scripts/harness/lib/ 에서 세 단계 위. */
+const REPO_ROOT = join(dirname(fileURLToPath(import.meta.url)), '..', '..', '..');
+
+/** 라우팅하는 쪽이라 라우팅 대상이 아니다. 로스터에서 뺀다. */
+const NOT_ROUTED = new Set(['gateway-service']);
 
 /**
- * 자바 서비스 로스터(gateway-service 제외 — 라우팅하는 쪽이라 라우팅 대상이 아니다).
- * 드리프트는 `harness-audit` 가 settings.gradle.kts 와 대조해 잡는다.
+ * settings.gradle.kts 의 include(...) 블록에서 모듈명을 뽑는다.
+ * coverage-scope-gate 의 parseIncludedModules 와 같은 규칙 — 로스터 정본은 한 곳뿐이다.
  */
-export const JAVA_SERVICES = [
-  'order-service', 'settlement-service', 'finance-service',
-  'company-service', 'operation-service',
-  'external-data-service',
-  'education-service', 'board-service',
-];
+export function parseIncludedModules(settingsText) {
+  const start = String(settingsText).indexOf('include(');
+  if (start < 0) return [];
+  const end = String(settingsText).indexOf(')', start);
+  if (end < 0) return [];
+  return [...String(settingsText).slice(start, end).matchAll(/"([^"]+)"/g)].map((m) => m[1]);
+}
+
+/**
+ * 자바 서비스 로스터를 settings.gradle.kts 에서 읽는다.
+ *
+ * <p>손으로 적어 두면 안 되는 이유(실측): 이 목록은 settlement 에서 떼어 오기 전의 이름
+ * 8개를 그대로 들고 있었고, 그중 6개는 이 저장소에 존재한 적이 없다. walk() 는 없는
+ * 디렉터리에 대해 조용히 빈 배열을 돌려주므로 게이트는 **아무것도 검사하지 않고 통과**한다.
+ * 새 서비스를 추가할 때 이 목록을 잊으면 그 서비스의 엔드포인트는 라우팅·화면 게이트 어디에도
+ * 잡히지 않는다 — 목록을 유지보수 대상에서 빼는 것이 유일하게 안전한 형태다.
+ */
+export function javaServices(repoRoot = REPO_ROOT) {
+  const settings = join(repoRoot, 'settings.gradle.kts');
+  if (!existsSync(settings)) return [];
+  return parseIncludedModules(readFileSync(settings, 'utf8')).filter((m) => !NOT_ROUTED.has(m));
+}
+
+export const JAVA_SERVICES = javaServices();
 
 export function walk(dir, out = []) {
   if (!existsSync(dir)) return out;

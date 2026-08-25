@@ -32,7 +32,10 @@
     "scripts/verify.sh",
     "scripts/harness/test/ci-changed-base-gate.test.mjs",
     "scripts/harness/test/ci-artifact-layout-gate.test.mjs",
-    ".github/workflows/ci.yml"
+    ".github/workflows/ci.yml",
+    "scripts/harness/lib/java-controllers.mjs",
+    "scripts/harness/test/java-services-roster-gate.test.mjs",
+    "settings.gradle.kts"
   ],
   "docLinkIgnorePrefixes": [],
   "criticalContractPairs": [],
