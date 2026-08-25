@@ -44,6 +44,10 @@ public class OrderItemJpaEntity {
     @Column(name = "canceled_at")
     private LocalDateTime canceledAt;
 
+    /** 주문 전체 쿠폰 할인 중 이 라인이 짊어진 몫. 쿠폰 없는 주문은 0. */
+    @Column(name = "allocated_discount", nullable = false, precision = 12, scale = 2)
+    private BigDecimal allocatedDiscount = BigDecimal.ZERO;
+
     protected OrderItemJpaEntity() { }
 
     public OrderItemJpaEntity(Long id, Long orderId, Long productId, Long variantId, String sku,
@@ -57,7 +61,16 @@ public class OrderItemJpaEntity {
                               String productName, BigDecimal unitPrice, int quantity,
                               BigDecimal lineAmount, LocalDateTime createdAt,
                               LocalDateTime canceledAt) {
+        this(id, orderId, productId, variantId, sku, productName, unitPrice, quantity,
+                lineAmount, createdAt, canceledAt, BigDecimal.ZERO);
+    }
+
+    public OrderItemJpaEntity(Long id, Long orderId, Long productId, Long variantId, String sku,
+                              String productName, BigDecimal unitPrice, int quantity,
+                              BigDecimal lineAmount, LocalDateTime createdAt,
+                              LocalDateTime canceledAt, BigDecimal allocatedDiscount) {
         this.canceledAt = canceledAt;
+        this.allocatedDiscount = allocatedDiscount == null ? BigDecimal.ZERO : allocatedDiscount;
         this.id = id;
         this.orderId = orderId;
         this.productId = productId;
@@ -86,6 +99,9 @@ public class OrderItemJpaEntity {
     public BigDecimal getLineAmount() { return lineAmount; }
     public LocalDateTime getCreatedAt() { return createdAt; }
     public LocalDateTime getCanceledAt() { return canceledAt; }
+    public BigDecimal getAllocatedDiscount() {
+        return allocatedDiscount == null ? BigDecimal.ZERO : allocatedDiscount;
+    }
 
     public void setOrderId(Long orderId) { this.orderId = orderId; }
 }

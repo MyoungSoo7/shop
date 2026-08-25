@@ -6,6 +6,7 @@ import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.Comparator;
 import java.util.List;
 
 /**
@@ -80,8 +81,10 @@ public class Order {
      * {@code amount = subtotal - discountAmount} 로, 외부에서 amount 를 임의 지정할 수 없어
      * 영수증/결제/정산 정합성이 도메인 차원에서 보장된다.
      *
-     * <p>할인 금액은 별도 컬럼으로 저장하지 않아도 subtotal(= 영속된 {@code order_items.line_amount}
-     * 합) 에서 {@code discount = subtotal - amount} 로 항상 역산할 수 있으므로 스키마 확장이 필요 없다.
+     * <p>주문 <b>전체</b> 할인액은 subtotal(= 영속된 {@code order_items.line_amount} 합) 에서
+     * {@code discount = subtotal - amount + shippingFee} 로 역산할 수 있다. 그러나 라인별 몫은
+     * 총액에서 역산되지 않으므로 {@code order_items.allocated_discount} 에 적어 둔다 —
+     * 부분 취소가 환불할 금액의 단위가 그 몫이다({@link #allocateDiscount}).
      * 쿠폰-주문의 연결 자체는 {@code coupon_usages.order_id} 가 보존한다.
      *
      * @param discountAmount 쿠폰 할인 금액(없으면 {@code null}/0). 0 이상이어야 하고, 결제 금액은
@@ -136,8 +139,66 @@ public class Order {
         order.shippingFee = shipping;
         order.validateUserId();
         order.validateAmount();
+        allocateDiscount(items, discount, subtotal);
         order.items.addAll(items);
         return order;
+    }
+
+    /**
+     * 쿠폰 할인을 라인에 안분한다 — 결제 금액이 확정되는 이 자리에서 한 번만.
+     *
+     * <p><b>왜 라인마다 들고 있어야 하나.</b> 주문 총액만으로는 "이 라인이 얼마를 낸 것인가"에
+     * 답할 수 없다. 그래서 부분 취소가 정가({@code lineAmount})를 환불했고, 라인을 차례로
+     * 취소하면 환불 합계가 결제액을 넘어 <b>마지막 라인의 취소가 PG 잔액 초과로 거절</b>됐다.
+     * 총액에서 역산하지 않고 주문서에 적어 두는 이유는 또 있다 — 쿠폰은 나중에 수정·삭제되므로,
+     * 환불 시점에 쿠폰을 다시 읽어 계산하면 그때의 쿠폰이 그때의 주문을 재해석하게 된다.
+     *
+     * <p><b>비례 배분이 맞는 근거.</b> 할인액은 {@code CouponService.validateCoupon} 이 주문
+     * 소계 전체에 대해 산출한다 — 쿠폰의 {@code CouponTarget}(ALL/PRODUCT/CATEGORY) 은 그 계산에
+     * 들어가지 않고 목록 노출 필터로만 쓰인다. 즉 실제로 깎인 돈은 주문 전체에 걸려 있으므로,
+     * 전체 비례 배분이 <b>실제 청구액과 일치하는</b> 유일한 배분이다. 대상 제한을 결제 단계에서
+     * 강제하게 되는 날에는 이 함수도 함께 바뀌어야 한다(매칭 라인에만 붙는다).
+     *
+     * <p><b>잔돈.</b> 원 단위 아래는 버리고(FLOOR), 버려서 생긴 잔돈은 소수 분리(largest
+     * remainder) 로 소수부가 큰 라인부터 1 원씩 얹는다. 잔돈을 한 라인에 몰면 소액 라인이 여러 개인
+     * 주문에서 그 라인의 몫이 라인 금액을 넘어 순액이 음수가 된다. 이 방식은 각 라인이
+     * {@code floor} 또는 {@code floor+1} 만 받으므로 그런 초과가 구조적으로 불가능하고,
+     * <b>Σ 안분액 = 할인액</b> 이 정확히 성립한다.
+     */
+    private static void allocateDiscount(List<OrderItem> items, BigDecimal discount, BigDecimal subtotal) {
+        if (discount.signum() == 0) {
+            return; // 쿠폰 없는 주문 — 모든 라인의 몫은 0(기본값)
+        }
+        BigDecimal[] shares = new BigDecimal[items.size()];
+        BigDecimal[] remainders = new BigDecimal[items.size()];
+        BigDecimal allocated = BigDecimal.ZERO;
+        for (int i = 0; i < items.size(); i++) {
+            BigDecimal weighted = discount.multiply(items.get(i).getLineAmount());
+            BigDecimal[] divided = weighted.divideAndRemainder(subtotal);
+            // 몫은 정수부라 setScale(0) 이 반올림을 하지 않는다 — divideAndRemainder 가 남기는
+            // 음수 scale(예: 4E+1) 을 정규화해 저장·비교에 scale drift 를 남기지 않으려는 것뿐이다.
+            shares[i] = divided[0].setScale(0);
+            remainders[i] = divided[1];
+            allocated = allocated.add(divided[0]);
+        }
+        // 남은 잔돈 = 할인액 - 내림 합. 라인 수보다 항상 작다(라인당 버린 몫이 1 원 미만).
+        int leftover = discount.subtract(allocated).intValueExact();
+        Integer[] order = new Integer[items.size()];
+        for (int i = 0; i < order.length; i++) {
+            order[i] = i;
+        }
+        // 소수부 큰 라인 우선, 동률이면 라인 금액이 큰 쪽 — 같은 주문이면 항상 같은 배분이 나온다.
+        java.util.Arrays.sort(order, Comparator
+                .comparing((Integer i) -> remainders[i]).reversed()
+                .thenComparing(Comparator.comparing((Integer i) -> items.get(i).getLineAmount()).reversed())
+                .thenComparing(i -> i));
+        for (int k = 0; k < leftover; k++) {
+            int i = order[k];
+            shares[i] = shares[i].add(BigDecimal.ONE);
+        }
+        for (int i = 0; i < items.size(); i++) {
+            items.get(i).allocateDiscount(shares[i]);
+        }
     }
 
     // 도메인 규칙: userId 검증
@@ -211,7 +272,8 @@ public class Order {
     }
 
     /**
-     * 라인 단위 부분 취소 — 지정한 라인을 취소 상태로 바꾸고 <b>취소된 라인 금액 합</b>을 돌려준다.
+     * 라인 단위 부분 취소 — 지정한 라인을 취소 상태로 바꾸고 <b>그 라인들에 대해 고객이 실제로 낸
+     * 금액의 합</b>({@link OrderItem#getNetAmount()} = 정가 − 안분된 할인 몫)을 돌려준다.
      *
      * <p>주문 총액({@link #getAmount()})은 발행된 영수증이라 여기서 바뀌지 않는다. 얼마를 실제로
      * 되돌려줬는지는 결제의 {@code refundedAmount} 가 들고 있고, 이 메서드는 "어떤 라인이 살아
@@ -222,7 +284,7 @@ public class Order {
      * 돌아오고 실물은 고객에게 있다 — 그 경로는 반품(회수 확인 후 원복)이다.
      *
      * @param itemIds 취소할 라인 id 목록(비어 있으면 거절, 주문에 없는 id·이미 취소된 id 도 거절)
-     * @return 취소된 라인들의 {@code lineAmount} 합
+     * @return 취소된 라인들의 {@code netAmount}(= 정가 − 안분 할인) 합
      */
     public BigDecimal cancelItems(List<Long> itemIds) {
         if (itemIds == null || itemIds.isEmpty()) {
@@ -246,7 +308,7 @@ public class Order {
         }
 
         // 전량 검증 후 일괄 취소 — 중간 라인에서 실패하면 앞 라인만 취소된 반쪽 상태가 남는다.
-        BigDecimal canceledSubtotal = BigDecimal.ZERO;
+        BigDecimal canceledNet = BigDecimal.ZERO;
         for (OrderItem target : targets) {
             if (target.isCanceled()) {
                 throw new OrderInvariantViolationException(
@@ -255,10 +317,10 @@ public class Order {
         }
         for (OrderItem target : targets) {
             target.cancel();
-            canceledSubtotal = canceledSubtotal.add(target.getLineAmount());
+            canceledNet = canceledNet.add(target.getNetAmount());
         }
         this.updatedAt = LocalDateTime.now();
-        return canceledSubtotal;
+        return canceledNet;
     }
 
     /** 아직 취소되지 않은 라인 — 배송비 재산정·출고 대상의 진실의 원천. */

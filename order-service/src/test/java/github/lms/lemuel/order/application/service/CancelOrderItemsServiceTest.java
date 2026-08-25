@@ -92,7 +92,7 @@ class CancelOrderItemsServiceTest {
         CancelOrderItemsUseCase.Result result =
                 service.cancelItems(77L, List.of(1L), "단순 변심", "buyer");
 
-        assertThat(result.canceledSubtotal()).isEqualByComparingTo("40000");
+        assertThat(result.canceledAmount()).isEqualByComparingTo("40000");
         assertThat(result.additionalShippingFee()).isEqualByComparingTo("3000");
         assertThat(result.refundedAmount()).isEqualByComparingTo("37000"); // 40000 - 3000
         assertThat(order.getShippingFee()).isEqualByComparingTo("3000");   // 고객이 최종 부담하는 배송비
@@ -223,5 +223,51 @@ class CancelOrderItemsServiceTest {
         service.cancelItems(77L, List.of(2L), "부분 취소", "buyer");
 
         verify(couponRestorePort, never()).restoreOnCanceled(anyLong(), any());
+    }
+
+    /**
+     * 50,000 × 2 = 소계 100,000, 쿠폰 −20,000, 배송비 0 → <b>80,000 결제</b>.
+     *
+     * <p>위 다른 케이스들이 전부 {@code discountAmount = ZERO} 라, 할인이 걸린 주문의 부분 취소는
+     * 여기 오기 전까지 한 번도 측정된 적이 없었다.
+     */
+    private Order discountedOrder() {
+        OrderItem a = OrderItem.newItem(100L, null, null, "상품A", new BigDecimal("50000"), 1);
+        OrderItem b = OrderItem.newItem(200L, null, null, "상품B", new BigDecimal("50000"), 1);
+        a.assignId(1L);
+        b.assignId(2L);
+        Order order = Order.createMultiItem(9L, List.of(a, b), new BigDecimal("20000"), BigDecimal.ZERO);
+        order.assignId(81L);
+        order.transitionTo(OrderStatus.PAID);
+        when(loadOrderPort.findById(81L)).thenReturn(Optional.of(order));
+        return order;
+    }
+
+    @Test
+    @DisplayName("할인 주문의 부분 취소는 그 라인이 실제로 낸 돈만 환불한다 — 정가 환불은 과환불이다")
+    void discountedOrder_refundsAllocatedShareNotListPrice() {
+        Order order = discountedOrder();
+        when(assessShippingFee.assess(any())).thenReturn(ShippingFeeAssessment.none());
+        assertThat(order.getAmount()).isEqualByComparingTo("80000"); // 실제로 받은 돈
+
+        CancelOrderItemsUseCase.Result result =
+                service.cancelItems(81L, List.of(1L), "단순 변심", "buyer");
+
+        // 라인 몫 = 50,000 − (20,000 × 50,000/100,000) = 40,000. 정가 50,000 을 돌려주면 1 만원을 더 준다.
+        assertThat(result.refundedAmount()).isEqualByComparingTo("40000");
+        verify(refundPort).refundOrderPayment(eq(81L), eq(new BigDecimal("40000")), any());
+    }
+
+    @Test
+    @DisplayName("할인 주문을 라인별로 차례로 취소해도 환불 합계가 결제액을 넘지 않는다")
+    void discountedOrder_sequentialCancelsNeverExceedPaidAmount() {
+        discountedOrder();
+        when(assessShippingFee.assess(any())).thenReturn(ShippingFeeAssessment.none());
+
+        BigDecimal first = service.cancelItems(81L, List.of(1L), "1차", "buyer").refundedAmount();
+        BigDecimal second = service.cancelItems(81L, List.of(2L), "2차", "buyer").refundedAmount();
+
+        // 결제액 80,000 을 넘으면 두 번째 환불은 PG 잔액 초과로 거절된다(RefundExceedsPaymentException).
+        assertThat(first.add(second)).isEqualByComparingTo("80000");
     }
 }

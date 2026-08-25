@@ -23,13 +23,16 @@ public interface CancelOrderItemsUseCase {
     Result cancelItems(Long orderId, List<Long> itemIds, String reason, String operator);
 
     /**
-     * @param canceledSubtotal      취소된 라인 금액 합
+     * @param canceledAmount        취소된 라인들에 대해 <b>고객이 실제로 낸 금액</b>의 합
+     *                              (= 정가 합 − 그 라인들에 안분된 쿠폰 할인). 이전 이름은
+     *                              {@code canceledSubtotal} 이었는데, 그 이름대로 정가 합을 담고
+     *                              환불하다가 할인 주문에서 과환불이 났다 — 이름이 곧 규격이다.
      * @param additionalShippingFee 무료배송 조건이 깨져 되살아난 배송비(없으면 0)
-     * @param refundedAmount        실제 환불한 금액({@code canceledSubtotal + 기존배송비 - 새배송비}, 0 하한)
+     * @param refundedAmount        실제 환불한 금액({@code canceledAmount + 기존배송비 - 새배송비}, 0 하한)
      * @param orderFullyCanceled    남은 라인이 하나도 없는지
      */
     record Result(Long orderId,
-                  BigDecimal canceledSubtotal,
+                  BigDecimal canceledAmount,
                   BigDecimal additionalShippingFee,
                   BigDecimal refundedAmount,
                   boolean orderFullyCanceled) {

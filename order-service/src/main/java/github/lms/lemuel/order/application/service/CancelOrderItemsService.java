@@ -84,7 +84,8 @@ public class CancelOrderItemsService implements CancelOrderItemsUseCase {
                 .toList();
 
         // 1) 라인 취소 — 소속/중복 검증과 상태 가드는 도메인이 강제한다.
-        BigDecimal canceledSubtotal = order.cancelItems(itemIds);
+        //    돌아오는 값은 정가 합이 아니라 "그 라인들에 대해 고객이 실제로 낸 돈"(정가 − 안분 할인)이다.
+        BigDecimal canceledAmount = order.cancelItems(itemIds);
 
         // 2) 취소된 라인만 재고 복원. 전량 취소 경로의 claimStockRestorationOnCancel 과 달리
         //    여기서는 라인의 canceled_at 자체가 이중 복원을 막는 멱등 장치다.
@@ -97,6 +98,8 @@ public class CancelOrderItemsService implements CancelOrderItemsUseCase {
         }
 
         // 3) 남은 라인으로 배송비 재산정 — 무료배송 조건이 깨졌는지 여기서 드러난다.
+        //    입력은 할인 전 lineAmount 다(주문 생성 시 무료배송 판정과 같은 기준). 여기만 할인 후
+        //    금액을 쓰면 "쿠폰을 썼더니 배송비가 생겼다"는 역진성이 취소 시점에 뒤늦게 나타난다.
         BigDecimal previousShippingFee = order.getShippingFee();
         BigDecimal newShippingFee = assessShippingFeeUseCase.assess(
                 order.activeItems().stream()
@@ -107,12 +110,13 @@ public class CancelOrderItemsService implements CancelOrderItemsUseCase {
         BigDecimal additionalShippingFee = newShippingFee.subtract(previousShippingFee).max(BigDecimal.ZERO);
         order.assignShippingFee(newShippingFee);
 
-        // 4) 환불액 = 취소라인합 + 기존배송비 - 새배송비 (0 하한 — 재부과가 취소액을 넘어도 추가 청구는 하지 않는다)
+        // 4) 환불액 = 취소라인의 실지불액 + 기존배송비 - 새배송비
+        //    (0 하한 — 재부과가 취소액을 넘어도 추가 청구는 하지 않는다)
         boolean fullyCanceled = order.allItemsCanceled();
         boolean paid = statusBefore != OrderStatus.CREATED;
         // 결제 전 주문은 돌려줄 돈이 없다 — 환불 "예정액"이 아니라 실제 환불액을 보고한다.
         BigDecimal refundAmount = paid
-                ? canceledSubtotal.add(previousShippingFee).subtract(newShippingFee).max(BigDecimal.ZERO)
+                ? canceledAmount.add(previousShippingFee).subtract(newShippingFee).max(BigDecimal.ZERO)
                 : BigDecimal.ZERO;
 
         if (fullyCanceled && !paid) {
@@ -120,7 +124,9 @@ public class CancelOrderItemsService implements CancelOrderItemsUseCase {
         }
         if (fullyCanceled) {
             // 쿠폰은 <b>전량 취소일 때만</b> 되돌린다. 부분 취소에서는 남은 라인이 여전히 그 할인을
-            // 받고 있으므로 돌려주면 같은 쿠폰을 두 번 쓰는 셈이 된다(할인 안분 재계산은 별개 주제).
+            // 받고 있으므로 돌려주면 같은 쿠폰을 두 번 쓰는 셈이 된다. 반대로 취소된 라인이 가져간
+            // 할인 몫은 고객에게 환불되지 않는데(그 라인은 처음부터 그만큼 싸게 산 것이다), 그게
+            // 위 4) 가 정가가 아니라 실지불액을 돌려주는 이유다 — 남은 할인은 남은 라인에 그대로 붙어 있다.
             orderCouponRestorePort.restoreOnCanceled(orderId, "주문 라인 전량 취소");
         }
         saveOrderPort.save(order);
@@ -134,9 +140,9 @@ public class CancelOrderItemsService implements CancelOrderItemsUseCase {
         }
 
         log.info("주문 부분 취소: orderId={}, items={}, canceled={}, shipping {}→{}, refund={}",
-                orderId, itemIds, canceledSubtotal, previousShippingFee, newShippingFee, refundAmount);
+                orderId, itemIds, canceledAmount, previousShippingFee, newShippingFee, refundAmount);
 
-        return new Result(orderId, canceledSubtotal, additionalShippingFee, refundAmount, fullyCanceled);
+        return new Result(orderId, canceledAmount, additionalShippingFee, refundAmount, fullyCanceled);
     }
 
     private String describe(String reason, List<Long> itemIds) {
