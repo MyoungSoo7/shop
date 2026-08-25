@@ -44,7 +44,7 @@ kubectl -n build rollout status deploy/buildkitd
 
 # 3) (선택) 프론트엔드 빌드 인자 — 없으면 ci.yml 과 같은 기본값으로 빌드된다
 kubectl -n build create secret generic frontend-build-args \
-  --from-literal=VITE_API_BASE_URL=https://jen.lemuel.co.kr \
+  --from-literal=VITE_API_BASE_URL=https://shop.lemuel.co.kr \
   --from-literal=VITE_TOSS_CLIENT_KEY="$TOSS_CLIENT_KEY"
 ```
 

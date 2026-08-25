@@ -9,7 +9,7 @@ import type { NavMenuNode } from '@/api/menu';
  * 예외 규칙을 손으로 넣어 뒀다(그 결과 `/admin/payouts` 에서 상단 '정산'이 꺼지는 버그가 남았다).
  */
 
-/** 경로 일치 — 세그먼트 경계를 지킨다. `/admin/ceo/loans` 는 `/admin/ceo/loan` 에 걸리지 않는다. */
+/** 경로 일치 — 세그먼트 경계를 지킨다. `/admin/products` 는 `/admin/product` 에 걸리지 않는다. */
 export const matchesPath = (menuPath: string, pathname: string): boolean =>
   menuPath === pathname || pathname.startsWith(menuPath + '/');
 

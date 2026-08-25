@@ -1,18 +1,20 @@
 import { defineConfig, devices } from '@playwright/test';
 
-const baseURL = process.env.PLAYWRIGHT_BASE_URL ?? 'https://jen.lemuel.co.kr';
+const baseURL = process.env.PLAYWRIGHT_BASE_URL ?? 'https://shop.lemuel.co.kr';
 const isCI = !!process.env.CI;
 
 /**
- * Chromium 전용 API 에 의존하는 스펙을 크로스 브라우저 프로젝트에서 제외하는 목록.
- * 해당하는 API 는 다음과 같고, 쓰는 스펙이 생기면 여기에 등록한다.
+ * Chromium 전용 API 에 의존하는 스펙을 크로스 브라우저 프로젝트에서 제외하는 목록 —
+ * **지금은 비어 있다**. 해당하는 API 는 다음과 같고, 쓰는 스펙이 생기면 여기에 등록한다.
  *  - `page.context().newCDPSession(page)` — CDP 는 Chromium 만 지원(firefox/webkit 에서 throw).
  *  - `test.use({ serviceWorkers: 'block' })` — 이 컨텍스트 옵션은 Chromium 에서만 유효.
  *    Firefox 는 SW 가 살아 있어 `page.route` 가 XHR 을 못 잡고 mock 이 통째로 무력화된다.
  *
- * 현재는 비어 있다 — 유일한 항목이던 loan.spec.ts 를 지웠기 때문이다(2026-08-25).
- * 대출은 이 저장소의 경계 밖(여신계)이고 화면·라우트·컨트롤러가 여기 없는데 e2e 만 남아
- * 외부 운영 호스트를 때리고 있었다.
+ * 유일한 항목이던 `loan.spec.ts` 는 settlement 에서 딸려 온 잔재였고, 이 저장소에는 대출
+ * 화면·라우트·컨트롤러가 없는데 e2e 만 남아 외부 운영 호스트를 때리고 있어 2026-08-25 에
+ * 지웠다. 목록과 아래 projects 의 `testIgnore` 배선은 남긴다 — 같은 이유로 제한이 필요한
+ * 스펙이 다시 생겼을 때 붙일 자리다.
+ * 크로스 브라우저·모바일 검증은 smoke(라우팅/프록시) + auto-login(인증 플로우)이 담당한다.
  */
 const CHROMIUM_ONLY: string[] = [];
 
@@ -40,7 +42,7 @@ export default defineConfig({
   },
 
   projects: [
-    // 기준 프로젝트 — 전체 스펙 실행(CHROMIUM_ONLY 포함).
+    // 기준 프로젝트 — 전체 스펙 실행(CHROMIUM_ONLY 항목까지 여기서만 돈다).
     {
       name: 'chromium',
       use: { ...devices['Desktop Chrome'] },

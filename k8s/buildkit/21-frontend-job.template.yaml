@@ -39,7 +39,7 @@ spec:
               value: /docker
           # 없으면 아래 기본값으로 빌드된다(optional: true) — ci.yml 의 `|| ''`, `|| 'test_ck_…'` 와 동일.
           #   kubectl -n build create secret generic frontend-build-args \
-          #     --from-literal=VITE_API_BASE_URL=https://jen.lemuel.co.kr \
+          #     --from-literal=VITE_API_BASE_URL=https://shop.lemuel.co.kr \
           #     --from-literal=VITE_TOSS_CLIENT_KEY=<운영 클라이언트 키>
           envFrom:
             - secretRef:
