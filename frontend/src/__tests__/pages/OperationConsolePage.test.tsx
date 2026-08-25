@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { render, screen, fireEvent, waitFor } from '@testing-library/react';
+import { render, screen, fireEvent, waitFor, within } from '@testing-library/react';
 import OperationConsolePage from '@/pages/operation/OperationConsolePage';
 import { operationApi } from '@/api/operation';
 
@@ -29,10 +29,20 @@ vi.mock('@/api/operation', async (importOriginal) => {
       markFalsePositive: vi.fn(),
       comment: vi.fn(),
     },
+    // 알림 발송 이력 패널도 이 화면 안에 있다 — pgRouting 과 같은 이유로 막는다.
+    // 패널 자체의 규율은 NotificationDispatchPanel 쪽 테스트가 따로 못박는다.
+    notificationDispatchApi: {
+      search: vi.fn().mockResolvedValue({ items: [], total: 0, limit: 20, offset: 0 }),
+      get: vi.fn(),
+      resend: vi.fn(),
+    },
   };
 });
 
 const mocked = vi.mocked(operationApi);
+
+/** 인시던트 필터 영역 — 화면에 select 가 더 붙어도 위치로 집지 않도록 범위를 좁힌다. */
+const incidentFilters = () => within(screen.getByTestId('incident-filters'));
 
 const incident = (over: Record<string, unknown> = {}) =>
   ({
@@ -164,7 +174,7 @@ describe('OperationConsolePage — 요약·목록', () => {
 describe('OperationConsolePage — 필터·페이지', () => {
   it('상태 필터를 걸면 첫 페이지부터 다시 조회한다', async () => {
     await renderAndWait();
-    const selects = screen.getAllByRole('combobox');
+    const selects = incidentFilters().getAllByRole('combobox');
 
     fireEvent.change(selects[0], { target: { value: 'OPEN' } });
 
@@ -175,7 +185,7 @@ describe('OperationConsolePage — 필터·페이지', () => {
 
   it('필터를 전체로 되돌리면 그 조건을 뺀다', async () => {
     await renderAndWait();
-    const selects = screen.getAllByRole('combobox');
+    const selects = incidentFilters().getAllByRole('combobox');
     fireEvent.change(selects[0], { target: { value: 'OPEN' } });
     await waitFor(() => expect(mocked.search).toHaveBeenCalledTimes(2));
 
@@ -186,7 +196,7 @@ describe('OperationConsolePage — 필터·페이지', () => {
 
   it('초기화 버튼은 모든 필터를 지운다', async () => {
     await renderAndWait();
-    const selects = screen.getAllByRole('combobox');
+    const selects = incidentFilters().getAllByRole('combobox');
     fireEvent.change(selects[1], { target: { value: 'CRITICAL' } });
     await waitFor(() => expect(mocked.search).toHaveBeenCalledTimes(2));
 

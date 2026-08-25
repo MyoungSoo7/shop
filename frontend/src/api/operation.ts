@@ -155,3 +155,107 @@ export const CATEGORY_LABEL: Record<SignalCategory, string> = {
   INFRA_ETC: '기타 인프라',
   UNKNOWN: '미분류',
 };
+
+// ════════════════════════════════════════════════════════════════════════════
+// 알림 발송 이력 — /api/ops/notifications/dispatches
+//   "그 사람한테 알림이 갔나?" 를 조회로 답하는 경로. 같은 ROLE_ADMIN 체인.
+// ════════════════════════════════════════════════════════════════════════════
+
+/**
+ * 발송 상태.
+ * - PARTIAL 은 <b>실패가 아니다</b> — 일부 채널만 성공했어도 사람에게는 닿았다.
+ * - NO_CHANNEL 은 메시지 문제가 아니라 배포 설정 오류(활성 채널 0개)라 대응 주체가 다르다.
+ * - PENDING 이 남아 있다는 것은 발송 도중 프로세스가 죽었다는 뜻이고, 자동 복구되지 않는다.
+ */
+export type DispatchStatus = 'PENDING' | 'DELIVERED' | 'PARTIAL' | 'FAILED' | 'NO_CHANNEL';
+
+/** 목록 행 — 본문은 상세에서만 온다. */
+export interface NotificationDispatch {
+  id: number;
+  eventId: string;
+  type: string;
+  recipient: string;
+  subject: string;
+  status: DispatchStatus;
+  channelsTotal: number;
+  channelsSucceeded: number;
+  resentFromId: number | null;
+  createdAt: string;
+  completedAt: string | null;
+}
+
+export interface DispatchChannelOutcome {
+  channel: string;
+  status: 'SUCCESS' | 'FAILURE';
+  attempts: number;
+  error: string | null;
+  createdAt: string | null;
+}
+
+export interface NotificationDispatchDetail extends NotificationDispatch {
+  body: string | null;
+  channels: DispatchChannelOutcome[];
+}
+
+export interface NotificationDispatchPage {
+  items: NotificationDispatch[];
+  total: number;
+  limit: number;
+  offset: number;
+}
+
+export interface NotificationResendResult {
+  originalId: number;
+  eventId: string;
+  /** 같은 idempotencyKey 로 이미 보낸 건이라 실제로는 나가지 않았다는 뜻 — 실패가 아니다. */
+  deduped: boolean;
+  allSucceeded: boolean;
+  results: DispatchChannelOutcome[];
+}
+
+export interface DispatchSearchParams {
+  status?: DispatchStatus;
+  recipient?: string;
+  limit?: number;
+  offset?: number;
+}
+
+export const notificationDispatchApi = {
+  /** GET /api/ops/notifications/dispatches — 최신순 목록(상태·수신자 정확일치 필터). */
+  search: async (params: DispatchSearchParams = {}): Promise<NotificationDispatchPage> => {
+    const query: Record<string, unknown> = {};
+    Object.entries(params).forEach(([k, v]) => {
+      if (v !== undefined && v !== null && v !== '') query[k] = v;
+    });
+    return (await api.get<NotificationDispatchPage>('/api/ops/notifications/dispatches', { params: query })).data;
+  },
+
+  /** GET /api/ops/notifications/dispatches/{id} — 채널별 결과 포함 단건. */
+  get: async (id: number): Promise<NotificationDispatchDetail> =>
+    (await api.get<NotificationDispatchDetail>(`/api/ops/notifications/dispatches/${id}`)).data,
+
+  /**
+   * POST /api/ops/notifications/dispatches/{id}/resend — 원본을 그대로 다시 보낸다.
+   *
+   * <p>{@code idempotencyKey} 를 <b>반드시</b> 넘긴다. 안 넘기면 더블클릭이 두 번 발송된다.
+   */
+  resend: async (id: number, idempotencyKey: string): Promise<NotificationResendResult> =>
+    (await api.post<NotificationResendResult>(
+      `/api/ops/notifications/dispatches/${id}/resend`, { idempotencyKey })).data,
+};
+
+export const DISPATCH_STATUS_LABEL: Record<DispatchStatus, string> = {
+  PENDING: '미완결',
+  DELIVERED: '전건 성공',
+  PARTIAL: '일부 성공',
+  FAILED: '전건 실패',
+  NO_CHANNEL: '채널 없음',
+};
+
+export const DISPATCH_STATUS_BADGE: Record<DispatchStatus, string> = {
+  PENDING: 'bg-amber-100 text-amber-800',
+  DELIVERED: 'bg-green-100 text-green-800',
+  PARTIAL: 'bg-sky-100 text-sky-800',
+  FAILED: 'bg-red-100 text-red-800',
+  NO_CHANNEL: 'bg-gray-200 text-gray-700',
+};

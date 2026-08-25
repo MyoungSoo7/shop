@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import Spinner from '@/components/Spinner';
 import PgRoutingHealthCard from '@/components/PgRoutingHealthCard';
+import NotificationDispatchPanel from '@/components/NotificationDispatchPanel';
 import { useToast } from '@/contexts/useToast';
 import {
   operationApi,
@@ -186,6 +187,10 @@ const OperationConsolePage: React.FC = () => {
           order-service 표면이지만 읽는 맥락이 관제라 여기 둔다(장애 중 즉시 확인). */}
       <PgRoutingHealthCard />
 
+      {/* 알림 발송 이력 — 인시던트가 열렸을 때 "그래서 담당자에게 알림이 갔나"를 같은 자리에서 본다.
+          이 둘이 떨어져 있으면 알림 누락이 인시던트 대응 지연으로 나타나는데 원인을 못 잇는다. */}
+      <NotificationDispatchPanel />
+
       {/* 요약 카드 */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-4">
         <SummaryCard label="활성 인시던트" value={summary?.openTotal ?? '-'} accent="text-red-600" sub={`${window} 기준`} />
@@ -206,7 +211,10 @@ const OperationConsolePage: React.FC = () => {
       </div>
 
       {/* 필터 */}
-      <div className="bg-white rounded-xl border border-gray-200 p-4 mb-4 flex flex-wrap items-end gap-3">
+      <div
+        data-testid="incident-filters"
+        className="bg-white rounded-xl border border-gray-200 p-4 mb-4 flex flex-wrap items-end gap-3"
+      >
         <FilterSelect label="상태" value={filters.status ?? ''}
           onChange={(v) => setFilter('status', v)}
           options={STATUS_OPTIONS.map((s) => ({ value: s, label: STATUS_LABEL[s] }))} />
