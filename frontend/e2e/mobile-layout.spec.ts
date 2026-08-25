@@ -131,33 +131,33 @@ async function loginAs(page: Page, button: string, expectedPath: string) {
 const PUBLIC_ROUTES = ['/login'];
 
 /**
- * USER 동선 — 주문·장바구니·마이페이지가 모바일 사용 비중이 가장 높다.
+ * 아래 두 목록에는 **`App.tsx` 에 실제로 선언된 경로만** 넣는다.
  *
- * `/loans` 를 뺐다(2026-08-25). 여신은 이 저장소의 경계 밖이라 `App.tsx` 에 라우트가 없고,
- * 그런 경로는 SPA 폴백 화면을 그린다 — `expectRouteReached` 는 `/login` 으로 튕겼는지만 보므로
- * **통과하지만 아무것도 재지 않는다**. 목록에 남겨두면 초록이 커버리지처럼 보인다.
+ * 없는 경로를 넣으면 조용히 무의미해진다. 라우터가 못 찾은 경로는 SPA 폴백 화면을 그리는데,
+ * `expectRouteReached` 는 `/login` 으로 튕겼는지만 보고 폴백 화면은 가로로 넘치지 않는다 —
+ * 그래서 **통과하지만 아무것도 재지 않는다**. 목록이 길수록 커버리지가 넓어 보이므로 더 나쁘다.
+ *
+ * 2026-08-25 에 이 상태의 경로 8개를 뺐다(`/loans` `/ai/chat` `/admin/settlement`
+ * `/settlement/search` `/admin/payouts` `/workforce` `/admin/ceo/{insight,invest,companies}`).
+ * 전부 여신·정산·인사·CEO 로, 이 저장소의 경계 밖이라 화면이 여기 없다. 남아 있던 이유는
+ * 기본 `PLAYWRIGHT_BASE_URL` 이 외부 운영 호스트라 거기서는 그려졌기 때문이다.
  */
-const USER_ROUTES = ['/order', '/cart', '/mypage', '/recommend', '/ai/chat'];
+
+/** USER 동선 — 주문·장바구니·마이페이지가 모바일 사용 비중이 가장 높다. */
+const USER_ROUTES = ['/order', '/cart', '/mypage', '/recommend'];
 
 /**
  * ADMIN 동선 — 표가 많아 넘침이 가장 잘 나는 화면들.
- * 정산·CEO·시스템 그룹은 좌측 사이드바 셸(SideNavLayout)을 쓰므로 그룹별로 최소 1개씩 포함해
- * **사이드바가 붙는 3개 그룹이 모두 측정되게** 한다(항목은 menus 테이블이 정한다).
+ * 좌측 사이드바 셸(SideNavLayout)이 붙는 화면을 반드시 포함한다. 셸이 폭을 잡아먹어 넘침이
+ * 가장 잘 나는 조합이기 때문이다. 지금은 `/product`·`/admin/shipping`·`/admin/system/*` 가
+ * 그에 해당한다(사이드바 항목 자체는 menus 테이블이 정한다).
  */
 const ADMIN_ROUTES = [
   '/admin',
-  '/admin/settlement',
-  '/settlement/search',
   '/product',
-  '/admin/payouts',
   '/admin/shipping',
   '/admin/approvals',
-  '/workforce',
-  // CEO 그룹
-  '/admin/ceo/insight',
-  '/admin/ceo/invest',
-  '/admin/ceo/companies',
-  // 시스템 그룹
+  // 시스템 그룹 — SideNavLayout
   '/admin/system/menus',
   '/admin/system/codes',
   '/admin/system/operation',

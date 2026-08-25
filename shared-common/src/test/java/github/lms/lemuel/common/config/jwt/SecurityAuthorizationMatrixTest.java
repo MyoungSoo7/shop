@@ -42,6 +42,11 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
  * 포인트 콘솔 · 보험 언더라이팅(청약 UUID 만 알면 계약 발행). 네 건 모두 <b>컴파일도 테스트도
  * 통과한 채</b> 운영에 들어갔다 — "매처가 없다"는 컴파일러가 볼 수 없는 축이다.
  *
+ * <p>이 중 보험 언더라이팅 케이스는 2026-08-25 에 여기서 빠졌다. 사고가 취소돼서가 아니라
+ * <b>그 경로의 컨트롤러가 이 저장소에 없어서</b>다 — 핸들러가 없으면 매처도 이 검증도 판정할
+ * 대상이 없다. 정산·계정계 리포트 묶음도 같은 이유로 함께 빠졌다. 그 도메인이 이 저장소로
+ * 들어오는 날 매처와 이 케이스를 같이 되살려야 한다.
+ *
  * <h2>무엇을 어떻게 보는가</h2>
  * 실제 {@code springSecurityFilterChain} 에 요청을 흘려 <b>상태코드로 판정을 읽는다</b>
  * ({@code SecurityConfig} 의 핸들러가 미인증 401 · 권한부족 403 으로 고정한다).
@@ -71,108 +76,8 @@ class SecurityAuthorizationMatrixTest {
     }
 
     /**
-     * 재무/자금흐름 리포트 — settlement `report` 슬라이스의 전 표면.
-     *
-     * <p>셀러별 거래액 랭킹과 셀러 이메일(원문, 마스킹 없음)이 실리는 응답이라 일반 사용자에게
-     * 열리면 그대로 유출이다. Seed {@code settlement-service-report} KI-1·KI-7 이 가리키는 지점.
-     */
-    @Nested
-    @DisplayName("/api/reports/** — ADMIN·MANAGER 전용 (Seed KI-7)")
-    class Reports {
-
-        @ParameterizedTest(name = "미인증 → 401: {0}")
-        @ValueSource(strings = {
-                "/api/reports/cashflow",
-                "/api/reports/cashflow/pdf",
-                "/api/reports/sellers/1/cashflow",
-                "/api/reports/sales-stats/summary",
-                "/api/reports/sales-stats/breakdown"
-        })
-        void 미인증은_401(String path) throws Exception {
-            mvc.perform(get(path)).andExpect(status().isUnauthorized());
-        }
-
-        @ParameterizedTest(name = "USER → 403: {0}")
-        @ValueSource(strings = {
-                "/api/reports/cashflow",
-                "/api/reports/cashflow/pdf",
-                "/api/reports/sellers/1/cashflow",
-                "/api/reports/sales-stats/summary",
-                "/api/reports/sales-stats/breakdown"
-        })
-        void 일반_사용자는_403(String path) throws Exception {
-            mvc.perform(get(path).with(user("seller").roles("USER")))
-                    .andExpect(status().isForbidden());
-        }
-
-        @ParameterizedTest(name = "ADMIN → 통과: {0}")
-        @ValueSource(strings = {
-                "/api/reports/cashflow",
-                "/api/reports/sales-stats/breakdown"
-        })
-        void 관리자는_통과(String path) throws Exception {
-            mvc.perform(get(path).with(user("admin").roles("ADMIN")))
-                    .andExpect(status().isOk());
-        }
-
-        @ParameterizedTest(name = "MANAGER → 통과: {0}")
-        @ValueSource(strings = {
-                "/api/reports/cashflow",
-                "/api/reports/sales-stats/breakdown"
-        })
-        void 매니저는_통과(String path) throws Exception {
-            mvc.perform(get(path).with(user("manager").roles("MANAGER")))
-                    .andExpect(status().isOk());
-        }
-
-        /**
-         * 하위 경로를 새로 만들어도 와일드카드가 덮는지 — 경로가 늘 때 규칙을 다시 안 적어도 되는 근거.
-         * 이 케이스가 깨지면 {@code /api/reports/**} 가 접두 매칭을 잃은 것이다.
-         */
-        @Test
-        @DisplayName("아직 없는 하위 경로도 와일드카드가 덮는다")
-        void 미래_하위경로도_보호된다() throws Exception {
-            mvc.perform(get("/api/reports/does-not-exist-yet/deep/path")
-                            .with(user("seller").roles("USER")))
-                    .andExpect(status().isForbidden());
-        }
-    }
-
-    /**
-     * 같은 실패 모드를 공유하는 정산 계열 경로 — 리포트와 같은 등급으로 선언돼 있다.
-     *
-     * <p>여기 있는 경로가 열리면 리포트가 닫혀 있어도 같은 수치를 다른 문으로 꺼낼 수 있다.
-     */
-    @Nested
-    @DisplayName("정산 계열 조회 — ADMIN·MANAGER 전용")
-    class SettlementFamily {
-
-        @ParameterizedTest(name = "USER → 403: {0}")
-        @ValueSource(strings = {
-                "/api/settlements/1",
-                "/api/ledger/entries",
-                "/api/account/trial-balance",
-                "/settlements/1"
-        })
-        void 일반_사용자는_403(String path) throws Exception {
-            mvc.perform(get(path).with(user("seller").roles("USER")))
-                    .andExpect(status().isForbidden());
-        }
-
-        @ParameterizedTest(name = "MANAGER → 통과: {0}")
-        @ValueSource(strings = {
-                "/api/settlements/1",
-                "/api/ledger/entries",
-                "/api/account/trial-balance"
-        })
-        void 매니저는_통과(String path) throws Exception {
-            mvc.perform(get(path).with(user("manager").roles("MANAGER")))
-                    .andExpect(status().isOk());
-        }
-    }
-
-    /**
-     * 과거에 실제로 새어 본 경로들 — {@link SecurityConfig} 주석이 사고로 기록한 네 건.
+     * 과거에 실제로 새어 본 경로들 — {@link SecurityConfig} 주석이 사고로 기록한 네 건 중,
+     * 이 저장소에 핸들러가 남아 있는 세 건(쿠폰 · VAN · 포인트 콘솔).
      *
      * <p>여기 있는 경로는 전부 "매처를 빠뜨려 {@code anyRequest().authenticated()} 로 떨어졌다"는
      * 같은 원인으로 열렸었다. 고친 뒤 다시 닫혔는지 지키는 것이 없어서 이 묶음을 남긴다 —
@@ -187,10 +92,7 @@ class SecurityAuthorizationMatrixTest {
                 "/coupons",                      // 쿠폰 조회·발행: 누구나 자기에게 100% 할인 쿠폰을 만들 수 있었다
                 "/admin/coupons",
                 "/admin/points/summary",         // 포인트 콘솔: 수기 지급은 없던 돈을 만든다
-                "/admin/gift-cards",
-                "/admin/payouts/1",              // 송금 실행
-                "/admin/deposits",
-                "/admin/expense-receipts"
+                "/admin/gift-cards"
         })
         void 일반_사용자는_403(String path) throws Exception {
             mvc.perform(get(path).with(user("u").roles("USER")))
@@ -201,14 +103,6 @@ class SecurityAuthorizationMatrixTest {
         @DisplayName("쿠폰 생성(POST /coupons)은 GET 과 별개로 막힌다")
         void 쿠폰_생성은_별도로_막힌다() throws Exception {
             mvc.perform(post("/coupons").with(user("u").roles("USER")).with(csrf()))
-                    .andExpect(status().isForbidden());
-        }
-
-        @Test
-        @DisplayName("보험 언더라이팅 승인은 접수자 권한으로 못 부른다")
-        void 언더라이팅_승인은_백오피스_전용() throws Exception {
-            mvc.perform(post("/api/insurance/applications/1/approve")
-                            .with(user("fc").roles("USER")).with(csrf()))
                     .andExpect(status().isForbidden());
         }
 
