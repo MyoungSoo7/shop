@@ -1,5 +1,7 @@
 package github.lms.lemuel.operation.board.application.service;
 
+import github.lms.lemuel.common.audit.application.Auditable;
+import github.lms.lemuel.common.audit.domain.AuditAction;
 import github.lms.lemuel.operation.board.application.port.in.ManageBoardUseCase;
 import github.lms.lemuel.operation.board.application.port.in.QueryBoardUseCase;
 import github.lms.lemuel.operation.board.application.port.out.LoadBoardDefinitionPort;
@@ -30,6 +32,15 @@ import java.util.Locale;
  *
  * <p>예외는 키 중복(존재 조회가 필요해 도메인이 알 수 없다)과 삭제 가드(애그리거트 하나로는
  * 판단되지만 저장소 삭제라는 응용 행위에 붙는다) 둘이다.
+ *
+ * <p><b>쓰기 5개는 전부 감사에 남는다.</b> 게시판을 닫고 지우는 것은 배포된 링크와 메뉴를
+ * 동시에 죽이는 조작인데, 지금까지는 누가 했는지 어디에도 남지 않았다 — 관리 API 가 인증 주체를
+ * 인자로 받지도 않았으니 기록이 빠진 게 아니라 <b>알 방법 자체가 없었다</b>. 행위자는 요청
+ * 필터가 채워 둔 {@code AuditContext}(JWT 주체)에서 오므로 시그니처는 그대로 둔다 — 본문·쿼리로
+ * 행위자를 받으면 남의 이름으로 조작할 수 있는 경로가 열린다(CurrentActor javadoc 과 같은 이유).
+ *
+ * <p>감사 어휘는 shared-common 의 {@link AuditAction} enum 이다. education 슬라이스처럼 자체
+ * 테이블에 문자열 액션을 넣으면 오타 한 번이 조용한 감사 유실이 된다.
  */
 @Service
 @RequiredArgsConstructor
@@ -42,6 +53,15 @@ public class BoardDefinitionService implements ManageBoardUseCase, QueryBoardUse
 
     @Override
     @Transactional
+    @Auditable(
+            action = AuditAction.BOARD_CREATED,
+            resourceType = "Board",
+            // 실패(키 중복)면 #result 가 null 이다. 널가드를 빼면 감사 행이 남긴 남되 상세가
+            // auditExpressionError 로 채워져 "무슨 게시판을 만들려다 실패했는지"가 사라진다.
+            resourceId = "#result == null ? null : #result.id.toString()",
+            detail = "{'boardKey': #p0.boardKey(), 'name': #p0.name(),"
+                    + " 'skin': #p0.skin() == null ? null : #p0.skin().name()}"
+    )
     public BoardDefinition create(CreateBoardCommand command) {
         BoardDefinition definition = BoardDefinition.create(
                 command.boardKey(),
@@ -62,6 +82,14 @@ public class BoardDefinitionService implements ManageBoardUseCase, QueryBoardUse
 
     @Override
     @Transactional
+    @Auditable(
+            action = AuditAction.BOARD_UPDATED,
+            resourceType = "Board",
+            resourceId = "#p0.toString()",
+            // 정책 전체를 상세에 넣지 않는다 — 권한 역할 목록까지 매 수정마다 복사하면 audit_logs 가
+            // 게시판 정의의 사본이 된다. 무엇이 바뀌었는지는 이름·스킨으로 짚고, 현재 정의는 게시판이 답한다.
+            detail = "{'name': #p1.name(), 'skin': #p1.skin() == null ? null : #p1.skin().name()}"
+    )
     public BoardDefinition update(Long id, UpdateBoardCommand command) {
         BoardDefinition definition = getById(id);
         definition.update(
@@ -77,6 +105,12 @@ public class BoardDefinitionService implements ManageBoardUseCase, QueryBoardUse
 
     @Override
     @Transactional
+    @Auditable(
+            action = AuditAction.BOARD_DEACTIVATED,
+            resourceType = "Board",
+            resourceId = "#p0.toString()",
+            detail = "{'boardKey': #result == null ? null : #result.boardKey}"
+    )
     public BoardDefinition deactivate(Long id) {
         BoardDefinition definition = getById(id);
         definition.deactivate(now());
@@ -85,6 +119,12 @@ public class BoardDefinitionService implements ManageBoardUseCase, QueryBoardUse
 
     @Override
     @Transactional
+    @Auditable(
+            action = AuditAction.BOARD_ACTIVATED,
+            resourceType = "Board",
+            resourceId = "#p0.toString()",
+            detail = "{'boardKey': #result == null ? null : #result.boardKey}"
+    )
     public BoardDefinition activate(Long id) {
         BoardDefinition definition = getById(id);
         definition.activate(now());
@@ -93,6 +133,15 @@ public class BoardDefinitionService implements ManageBoardUseCase, QueryBoardUse
 
     @Override
     @Transactional
+    @Auditable(
+            action = AuditAction.BOARD_DELETED,
+            resourceType = "Board",
+            resourceId = "#p0.toString()",
+            // 반환이 void 라 상세에 게시판 키를 실을 수 없다. 감사만 위해 반환형을 바꾸지는 않는다 —
+            // 삭제는 **닫힌 게시판만** 가능하므로 같은 resourceId 의 BOARD_DEACTIVATED 행이 앞서 있고,
+            // 그 행이 키를 갖고 있다. 두 행을 이으면 "무엇을 지웠나"가 나온다.
+            detail = "{'boardId': #p0}"
+    )
     public void delete(Long id) {
         BoardDefinition definition = getById(id);
         if (definition.isActive()) {

@@ -77,6 +77,21 @@ describe('AuditLogConsolePage', () => {
       expect(mocked.search.mock.calls.some(([scope]) => scope === 'SETTLEMENT')).toBe(true));
   });
 
+  it('운영 탭을 고르면 운영 감사 표면을 조회한다', async () => {
+    const user = userEvent.setup();
+    render(<AuditLogConsolePage />);
+    await waitFor(() => expect(mocked.search).toHaveBeenCalled());
+
+    await user.click(await screen.findByRole('tab', { name: /운영/ }));
+
+    await waitFor(() =>
+      expect(mocked.search.mock.calls.some(([scope]) => scope === 'OPERATION')).toBe(true));
+    // 액션 목록도 새 표면에서 다시 받아야 한다. 커머스 액션이 남아 있으면 운영자가 고른 값이
+    // 영원히 0건이 되고, 필터가 "없는 것"과 "안 하는 것"을 구분하지 못한다.
+    await waitFor(() =>
+      expect(mocked.actions.mock.calls.some(([scope]) => scope === 'OPERATION')).toBe(true));
+  });
+
   it('행 상세는 접혀 있고, 눌러야 detail_json 이 펼쳐진다', async () => {
     mocked.search.mockResolvedValue(pageWith());
     const user = userEvent.setup();

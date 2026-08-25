@@ -286,6 +286,43 @@ class SecurityFiltersTest {
         assertThat(captured[0].ipAddress()).isEqualTo("192.168.0.9");
     }
 
+    @Test
+    @DisplayName("AuthPrincipal 주체면 actor id 까지 채운다 — 이메일만으로는 행위자를 고정할 수 없다")
+    void auditContextResolvesActorIdFromPrincipal() throws Exception {
+        AuditContextFilter filter = new AuditContextFilter();
+        Authentication auth = mock(Authentication.class);
+        when(auth.isAuthenticated()).thenReturn(true);
+        when(auth.getPrincipal()).thenReturn(new AuthPrincipal(42L, "admin@test.com", "ADMIN"));
+        SecurityContextHolder.getContext().setAuthentication(auth);
+
+        MockHttpServletRequest req = new MockHttpServletRequest("POST", "/admin/boards");
+        req.setRemoteAddr("10.1.2.3");
+
+        AuditContext.AuditActor[] captured = new AuditContext.AuditActor[1];
+        FilterChain chain = (rq, rs) -> captured[0] = AuditContext.get();
+        filter.doFilter(req, new MockHttpServletResponse(), chain);
+
+        assertThat(captured[0].actorId()).isEqualTo(42L);
+        assertThat(captured[0].actorEmail()).isEqualTo("admin@test.com");
+    }
+
+    @Test
+    @DisplayName("구 토큰(주체가 문자열)이면 actor id 는 null 이고 이메일만 남는다")
+    void auditContextKeepsEmailWhenPrincipalHasNoId() throws Exception {
+        AuditContextFilter filter = new AuditContextFilter();
+        Authentication auth = mock(Authentication.class);
+        when(auth.isAuthenticated()).thenReturn(true);
+        when(auth.getPrincipal()).thenReturn("legacy@test.com");
+        SecurityContextHolder.getContext().setAuthentication(auth);
+
+        AuditContext.AuditActor[] captured = new AuditContext.AuditActor[1];
+        FilterChain chain = (rq, rs) -> captured[0] = AuditContext.get();
+        filter.doFilter(new MockHttpServletRequest("GET", "/orders"), new MockHttpServletResponse(), chain);
+
+        assertThat(captured[0].actorId()).isNull();
+        assertThat(captured[0].actorEmail()).isEqualTo("legacy@test.com");
+    }
+
     // ─── AuthPrincipal ───────────────────────────────────────────────────────
 
     @Test

@@ -10,7 +10,12 @@ import api from './axios';
  * <ul>
  *   <li><b>COMMERCE</b> (`/admin/audit-logs`) — 로그인·권한 변경·환불 요청 등 커머스 조작
  *   <li><b>SETTLEMENT</b> (`/admin/audit-trail`) — 지급 실행·차지백 판정·대사 마감 등 자금 조작
+ *   <li><b>OPERATION</b> (`/api/ops/audit-logs`) — 게시판 생성·수정·닫기·삭제 등 운영 조작
  * </ul>
+ *
+ * <p>운영 표면만 `/api/ops` 아래에 있는 것은 게이트웨이 사정이다 — `/admin/audit-logs` 는 이미
+ * 커머스로 가는 경로라 뒤에 온 서비스가 그 이름을 다시 쓸 수 없었다. 경로 모양이 다른 것이지
+ * 성격이 다른 게 아니다.
  *
  * <p>화면이 반드시 지켜야 할 것 —
  *
@@ -24,12 +29,13 @@ import api from './axios';
  */
 
 /** 어느 서비스의 감사 테이블을 볼 것인가. */
-export type AuditScope = 'COMMERCE' | 'SETTLEMENT';
+export type AuditScope = 'COMMERCE' | 'SETTLEMENT' | 'OPERATION';
 
 const BASE: Record<AuditScope, string> = {
   // 경로는 전체 리터럴로 적는다(point.ts 와 같은 이유 — grep 으로 배선을 추적할 수 있어야 한다).
   COMMERCE: '/admin/audit-logs',
   SETTLEMENT: '/admin/audit-trail',
+  OPERATION: '/api/ops/audit-logs',
 };
 
 export interface AuditLogRow {

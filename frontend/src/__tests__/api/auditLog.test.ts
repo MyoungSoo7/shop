@@ -44,6 +44,16 @@ describe('auditLogApi — 표면 분기', () => {
     });
   });
 
+  it('운영은 /api/ops/audit-logs 로 간다 — /admin/audit-logs 는 이미 커머스가 쓰는 이름이다', async () => {
+    mocked.get.mockResolvedValue({ data: { content: [] } } as never);
+
+    await auditLogApi.search('OPERATION', { from: '2026-08-01' });
+
+    expect(mocked.get).toHaveBeenCalledWith('/api/ops/audit-logs', {
+      params: { from: '2026-08-01' },
+    });
+  });
+
   it('액션별 건수·액션 목록도 고른 표면을 따른다', async () => {
     mocked.get.mockResolvedValue({ data: [] } as never);
 
@@ -52,6 +62,9 @@ describe('auditLogApi — 표면 분기', () => {
 
     await auditLogApi.actions('COMMERCE');
     expect(mocked.get).toHaveBeenCalledWith('/admin/audit-logs/actions');
+
+    await auditLogApi.actionCounts('OPERATION', {});
+    expect(mocked.get).toHaveBeenCalledWith('/api/ops/audit-logs/action-counts', { params: {} });
   });
 });
 

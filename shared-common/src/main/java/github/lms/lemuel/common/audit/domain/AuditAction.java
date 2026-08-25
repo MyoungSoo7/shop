@@ -99,6 +99,16 @@ public enum AuditAction {
     // 정보계 월마감 배치 — 셀러 월 정산 마트 적재 실행(성공/실패)의 잡 단위 감사 추적.
     MONTHLY_CLOSING_EXECUTED,
 
+    // ── operation-service (운영 관제 콘솔) 관리자 조작 ──
+    // 게시판 정의 관리. "게시판이 사라졌다"는 문의에 답하려면 누가 닫았는지·지웠는지가 남아야 한다.
+    // 닫기(비활성)와 삭제를 다른 액션으로 두는 이유는 되돌릴 수 있는 조작과 없는 조작이기 때문이다 —
+    // 감사에서 같은 무게로 묶으면 복구 가능 여부를 상세를 열어봐야 알게 된다.
+    BOARD_CREATED,
+    BOARD_UPDATED,
+    BOARD_DEACTIVATED,
+    BOARD_ACTIVATED,
+    BOARD_DELETED,
+
     // ── ai 슬라이스 (AI 챗봇 — ADR 0040 으로 settlement-service 에 흡수) ──
     // 사용자가 자기 대화를 삭제 — 발화(비정형 PII 가능)와 그 이력이 사라지는 사건이라 "누가 언제
     // 어떤 대화를 지웠나"를 되짚을 수 있어야 한다. 흡수 전 ai-service 는 자체 DB 에 같은 표준
