@@ -238,9 +238,6 @@ public class SecurityConfig {
                         .requestMatchers("/admin/backfill/**").hasRole("ADMIN")
                         // 지급후 회수 채권·상계 조회 콘솔 — 읽기 전용이라 MANAGER 도 허용 (seed-p0-6)
                         .requestMatchers("/admin/recoveries/**").hasAnyRole("ADMIN", "MANAGER")
-                        // 기업 신용대출 실행(실자금 지급) — 승인·실행 권한은 ADMIN 만.
-                        // 신용평가 조회(/credit)·신청(POST /loans/corporate)·목록 조회는 인증 사용자(CEO) 허용.
-                        .requestMatchers(HttpMethod.POST, "/loans/corporate/*/disburse").hasRole("ADMIN")
                         // 환불 콘솔 — 실패/재시도 소진 환불 조회(운영 개입용). 실행 없는 조회라 MANAGER 도 허용
                         .requestMatchers("/admin/refunds/**").hasAnyRole("ADMIN", "MANAGER")
                         // 정산 관련 API (관리자·매니저)

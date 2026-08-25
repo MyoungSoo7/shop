@@ -130,8 +130,14 @@ async function loginAs(page: Page, button: string, expectedPath: string) {
 /** 로그인 없이 볼 수 있는 화면. */
 const PUBLIC_ROUTES = ['/login'];
 
-/** USER 동선 — 주문·장바구니·마이페이지가 모바일 사용 비중이 가장 높다. */
-const USER_ROUTES = ['/order', '/cart', '/mypage', '/recommend', '/loans', '/ai/chat'];
+/**
+ * USER 동선 — 주문·장바구니·마이페이지가 모바일 사용 비중이 가장 높다.
+ *
+ * `/loans` 를 뺐다(2026-08-25). 여신은 이 저장소의 경계 밖이라 `App.tsx` 에 라우트가 없고,
+ * 그런 경로는 SPA 폴백 화면을 그린다 — `expectRouteReached` 는 `/login` 으로 튕겼는지만 보므로
+ * **통과하지만 아무것도 재지 않는다**. 목록에 남겨두면 초록이 커버리지처럼 보인다.
+ */
+const USER_ROUTES = ['/order', '/cart', '/mypage', '/recommend', '/ai/chat'];
 
 /**
  * ADMIN 동선 — 표가 많아 넘침이 가장 잘 나는 화면들.
