@@ -29,7 +29,10 @@
     ".github/workflows/harness-guard.yml",
     "scripts/harness/harness-audit.mjs",
     "scripts/harness/test/harness-audit-gate.test.mjs",
-    "scripts/verify.sh"
+    "scripts/verify.sh",
+    "scripts/harness/test/ci-changed-base-gate.test.mjs",
+    "scripts/harness/test/ci-artifact-layout-gate.test.mjs",
+    ".github/workflows/ci.yml"
   ],
   "docLinkIgnorePrefixes": [],
   "criticalContractPairs": [],
