@@ -6,6 +6,7 @@ import { orderApi } from '@/api/order';
 import { couponApi } from '@/api/coupon';
 import { authApi } from '@/api/auth';
 import { opsDashboardApi, TodayOverview, MetricCard } from '@/api/opsDashboard';
+import { revenueAdminApi, RevenueReport, toIsoDate } from '@/api/revenueAdmin';
 import { OrderResponse, ProductResponse, CouponResponse, CouponType, CouponCreateRequest } from '@/types';
 import Spinner from '@/components/Spinner';
 import { apiErrorMessage } from '@/lib/apiError';
@@ -17,6 +18,22 @@ const ORDER_PAGE_SIZE = 50;
 
 /** 개요 탭 "최근 주문" 건수. */
 const RECENT_ORDER_COUNT = 5;
+
+/** 매출 섹션이 보는 기간 — 오늘 포함 최근 N일. 서버 상한은 366일이다. */
+const REVENUE_DAYS = 30;
+
+/** 결제수단 라벨. 서버는 enum 이름을 주고 화면이 한글로 읽는다. */
+const TENDER_LABEL: Record<string, string> = {
+  CARD: '카드',
+  KAKAO_PAY: '카카오페이',
+  NAVER_PAY: '네이버페이',
+  PAYCO: '페이코',
+  SAMSUNG_PAY: '삼성페이',
+  BANK_TRANSFER: '무통장입금',
+  VIRTUAL_ACCOUNT: '가상계좌',
+  POINT: '포인트',
+  GIFT_CARD: '상품권',
+};
 
 const fmt = (v: number) =>
   new Intl.NumberFormat('ko-KR', { style: 'currency', currency: 'KRW' }).format(v);
@@ -170,6 +187,10 @@ const AdminDashboardPage: React.FC = () => {
   const [today, setToday] = useState<TodayOverview | null>(null);
   const [todayError, setTodayError] = useState<string | null>(null);
 
+  // 기간 매출 — 결제 원장 기준. 주문 상태 합계로 세던 옛 "총 매출"을 대신한다.
+  const [revenue, setRevenue] = useState<RevenueReport | null>(null);
+  const [revenueError, setRevenueError] = useState<string | null>(null);
+
   useEffect(() => {
     const load = async () => {
       try {
@@ -260,6 +281,24 @@ const AdminDashboardPage: React.FC = () => {
       .catch(() => setTodayError('오늘 집계를 불러오지 못했습니다.'));
   }, [isAdmin]);
 
+  /**
+   * 기간 매출 — 최근 {@link REVENUE_DAYS}일.
+   *
+   * 오늘 집계와 같은 이유로 따로 부르고 실패도 이 섹션 안에만 남긴다.
+   *
+   * MANAGER 도 부른다 — `/admin/revenue` 는 ADMIN·MANAGER 매처라 403 이 아니다
+   * (`/api/ops/**` 와 다르다).
+   */
+  useEffect(() => {
+    const to = new Date();
+    const from = new Date();
+    from.setDate(to.getDate() - (REVENUE_DAYS - 1));
+    revenueAdminApi
+      .report(toIsoDate(from), toIsoDate(to))
+      .then(setRevenue)
+      .catch(() => setRevenueError('매출 집계를 불러오지 못했습니다.'));
+  }, []);
+
   // ── 통계 계산 ──
   /**
    * 주문 쪽 숫자는 <b>전부</b> 서버 집계에서 온다. 목록 배열을 세면 페이징이 붙은 지금
@@ -269,14 +308,19 @@ const AdminDashboardPage: React.FC = () => {
   const stats = useMemo(() => {
     const countOf = (status: string) =>
       orderSummary?.statuses.find((s) => s.status === status)?.count ?? 0;
-    const amountOf = (status: string) => {
-      const raw = orderSummary?.statuses.find((s) => s.status === status)?.amountSum;
-      return raw === null || raw === undefined ? 0 : Number(raw);
-    };
 
+    /*
+      여기 있던 `totalRevenue: amountOf('PAID')` 를 뺐다.
+      그 값은 <b>현재 상태가 PAID 인 주문</b>의 주문금액 합이라, 주문이 발송(IN_TRANSIT)되거나
+      배송 완료(DELIVERED)되면 PAID 가 아니게 되면서 매출에서 빠졌다 — 장사가 굴러갈수록
+      줄어드는 숫자였다. 환불도 차감이 아니라 다른 상태 칸으로 옮겨갈 뿐이라 그냥 사라졌고,
+      결과는 늘 "그럴듯하게 작은" 값이라 아무도 이상하게 여기지 않았다.
+
+      매출은 주문 상태가 아니라 결제 원장(수납 시각·환불 완료 시각)에 달린다 —
+      `revenueAdminApi` 가 그 정의를 들고 있고, 그래서 기간이 반드시 붙는다.
+    */
     return {
       totalOrders:    orderSummary?.totalCount ?? 0,
-      totalRevenue:   amountOf('PAID'),
       paidCount:      countOf('PAID'),
       createdCount:   countOf('CREATED'),
       canceledCount:  countOf('CANCELED'),
@@ -478,9 +522,111 @@ const AdminDashboardPage: React.FC = () => {
               언젠가 죽는 구조였다. 라벨에 기간을 박는 것은 필수다 — 기간이 다른 숫자가
               라벨 없이 나란히 있으면 반드시 오독된다.
             */}
+            {/*
+              ── 매출 ──
+              주문 상태가 아니라 결제 원장에 달린 숫자다. 그래서 기간이 반드시 붙는다 —
+              "전 기간 매출"은 이 정의로 만들 수 없고, 만들 수 있는 척하는 것이 옛 카드의
+              문제였다.
+            */}
+            <section className="space-y-4">
+              <div className="flex items-baseline justify-between">
+                <h2 className="font-bold text-gray-900">매출</h2>
+                <span className="text-xs text-gray-400">
+                  {revenue ? `${revenue.from} ~ ${revenue.to}` : `최근 ${REVENUE_DAYS}일`}
+                </span>
+              </div>
+
+              {revenueError && <p className="text-sm text-red-600">{revenueError}</p>}
+              {!revenueError && !revenue && (
+                <p className="text-sm text-gray-400">매출 집계를 불러오는 중…</p>
+              )}
+
+              {revenue && (
+                <>
+                  <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+                    {/*
+                      순매출을 먼저 놓는다. 수납액만 크게 띄우면 환불이 눈에 안 들어오고,
+                      그러면 "매출은 늘었는데 왜 돈이 없지"가 된다.
+                      환불이 수납을 넘긴 기간은 음수다 — 숨기지 않고 그대로 적는다.
+                    */}
+                    <StatCard
+                      label={`순매출 (최근 ${REVENUE_DAYS}일)`}
+                      value={fmt(revenue.netAmount)}
+                      sub="수납액 − 환불액"
+                      color={revenue.netAmount < 0 ? 'bg-red-50' : 'bg-green-50'}
+                      icon={<svg className="w-5 h-5 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>}
+                    />
+                    <StatCard
+                      label="수납액"
+                      value={fmt(revenue.capturedAmount)}
+                      sub="실제로 결제가 잡힌 금액"
+                      color="bg-blue-50"
+                      icon={<svg className="w-5 h-5 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M3 10h18M7 15h1m4 0h1m-7 4h12a3 3 0 003-3V8a3 3 0 00-3-3H6a3 3 0 00-3 3v8a3 3 0 003 3z"/></svg>}
+                    />
+                    <StatCard
+                      label="환불액"
+                      value={fmt(revenue.refundedAmount)}
+                      sub="환불이 완료된 날 기준"
+                      color={revenue.refundedAmount > 0 ? 'bg-amber-50' : 'bg-gray-50'}
+                      icon={<svg className="w-5 h-5 text-amber-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M3 10h10a5 5 0 015 5v1M3 10l4-4M3 10l4 4"/></svg>}
+                    />
+                  </div>
+
+                  <div className="bg-white rounded-xl border border-gray-200 p-5">
+                    <h3 className="font-bold text-gray-900 mb-4">결제수단 구성</h3>
+
+                    {revenue.byTender.length === 0 && (
+                      <p className="text-sm text-gray-400">이 기간에 집계된 결제수단이 없습니다.</p>
+                    )}
+
+                    <div className="space-y-2">
+                      {revenue.byTender.map((t) => (
+                        <div key={t.tenderType} className="flex items-center justify-between text-sm">
+                          <span className="text-gray-700">
+                            {TENDER_LABEL[t.tenderType] ?? t.tenderType}
+                            {/*
+                              포인트·상품권은 이 기간에 새로 들어온 현금이 아니다 — 상품권은
+                              팔릴 때 이미 한 번 수납됐다. 카드와 같은 줄에 두되 표시로 갈라
+                              놓지 않으면 합쳐 읽는 순간 그만큼 이중으로 센다.
+                            */}
+                            {!t.usesExternalPg && (
+                              <span className="ml-2 text-xs text-gray-400">내부 잔액</span>
+                            )}
+                          </span>
+                          <span className="text-gray-900 font-medium">
+                            {fmt(t.amount)}
+                            <span className="ml-2 text-xs text-gray-400">{t.count.toLocaleString()}건</span>
+                          </span>
+                        </div>
+                      ))}
+
+                      {/*
+                        분할결제 도입 전 결제에는 수단 행이 없다. 이 줄을 빼면 구성 비율만
+                        그럴듯하게 남고 합이 수납액에 못 미치는 것을 볼 사람이 없어진다.
+                      */}
+                      {!revenue.tenderBreakdownComplete && (
+                        <div className="flex items-center justify-between text-sm border-t border-gray-100 pt-2 mt-2">
+                          <span className="text-amber-600">수단 미상</span>
+                          <span className="text-amber-600 font-medium">
+                            {fmt(revenue.unattributedAmount)}
+                          </span>
+                        </div>
+                      )}
+                    </div>
+
+                    {!revenue.tenderBreakdownComplete && (
+                      <p className="text-xs text-amber-600 mt-3">
+                        분할결제 도입 전 결제에는 수단 기록이 없어 수납액 전체를 설명하지 못합니다.
+                      </p>
+                    )}
+                  </div>
+                </>
+              )}
+            </section>
+
             <h2 className="font-bold text-gray-900">전체 기간</h2>
             {/* 통계 카드 */}
-            <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
               <StatCard
                 label="총 주문"
                 value={stats.totalOrders.toLocaleString()}
@@ -488,13 +634,12 @@ const AdminDashboardPage: React.FC = () => {
                 color="bg-blue-50"
                 icon={<svg className="w-5 h-5 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M16 11V7a4 4 0 00-8 0v4M5 9h14l1 12H4L5 9z"/></svg>}
               />
-              <StatCard
-                label="총 매출"
-                value={fmt(stats.totalRevenue)}
-                sub="결제 완료 기준"
-                color="bg-green-50"
-                icon={<svg className="w-5 h-5 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>}
-              />
+              {/*
+                "총 매출" 카드는 여기서 뺐다 — 이 묶음은 전 기간 누계인데 매출만은 전 기간으로
+                셀 수 없기 때문이다. 결제 원장 기준 매출은 위 "매출" 섹션이 기간을 붙여 보여 준다.
+                옛 카드는 상태가 PAID 인 주문의 주문금액 합이라 발송된 주문이 빠지고 환불이
+                차감되지 않았다(stats useMemo 주석 참조).
+              */}
               <StatCard
                 label="총 회원"
                 value={users.length.toLocaleString()}

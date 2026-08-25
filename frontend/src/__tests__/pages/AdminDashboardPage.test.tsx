@@ -8,6 +8,7 @@ import { productApi } from '@/api/product';
 import { orderApi } from '@/api/order';
 import { couponApi } from '@/api/coupon';
 import { authApi } from '@/api/auth';
+import { revenueAdminApi } from '@/api/revenueAdmin';
 
 vi.mock('@/api/admin', () => ({
   adminApi: { getOrders: vi.fn(), getOrderSummary: vi.fn(), getAllUsers: vi.fn() },
@@ -24,12 +25,22 @@ vi.mock('@/api/coupon', () => ({
 vi.mock('@/api/auth', () => ({
   authApi: { getCurrentUser: vi.fn() },
 }));
+/**
+ * 매출만 부분 모킹한다 — {@code toIsoDate} 는 진짜를 그대로 쓴다. 화면이 서버에 넘기는
+ * 기간 문자열을 만드는 것이 그 함수라, 여기서 가짜로 바꾸면 "기간을 어떻게 넘기는가"를
+ * 검증하는 케이스가 자기가 만든 값을 자기가 확인하는 꼴이 된다.
+ */
+vi.mock('@/api/revenueAdmin', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/api/revenueAdmin')>()),
+  revenueAdminApi: { report: vi.fn() },
+}));
 
 const mockedAdmin = vi.mocked(adminApi);
 const mockedProduct = vi.mocked(productApi);
 const mockedOrder = vi.mocked(orderApi);
 const mockedCoupon = vi.mocked(couponApi);
 const mockedAuth = vi.mocked(authApi);
+const mockedRevenue = vi.mocked(revenueAdminApi);
 
 const order = (over: Record<string, unknown> = {}) =>
   ({
@@ -67,6 +78,29 @@ const orderSummary = (
     totalCount: statuses.reduce((sum, s) => sum + s.count, 0),
     totalAmount: String(statuses.reduce((sum, s) => sum + Number(s.amountSum ?? 0), 0)),
     statuses,
+  }) as never;
+
+/**
+ * 기간 매출 응답. 화면의 매출 숫자는 <b>전부</b> 여기서 온다 — 주문 상태별 합계에서 오지 않는다.
+ *
+ * <p>기본값은 수단 구성이 수납액을 정확히 설명하는 상태({@code tenderBreakdownComplete: true})다.
+ * 설명하지 못하는 쪽이 특수 케이스이므로 그 테스트에서만 뒤집는다.
+ */
+const revenueReport = (over: Record<string, unknown> = {}) =>
+  ({
+    from: '2026-07-28',
+    to: '2026-08-26',
+    capturedAmount: 1230000,
+    refundedAmount: 30000,
+    netAmount: 1200000,
+    unattributedAmount: 0,
+    tenderBreakdownComplete: true,
+    daily: [],
+    byTender: [
+      { tenderType: 'CARD', usesExternalPg: true, count: 12, amount: 1000000 },
+      { tenderType: 'POINT', usesExternalPg: false, count: 4, amount: 230000 },
+    ],
+    ...over,
   }) as never;
 
 const product = (over: Record<string, unknown> = {}) =>
@@ -112,6 +146,7 @@ beforeEach(() => {
   mockedAdmin.getAllUsers.mockResolvedValue([user()] as never);
   mockedProduct.getAllProducts.mockResolvedValue([product()] as never);
   mockedCoupon.getAll.mockResolvedValue([coupon()] as never);
+  mockedRevenue.report.mockResolvedValue(revenueReport());
   confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(true);
   alertSpy = vi.spyOn(window, 'alert').mockImplementation(() => undefined);
 });
@@ -158,18 +193,111 @@ describe('AdminDashboardPage — 로드·권한', () => {
 });
 
 describe('AdminDashboardPage — 개요 탭', () => {
-  it('결제완료 주문만 매출로 집계한다', async () => {
+  /**
+   * 여기 있던 <b>'결제완료 주문만 매출로 집계한다'</b> 를 지웠다. 그 케이스는 매출을
+   * "현재 상태가 PAID 인 주문의 주문금액 합"으로 못박고 있었는데, 그게 바로 고친 결함이다.
+   *
+   * <p>그 정의에서는 주문이 발송(IN_TRANSIT)·배송완료(DELIVERED)로 넘어가는 순간 PAID 가
+   * 아니게 되면서 매출에서 빠진다 — 장사가 굴러갈수록 줄어드는 숫자였다. 환불도 차감이
+   * 아니라 다른 상태 칸으로 옮겨갈 뿐이라 그냥 사라졌다. 테스트가 초록이었던 이유는 계산이
+   * 맞아서가 아니라 <b>테스트가 같은 정의를 반복했기 때문</b>이다.
+   */
+  it('매출은 주문 상태 합계가 아니라 결제 원장에서 온다', async () => {
+    // 주문 집계에는 PAID 3만원이 있지만, 매출 카드는 이 값을 쳐다보지 않는다.
     mockedAdmin.getOrderSummary.mockResolvedValue(orderSummary([
       { status: 'PAID', count: 1, amountSum: '30000' },
-      { status: 'CREATED', count: 1, amountSum: '50000' },
-      { status: 'CANCELED', count: 1, amountSum: '10000' },
+      { status: 'DELIVERED', count: 5, amountSum: '900000' },
     ]));
     renderPage();
 
-    // 같은 금액이 최근 주문 카드에도 찍히므로 매출 카드 안으로 범위를 좁힌다
-    const revenueCard = (await screen.findByText('총 매출')).closest('div')!.parentElement!;
-    expect(within(revenueCard).getByText('₩30,000')).toBeInTheDocument();
+    const netCard = (await screen.findByText('순매출 (최근 30일)')).closest('div')!.parentElement!;
+    expect(within(netCard).getByText('₩1,200,000')).toBeInTheDocument();
+    // PAID 합계가 매출로 새어 들어오면 여기서 잡힌다
+    expect(within(netCard).queryByText('₩30,000')).not.toBeInTheDocument();
+
+    const capturedCard = (await screen.findByText('수납액')).closest('div')!.parentElement!;
+    expect(within(capturedCard).getByText('₩1,230,000')).toBeInTheDocument();
+
+    const refundCard = (await screen.findByText('환불액')).closest('div')!.parentElement!;
+    expect(within(refundCard).getByText('₩30,000')).toBeInTheDocument();
+
+    // 건수는 여전히 주문 집계에서 온다 — 매출만 원장으로 옮겼다
     expect(screen.getByText('결제완료 1건')).toBeInTheDocument();
+  });
+
+  it('전 기간 누계 묶음에는 매출 카드가 없다', async () => {
+    renderPage();
+
+    await screen.findByText('총 주문');
+    // "전 기간 매출"은 결제 원장 정의로 만들 수 없다. 다시 생기면 옛 결함이 돌아온 것이다.
+    expect(screen.queryByText('총 매출')).not.toBeInTheDocument();
+  });
+
+  it('환불이 수납보다 크면 순매출이 음수로 찍힌다', async () => {
+    // 지난달 판 것을 이번 달에 환불하면 이번 기간 순매출은 실제로 음수다.
+    // 0 으로 깎아 보여 주면 화면이 손실을 감춘다.
+    mockedRevenue.report.mockResolvedValue(revenueReport({
+      capturedAmount: 0, refundedAmount: 15000, netAmount: -15000, byTender: [],
+    }));
+    renderPage();
+
+    const netCard = (await screen.findByText('순매출 (최근 30일)')).closest('div')!.parentElement!;
+    expect(within(netCard).getByText('-₩15,000')).toBeInTheDocument();
+  });
+
+  it('수단 구성이 수납액을 다 설명하지 못하면 "수단 미상"을 함께 적는다', async () => {
+    // 분할결제 도입 전 결제에는 tender 행이 없다. 이 줄이 빠지면 구성 비율만 그럴듯하게
+    // 남고 합이 수납액에 못 미치는 것을 볼 사람이 없어진다.
+    mockedRevenue.report.mockResolvedValue(revenueReport({
+      capturedAmount: 1000000,
+      refundedAmount: 30000,
+      netAmount: 970000,
+      unattributedAmount: 200000,
+      tenderBreakdownComplete: false,
+      byTender: [{ tenderType: 'CARD', usesExternalPg: true, count: 8, amount: 800000 }],
+    }));
+    renderPage();
+
+    expect(await screen.findByText('수단 미상')).toBeInTheDocument();
+    expect(screen.getByText('₩200,000')).toBeInTheDocument();
+  });
+
+  it('구성이 완전하면 "수단 미상" 줄을 만들지 않는다', async () => {
+    renderPage();
+
+    expect(await screen.findByText('결제수단 구성')).toBeInTheDocument();
+    expect(screen.queryByText('수단 미상')).not.toBeInTheDocument();
+  });
+
+  it('포인트·상품권은 "내부 잔액"으로 갈라 적는다', async () => {
+    // 카드와 한 줄로 합쳐 읽으면 그만큼 이중으로 센다 — 상품권은 팔릴 때 이미 수납됐다.
+    renderPage();
+
+    const panel = (await screen.findByText('결제수단 구성')).parentElement!;
+    // 카드 줄에는 표시가 없고, 포인트 줄에만 붙는다
+    expect(within(panel).getByText('카드')).toBeInTheDocument();
+    expect(within(panel).getAllByText(/^포인트/).length).toBeGreaterThan(0);
+    expect(within(panel).getByText('내부 잔액')).toBeInTheDocument();
+  });
+
+  it('매출 조회가 실패해도 화면은 살아 있고 매출만 오류를 적는다', async () => {
+    // 주문·상품이 멀쩡한데 매출 하나 때문에 대시보드 전체가 빈 화면이 되면 안 된다.
+    mockedRevenue.report.mockRejectedValue(new Error('down'));
+    renderPage();
+
+    expect(await screen.findByText('매출 집계를 불러오지 못했습니다.')).toBeInTheDocument();
+    expect(screen.getByText('총 주문')).toBeInTheDocument();
+  });
+
+  it('최근 30일을 종료일 포함으로 요청한다', async () => {
+    renderPage();
+
+    await waitFor(() => expect(mockedRevenue.report).toHaveBeenCalled());
+    const [from, to] = mockedRevenue.report.mock.calls[0];
+    // 30일이면 오늘 포함 30개 — 29일 전부터다. 30일 전부터면 31일치를 부른 것이다.
+    const days = (Date.parse(to) - Date.parse(from)) / 86_400_000;
+    expect(days).toBe(29);
+    expect(from).toMatch(/^\d{4}-\d{2}-\d{2}$/);
   });
 
   it('건수는 목록 배열이 아니라 서버 집계에서 온다 — 한 페이지만 받아도 전체가 찍힌다', async () => {

@@ -121,6 +121,43 @@ class SecurityAuthorizationMatrixTest {
     }
 
     /**
+     * 매출 콘솔 — 회사 전체 매출이 한 화면에 나오는 경로.
+     *
+     * <p>과거 사고 목록에 없는 <b>새 경로</b>라 여기 따로 둔다. 앞의 네 건이 전부 "매처를 빠뜨려
+     * {@code anyRequest().authenticated()} 로 떨어졌다"는 같은 원인이었으므로, 새 관리자 경로는
+     * 열리는 날부터 이 검증을 달고 들어온다 — 사고가 난 뒤에 추가하면 이미 한 번 샌 것이다.
+     *
+     * <p>끝의 {@code /**} 케이스가 있는 이유: 매처를 {@code "/admin/revenue"} 하나로만 적으면
+     * 지금은 통과하지만 하위 경로를 하나 더 여는 순간 그 경로만 조용히 열린다.
+     */
+    @Nested
+    @DisplayName("매출 콘솔 — 관리자·매니저 전용")
+    class RevenueConsole {
+
+        @ParameterizedTest(name = "USER → 403: {0}")
+        @ValueSource(strings = {"/admin/revenue", "/admin/revenue/anything"})
+        void 일반_사용자는_403(String path) throws Exception {
+            mvc.perform(get(path).with(user("u").roles("USER")))
+                    .andExpect(status().isForbidden());
+        }
+
+        @ParameterizedTest(name = "{0} → 통과")
+        @ValueSource(strings = {"ADMIN", "MANAGER"})
+        void 운영자는_통과한다(String role) throws Exception {
+            mvc.perform(get("/admin/revenue").with(user("op").roles(role)))
+                    .andExpect(status().isOk());
+        }
+
+        /** 인증 자체가 없으면 403 이 아니라 401 이다 — 두 축을 섞지 않는다. */
+        @Test
+        @DisplayName("미인증은 401")
+        void 미인증은_401() throws Exception {
+            mvc.perform(get("/admin/revenue"))
+                    .andExpect(status().isUnauthorized());
+        }
+    }
+
+    /**
      * 프로브 — 모든 경로를 200 으로 받는다.
      *
      * <p>핸들러가 없으면 인가를 통과한 요청이 404 로 떨어져 "통과"와 "경로 없음"이 섞인다.
