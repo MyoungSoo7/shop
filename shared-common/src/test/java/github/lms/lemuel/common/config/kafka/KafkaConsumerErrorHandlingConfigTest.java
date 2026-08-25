@@ -33,7 +33,9 @@ class KafkaConsumerErrorHandlingConfigTest {
             .withUserConfiguration(TestSupportConfig.class, KafkaConsumerErrorHandlingConfig.class)
             .withPropertyValues(
                     "spring.kafka.bootstrap-servers=localhost:9092",
-                    "spring.application.name=lemuel-settlement");
+                    // 이 저장소에 실재하는 이름을 쓴다(lemuel-settlement 는 여기 없는 서비스였다).
+                    // lemuel-operation 은 접두를 떼는 경로도 함께 태운다 → 접두 operation.
+                    "spring.application.name=lemuel-operation");
 
     @Configuration(proxyBeanMethods = false)
     static class TestSupportConfig {
@@ -163,11 +165,14 @@ class KafkaConsumerErrorHandlingConfigTest {
         @Test
         @DisplayName("spring.application.name 의 lemuel- 접두를 떼어 기존 알람 규칙과 같은 이름을 쓴다")
         void derivesPrefixFromApplicationName() {
-            // monitoring/alert-rules.yml 이 settlement_kafka_dlt_published_total 을 참조한다.
-            assertThat(KafkaConsumerErrorHandlingConfig.resolveMetricPrefix("lemuel-settlement"))
-                    .isEqualTo("settlement");
-            assertThat(KafkaConsumerErrorHandlingConfig.resolveMetricPrefix("lemuel-account"))
-                    .isEqualTo("account");
+            // 이 저장소가 실제로 의존하는 두 좌표 — 여기가 바뀌면 alert-rules.yml 의 룰이
+            // 존재하지 않는 시계열을 보게 되고, 발화하지 않는 채로 조용히 죽는다.
+            //   order-service     spring.application.name=lemuel           → lemuel_kafka_*
+            //   operation-service spring.application.name=lemuel-operation → operation_kafka_*
+            assertThat(KafkaConsumerErrorHandlingConfig.resolveMetricPrefix("lemuel"))
+                    .isEqualTo("lemuel");
+            assertThat(KafkaConsumerErrorHandlingConfig.resolveMetricPrefix("lemuel-operation"))
+                    .isEqualTo("operation");
         }
 
         @Test
@@ -184,8 +189,8 @@ class KafkaConsumerErrorHandlingConfigTest {
             runner.withPropertyValues("app.kafka.enabled=true").run(context -> {
                 MeterRegistry registry = context.getBean(MeterRegistry.class);
                 context.getBean(DefaultErrorHandler.class); // 지연 생성 방지
-                assertThat(registry.find("settlement.kafka.dlt.published").counter()).isNotNull();
-                assertThat(registry.find("settlement.kafka.retry").counter()).isNotNull();
+                assertThat(registry.find("operation.kafka.dlt.published").counter()).isNotNull();
+                assertThat(registry.find("operation.kafka.retry").counter()).isNotNull();
             });
         }
 

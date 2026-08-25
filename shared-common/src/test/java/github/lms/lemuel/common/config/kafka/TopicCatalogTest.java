@@ -193,9 +193,12 @@ class TopicCatalogTest {
         @Test
         @DisplayName("빈 스캔으로 통과하지 않는다 — 토픽이 비정상적으로 적으면 파서가 깨진 것이다")
         void isNotAccidentallyEmpty() {
+            // 하한 40 은 settlement 시절(정산·대출·카드 포함) 값이었다. 쇼핑몰만 떼어 오면서
+            // 카탈로그가 커머스 21개로 줄었는데 이 숫자는 안 따라와서, 파서가 멀쩡한데도 깨졌다.
+            // 하한은 "파싱이 죽어 0~몇 건만 읽히는 것"을 잡으려는 것이므로 현재 규모에 맞춰 다시 잡는다.
             assertThat(catalog.all().size())
-                    .as("cross-service 토픽은 40개를 넘는다 — 이보다 적으면 리소스 로딩이나 파싱이 깨졌다")
-                    .isGreaterThanOrEqualTo(40);
+                    .as("커머스 cross-service 토픽은 20개를 넘는다 — 이보다 적으면 리소스 로딩이나 파싱이 깨졌다")
+                    .isGreaterThanOrEqualTo(20);
         }
 
         @Test
