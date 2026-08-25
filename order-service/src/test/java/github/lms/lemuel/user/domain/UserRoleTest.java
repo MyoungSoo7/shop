@@ -1,5 +1,6 @@
 package github.lms.lemuel.user.domain;
 
+import github.lms.lemuel.common.exception.UnknownEnumValueException;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
@@ -28,9 +29,25 @@ class UserRoleTest {
         assertThat(UserRole.fromString("user")).isEqualTo(UserRole.USER);
     }
 
-    @Test @DisplayName("fromString: 유효하지 않은 값이면 USER 반환")
+    @Test @DisplayName("fromString: 모르는 값은 던진다 — USER 로 떨어뜨리면 권한 문제로 둔갑한다")
     void fromString_invalid() {
-        assertThat(UserRole.fromString("INVALID")).isEqualTo(UserRole.USER);
-        assertThat(UserRole.fromString("")).isEqualTo(UserRole.USER);
+        assertThatThrownBy(() -> UserRole.fromString("INVALID"))
+                .isInstanceOf(UnknownEnumValueException.class)
+                .hasMessageContaining("INVALID");
+        assertThatThrownBy(() -> UserRole.fromString("")).isInstanceOf(UnknownEnumValueException.class);
+        assertThatThrownBy(() -> UserRole.fromString(null)).isInstanceOf(UnknownEnumValueException.class);
+    }
+
+    @Test @DisplayName("fromStringOrNull: 모르는 값은 null — 조회 필터가 쓰는 관대한 쪽")
+    void fromStringOrNull_lenient() {
+        assertThat(UserRole.fromStringOrNull("manager")).isEqualTo(UserRole.MANAGER);
+        assertThat(UserRole.fromStringOrNull("INVALID")).isNull();
+        assertThat(UserRole.fromStringOrNull("  ")).isNull();
+        assertThat(UserRole.fromStringOrNull(null)).isNull();
+    }
+
+    @Test @DisplayName("앞뒤 공백은 다듬는다 — 폼에서 딸려 오는 공백 하나로 400 이 나지는 않게")
+    void fromString_trims() {
+        assertThat(UserRole.fromString("  admin  ")).isEqualTo(UserRole.ADMIN);
     }
 }

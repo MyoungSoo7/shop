@@ -55,8 +55,11 @@ public class AuthController {
                           "lemuel.demo.enabled=true 일 때만 허용.")
     @ApiResponses({
             @ApiResponse(responseCode = "200", description = "토큰 발급"),
+            @ApiResponse(responseCode = "400", description = "알 수 없는 역할"),
             @ApiResponse(responseCode = "404", description = "데모 모드 비활성")
     })
+    // 모르는 역할은 400 이다. 예전에는 USER 로 조용히 떨어져, ADMIN 을 요청했는데 일반 사용자
+    // 토큰을 받고도 그 사실을 알 방법이 없었다.
     @PostMapping("/dev/auto-login")
     public ResponseEntity<LoginResponse> autoLogin(
             @Parameter(description = "USER | MANAGER | ADMIN", example = "USER")

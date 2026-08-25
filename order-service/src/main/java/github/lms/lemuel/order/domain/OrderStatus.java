@@ -1,8 +1,11 @@
 package github.lms.lemuel.order.domain;
 
+import github.lms.lemuel.common.exception.UnknownEnumValueException;
+
 import java.util.Collections;
 import java.util.EnumMap;
 import java.util.EnumSet;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
 
@@ -66,11 +69,31 @@ public enum OrderStatus {
         return ALLOWED.getOrDefault(this, Collections.emptySet()).isEmpty();
     }
 
+    /**
+     * 문자열을 주문 상태로 옮긴다. 모르는 값이면 던진다.
+     *
+     * <p>예전 기본값은 {@link #CREATED} 였다. 종단 상태(환불·취소 완료)로 끝난 주문이
+     * 읽기에 실패하는 순간 <b>방금 만든 주문</b>이 되고, {@link #canTransitionTo} 는 거기서부터
+     * 취소·결제를 다시 허용한다. 상태머신을 아무리 촘촘히 짜도 입구에서 상태를 지어내면
+     * 소용이 없다.
+     */
     public static OrderStatus fromString(String status) {
+        OrderStatus parsed = fromStringOrNull(status);
+        if (parsed == null) {
+            throw new UnknownEnumValueException(OrderStatus.class, status);
+        }
+        return parsed;
+    }
+
+    /** 모르는 값·빈 값이면 {@code null}. 조회 필터처럼 던지지 않는 쪽이 옳은 자리에서만 쓴다. */
+    public static OrderStatus fromStringOrNull(String status) {
+        if (status == null || status.isBlank()) {
+            return null;
+        }
         try {
-            return OrderStatus.valueOf(status.toUpperCase());
-        } catch (Exception e) {
-            return CREATED; // 기본값
+            return OrderStatus.valueOf(status.trim().toUpperCase(Locale.ROOT));
+        } catch (IllegalArgumentException e) {
+            return null;
         }
     }
 }

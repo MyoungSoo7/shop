@@ -1,5 +1,6 @@
 package github.lms.lemuel.product.domain;
 
+import github.lms.lemuel.common.exception.UnknownEnumValueException;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
@@ -35,13 +36,23 @@ class ProductStatusTest {
         assertThat(ProductStatus.fromString(value)).isEqualTo(ProductStatus.valueOf(value.toUpperCase()));
     }
 
-    @Test @DisplayName("fromString: 유효하지 않은 문자열이면 ACTIVE를 반환한다")
-    void fromString_invalid_returnsActive() {
-        assertThat(ProductStatus.fromString("INVALID")).isEqualTo(ProductStatus.ACTIVE);
+    @Test @DisplayName("fromString: 모르는 문자열은 던진다 — ACTIVE 로 떨어지면 단종 상품이 판매 중이 된다")
+    void fromString_invalid_throws() {
+        assertThatThrownBy(() -> ProductStatus.fromString("INVALID"))
+                .isInstanceOf(UnknownEnumValueException.class)
+                .hasMessageContaining("INVALID");
     }
 
-    @Test @DisplayName("fromString: 빈 문자열이면 ACTIVE를 반환한다")
-    void fromString_empty_returnsActive() {
-        assertThat(ProductStatus.fromString("")).isEqualTo(ProductStatus.ACTIVE);
+    @Test @DisplayName("fromString: 빈 문자열·null 도 던진다")
+    void fromString_empty_throws() {
+        assertThatThrownBy(() -> ProductStatus.fromString("")).isInstanceOf(UnknownEnumValueException.class);
+        assertThatThrownBy(() -> ProductStatus.fromString(null)).isInstanceOf(UnknownEnumValueException.class);
+    }
+
+    @Test @DisplayName("fromStringOrNull: 모르는 문자열은 null")
+    void fromStringOrNull_lenient() {
+        assertThat(ProductStatus.fromStringOrNull("discontinued")).isEqualTo(ProductStatus.DISCONTINUED);
+        assertThat(ProductStatus.fromStringOrNull("INVALID")).isNull();
+        assertThat(ProductStatus.fromStringOrNull(null)).isNull();
     }
 }

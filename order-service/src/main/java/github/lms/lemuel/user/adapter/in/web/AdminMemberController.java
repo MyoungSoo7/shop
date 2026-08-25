@@ -190,9 +190,11 @@ public class AdminMemberController {
     /**
      * 문자열 필터를 enum 으로 옮긴다.
      *
-     * <p>모르는 이름은 <b>필터 미적용</b>으로 흘린다. {@code UserRole.fromString} 처럼 USER 로
-     * 기본값을 주면 오타 하나가 "USER 만 조회"로 조용히 바뀌어, 운영자는 찾는 사람이 없다고
-     * 결론짓는다. 조건을 빼는 편이 넓게 보여 줄 뿐 거짓말은 하지 않는다.
+     * <p>모르는 이름은 <b>필터 미적용</b>으로 흘린다. 그럴듯한 값으로 기본값을 주면 오타 하나가
+     * "USER 만 조회"로 조용히 바뀌어, 운영자는 찾는 사람이 없다고 결론짓는다. 조건을 빼는 편이
+     * 넓게 보여 줄 뿐 거짓말은 하지 않는다. 여기서 던지지 않는 것도 같은 이유다 — 조회 화면은
+     * 오타에 400 을 뱉기보다 넓게 보여 주는 쪽이 낫다. 값 하나를 <b>정해야</b> 하는 자리
+     * (로그인·영속화)에서는 반대로 {@code fromString} 이 던진다.
      */
     private static MemberQuery toQuery(String keyword, String role, String status, Boolean active,
                                        LocalDate joinedFrom, LocalDate joinedTo, int page, int size) {
@@ -207,7 +209,9 @@ public class AdminMemberController {
             return null;
         }
         try {
-            return Enum.valueOf(type, raw.trim().toUpperCase());
+            // Locale.ROOT 고정 — 터키어 로케일에서 "admin".toUpperCase() 는 "ADMİN" 이라
+            // 서버가 뜬 지역에 따라 같은 필터가 다르게 먹는다.
+            return Enum.valueOf(type, raw.trim().toUpperCase(java.util.Locale.ROOT));
         } catch (IllegalArgumentException e) {
             return null;
         }

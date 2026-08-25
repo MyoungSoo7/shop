@@ -1,5 +1,6 @@
 package github.lms.lemuel.order.domain;
 
+import github.lms.lemuel.common.exception.UnknownEnumValueException;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.DisplayName;
 
@@ -43,5 +44,29 @@ class OrderStatusTest {
         assertThat(OrderStatus.REFUNDED.isTerminal()).isTrue();
         assertThat(OrderStatus.REFUND_COMPLETED.isTerminal()).isTrue();
         assertThat(OrderStatus.REFUNDED.canTransitionTo(OrderStatus.PAID)).isFalse();
+    }
+
+    @Test @DisplayName("fromString: 대소문자·공백을 다듬어 읽는다")
+    void fromString_parses() {
+        assertThat(OrderStatus.fromString("paid")).isEqualTo(OrderStatus.PAID);
+        assertThat(OrderStatus.fromString("  REFUNDED ")).isEqualTo(OrderStatus.REFUNDED);
+    }
+
+    @Test @DisplayName("fromString: 모르는 값은 던진다 — CREATED 로 떨어지면 종단 주문이 되살아난다")
+    void fromString_rejectsUnknown() {
+        assertThatThrownBy(() -> OrderStatus.fromString("NOPE"))
+                .isInstanceOf(UnknownEnumValueException.class)
+                .hasMessageContaining("NOPE");
+        assertThatThrownBy(() -> OrderStatus.fromString(null))
+                .isInstanceOf(UnknownEnumValueException.class);
+        // 왜 위험한지: 기본값이 CREATED 면 아래 전이가 다시 열린다.
+        assertThat(OrderStatus.CREATED.canTransitionTo(OrderStatus.CANCELED)).isTrue();
+    }
+
+    @Test @DisplayName("fromStringOrNull: 모르는 값은 null")
+    void fromStringOrNull_lenient() {
+        assertThat(OrderStatus.fromStringOrNull("paid")).isEqualTo(OrderStatus.PAID);
+        assertThat(OrderStatus.fromStringOrNull("NOPE")).isNull();
+        assertThat(OrderStatus.fromStringOrNull(null)).isNull();
     }
 }

@@ -1,9 +1,11 @@
 package github.lms.lemuel.user.domain;
 
+import github.lms.lemuel.common.exception.UnknownEnumValueException;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 class MembershipStatusTest {
 
@@ -13,10 +15,19 @@ class MembershipStatusTest {
         assertThat(MembershipStatus.fromString("SUSPENDED")).isEqualTo(MembershipStatus.SUSPENDED);
     }
 
-    @Test @DisplayName("fromString - 알 수 없거나 null 이면 PENDING 기본값")
-    void fromString_fallback() {
-        assertThat(MembershipStatus.fromString("nope")).isEqualTo(MembershipStatus.PENDING);
-        assertThat(MembershipStatus.fromString(null)).isEqualTo(MembershipStatus.PENDING);
+    @Test @DisplayName("fromString - 모르는 값은 던진다 (PENDING 으로 떨어지면 승인된 회원이 대기로 둔갑)")
+    void fromString_rejectsUnknown() {
+        assertThatThrownBy(() -> MembershipStatus.fromString("nope"))
+                .isInstanceOf(UnknownEnumValueException.class);
+        assertThatThrownBy(() -> MembershipStatus.fromString(null))
+                .isInstanceOf(UnknownEnumValueException.class);
+    }
+
+    @Test @DisplayName("fromStringOrNull - 모르는 값은 null")
+    void fromStringOrNull_lenient() {
+        assertThat(MembershipStatus.fromStringOrNull("approved")).isEqualTo(MembershipStatus.APPROVED);
+        assertThat(MembershipStatus.fromStringOrNull("nope")).isNull();
+        assertThat(MembershipStatus.fromStringOrNull(null)).isNull();
     }
 
     @Test @DisplayName("canUseService - APPROVED 만 true")
