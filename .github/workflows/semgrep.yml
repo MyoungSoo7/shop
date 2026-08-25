@@ -37,10 +37,11 @@ jobs:
 
       # 컨테이너(semgrep/semgrep, alpine) 대신 pip 설치를 쓴다 —
       # alpine 컨테이너에서는 node20 기반 액션(actions/checkout)이 깨진다.
+      # cache: pip 은 쓰지 않는다 — 이 저장소에는 requirements.txt·pyproject.toml 이 없어
+      # setup-python 이 캐시 키를 만들지 못하고 잡 자체가 실패한다(파이썬은 semgrep 설치용일 뿐이다).
       - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
         with:
           python-version: "3.12"
-          cache: pip
 
       # 버전 고정 + 휠 전용 설치: SAST 결과가 러너마다 달라지지 않게 하고(같은 엔진·같은 룰 해석),
       # sdist 의 setup.py 실행 경로를 막는다. 버전 상향은 이 줄을 바꾸는 명시적 커밋으로만.

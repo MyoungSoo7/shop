@@ -337,8 +337,6 @@ app:
       # 기본 OFF — 사람 확인 없이 수수료·정산주기·홀드백이 바뀌지 않게 한다. 운영 절차는
       # POST /admin/seller-tiers/evaluate (미리보기) → 결과 확인 → ?dryRun=false (반영).
       enabled: ${APP_SELLER_TIER_AUTO_EVALUATE_ENABLED:false}
-  search:
-    enabled: false
   jwt:
     issuer: ${JWT_ISSUER}
     secret: ${JWT_SECRET}
