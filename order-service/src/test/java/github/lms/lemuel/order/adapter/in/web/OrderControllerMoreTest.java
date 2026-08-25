@@ -5,10 +5,12 @@ import github.lms.lemuel.order.application.port.in.ChangeOrderStatusUseCase;
 import github.lms.lemuel.order.application.port.in.CreateOrderUseCase;
 import github.lms.lemuel.order.application.port.in.GetOrderUseCase;
 import github.lms.lemuel.order.application.port.in.IdempotentMultiItemOrderUseCase;
+import github.lms.lemuel.order.application.port.in.SearchOrdersUseCase;
 import github.lms.lemuel.order.domain.Order;
 import github.lms.lemuel.order.domain.ShippingAddressSnapshot;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
+import org.mockito.ArgumentCaptor;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.boot.webmvc.test.autoconfigure.WebMvcTest;
@@ -52,6 +54,7 @@ class OrderControllerMoreTest {
     @MockitoBean github.lms.lemuel.order.application.port.in.CancelOrderItemsUseCase cancelOrderItemsUseCase;
     @MockitoBean github.lms.lemuel.order.application.port.in.WithdrawOrderRequestUseCase withdrawOrderRequestUseCase;
     @MockitoBean github.lms.lemuel.order.application.port.in.PreviewCouponUseCase previewCouponUseCase;
+    @MockitoBean github.lms.lemuel.order.application.port.in.SearchOrdersUseCase searchOrdersUseCase;
 
     /** JWT 주체를 SecurityContext 에 직접 세팅(addFilters=false 슬라이스 대응 — OrderControllerTest 와 동일). */
     private static void login(long uid, String role) {
@@ -202,12 +205,70 @@ class OrderControllerMoreTest {
     }
 
     @Test
-    @DisplayName("GET /orders/admin/all: 전체 주문")
-    void getAllOrders() throws Exception {
-        when(getOrderUseCase.getAllOrders()).thenReturn(List.of(order()));
-        mockMvc.perform(get("/orders/admin/all"))
+    @DisplayName("GET /orders/admin: 주문 페이지 — 전체 규모가 페이지 밖에 있다")
+    void searchOrders() throws Exception {
+        when(searchOrdersUseCase.search(any()))
+                .thenReturn(new SearchOrdersUseCase.OrderPage(List.of(order()), 0, 50, 137L, 3));
+
+        mockMvc.perform(get("/orders/admin"))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$[0].id").value(7));
+                .andExpect(jsonPath("$.content[0].id").value(7))
+                // 137건 중 1건만 실려 왔다는 사실이 응답 안에 있어야 한다. 없으면 화면은
+                // content.length 를 총 건수로 쓰고, 그 숫자는 조용히 틀린다.
+                .andExpect(jsonPath("$.totalElements").value(137))
+                .andExpect(jsonPath("$.totalPages").value(3))
+                .andExpect(jsonPath("$.page").value(0));
+    }
+
+    @Test
+    @DisplayName("GET /orders/admin: status 를 여러 번 주면 그대로 전달된다")
+    void searchOrdersWithRepeatedStatus() throws Exception {
+        when(searchOrdersUseCase.search(any()))
+                .thenReturn(new SearchOrdersUseCase.OrderPage(List.of(), 0, 50, 0L, 0));
+
+        mockMvc.perform(get("/orders/admin")
+                        .param("status", "CANCELLATION_REQUESTED")
+                        .param("status", "REFUND_REQUESTED")
+                        .param("page", "2")
+                        .param("size", "20"))
+                .andExpect(status().isOk());
+
+        ArgumentCaptor<SearchOrdersUseCase.OrderQuery> captor =
+                ArgumentCaptor.forClass(SearchOrdersUseCase.OrderQuery.class);
+        verify(searchOrdersUseCase).search(captor.capture());
+        // 승인 큐가 두 상태를 한 번에 묻는 경로다. 하나로 접히면 그 화면은 대기 건의
+        // 절반을 조용히 못 본다.
+        org.assertj.core.api.Assertions.assertThat(captor.getValue().statuses())
+                .containsExactly("CANCELLATION_REQUESTED", "REFUND_REQUESTED");
+        org.assertj.core.api.Assertions.assertThat(captor.getValue().page()).isEqualTo(2);
+        org.assertj.core.api.Assertions.assertThat(captor.getValue().size()).isEqualTo(20);
+    }
+
+    @Test
+    @DisplayName("GET /orders/admin/summary: 상태별 집계와 총합")
+    void orderSummary() throws Exception {
+        when(searchOrdersUseCase.countByStatus(any())).thenReturn(List.of(
+                new SearchOrdersUseCase.OrderStatusCount("PAID", 10L, new BigDecimal("1000.00")),
+                new SearchOrdersUseCase.OrderStatusCount("CANCELED", 2L, new BigDecimal("200.00"))));
+
+        mockMvc.perform(get("/orders/admin/summary"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.totalCount").value(12))
+                .andExpect(jsonPath("$.totalAmount").value(1200.00))
+                .andExpect(jsonPath("$.statuses[0].status").value("PAID"))
+                .andExpect(jsonPath("$.statuses[0].count").value(10));
+    }
+
+    @Test
+    @DisplayName("GET /orders/admin/summary: 금액이 없어도 총합은 0 이지 null 이 아니다")
+    void orderSummaryWithNullAmount() throws Exception {
+        when(searchOrdersUseCase.countByStatus(any())).thenReturn(List.of(
+                new SearchOrdersUseCase.OrderStatusCount("CREATED", 3L, null)));
+
+        mockMvc.perform(get("/orders/admin/summary"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.totalCount").value(3))
+                .andExpect(jsonPath("$.totalAmount").value(0));
     }
 
     @Test

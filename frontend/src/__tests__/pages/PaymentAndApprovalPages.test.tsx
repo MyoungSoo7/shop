@@ -21,7 +21,7 @@ vi.mock('@/contexts/useToast', () => ({ useToast: () => ({ showToast }) }));
 vi.mock('@/api/payment', () => ({
   paymentApi: { confirmTossPayment: vi.fn(), confirmTossCartPayment: vi.fn() },
 }));
-vi.mock('@/api/admin', () => ({ adminApi: { getAllOrders: vi.fn() } }));
+vi.mock('@/api/admin', () => ({ adminApi: { getOrders: vi.fn() } }));
 vi.mock('@/api/orderWorkflow', async (importOriginal) => {
   const actual = await importOriginal<typeof import('@/api/orderWorkflow')>();
   return {
@@ -44,6 +44,20 @@ const order = (over: Record<string, unknown> = {}) =>
     amount: 20000,
     status: 'CANCELLATION_REQUESTED',
     createdAt: '2026-08-01T00:00:00Z',
+    ...over,
+  }) as never;
+
+/**
+ * 승인 대기 큐 한 페이지. 상태 필터는 서버가 건다 — 여기 담기는 건 이미 걸러진 결과다.
+ * totalElements 를 배열보다 크게 주면 "페이지에 안 담긴 대기 건"을 흉내낼 수 있다.
+ */
+const queuePage = (content: unknown[], over: Record<string, unknown> = {}) =>
+  ({
+    content,
+    page: 0,
+    size: 200,
+    totalElements: content.length,
+    totalPages: content.length === 0 ? 0 : 1,
     ...over,
   }) as never;
 
@@ -130,45 +144,57 @@ describe('TossPaymentSuccess', () => {
 describe('OrderApprovalPage', () => {
   const renderPage = () => render(<OrderApprovalPage />);
 
-  it('승인 대기 상태(취소·환불 신청)만 골라 보여 준다', async () => {
-    mockedAdmin.getAllOrders.mockResolvedValue([
+  it('승인 대기 상태(취소·환불 신청)를 서버 조건으로 걸러 받는다', async () => {
+    mockedAdmin.getOrders.mockResolvedValue(queuePage([
       order({ id: 100, status: 'CANCELLATION_REQUESTED' }),
-      order({ id: 101, status: 'PAID' }),
       order({ id: 102, status: 'REFUND_REQUESTED' }),
-    ] as never);
+    ]));
     renderPage();
 
     expect(await screen.findByText('2건 대기 중')).toBeInTheDocument();
     expect(screen.getByText('주문 #100')).toBeInTheDocument();
-    expect(screen.queryByText('주문 #101')).not.toBeInTheDocument();
+    expect(mockedAdmin.getOrders).toHaveBeenCalledWith(
+      expect.objectContaining({ status: ['CANCELLATION_REQUESTED', 'REFUND_REQUESTED'] }),
+    );
+  });
+
+  it('페이지에 안 담긴 대기 건이 있으면 몇 건이 빠졌는지 적는다', async () => {
+    // 전 주문을 받아 클라이언트에서 거르던 시절에는, 큐가 길어지면 뒤쪽이 그냥 사라졌다.
+    mockedAdmin.getOrders.mockResolvedValue(
+      queuePage([order({ id: 100 })], { totalElements: 250, totalPages: 2 }),
+    );
+    renderPage();
+
+    expect(await screen.findByText('250건 대기 중')).toBeInTheDocument();
+    expect(screen.getByText(/249건은 다음 새로고침에서/)).toBeInTheDocument();
   });
 
   it('대기 건이 없으면 그 사실을 알린다', async () => {
-    mockedAdmin.getAllOrders.mockResolvedValue([order({ status: 'PAID' })] as never);
+    mockedAdmin.getOrders.mockResolvedValue(queuePage([]));
     renderPage();
 
     expect(await screen.findByText('승인 대기 중인 취소·환불 신청이 없습니다.')).toBeInTheDocument();
   });
 
   it('조회 실패는 사유를 보여 준다', async () => {
-    mockedAdmin.getAllOrders.mockRejectedValue({ response: { data: { message: '권한 없음' } } });
+    mockedAdmin.getOrders.mockRejectedValue({ response: { data: { message: '권한 없음' } } });
     renderPage();
 
     expect(await screen.findByText('권한 없음')).toBeInTheDocument();
   });
 
   it('새로고침은 목록을 다시 읽는다', async () => {
-    mockedAdmin.getAllOrders.mockResolvedValue([] as never);
+    mockedAdmin.getOrders.mockResolvedValue(queuePage([]));
     renderPage();
     await screen.findByText('승인 대기 중인 취소·환불 신청이 없습니다.');
 
     await userEvent.click(screen.getByRole('button', { name: '새로고침' }));
 
-    await waitFor(() => expect(mockedAdmin.getAllOrders).toHaveBeenCalledTimes(2));
+    await waitFor(() => expect(mockedAdmin.getOrders).toHaveBeenCalledTimes(2));
   });
 
   it('취소 신청은 취소 승인으로, 메모가 비면 기본 문구를 남긴다', async () => {
-    mockedAdmin.getAllOrders.mockResolvedValue([order({ status: 'CANCELLATION_REQUESTED' })] as never);
+    mockedAdmin.getOrders.mockResolvedValue(queuePage([order({ status: 'CANCELLATION_REQUESTED' })]));
     mockedWorkflow.approveCancellation.mockResolvedValue(order({ status: 'CANCELED' }));
     renderPage();
     await screen.findByText('주문 #100');
@@ -182,7 +208,7 @@ describe('OrderApprovalPage', () => {
   });
 
   it('환불 신청은 환불 승인으로 가고 입력한 메모를 그대로 보낸다', async () => {
-    mockedAdmin.getAllOrders.mockResolvedValue([order({ status: 'REFUND_REQUESTED' })] as never);
+    mockedAdmin.getOrders.mockResolvedValue(queuePage([order({ status: 'REFUND_REQUESTED' })]));
     mockedWorkflow.approveRefund.mockResolvedValue(order({ status: 'REFUNDED' }));
     renderPage();
     await screen.findByText('주문 #100');
@@ -195,7 +221,7 @@ describe('OrderApprovalPage', () => {
   });
 
   it('승인 실패는 토스트로 사유를 알린다', async () => {
-    mockedAdmin.getAllOrders.mockResolvedValue([order({ status: 'CANCELLATION_REQUESTED' })] as never);
+    mockedAdmin.getOrders.mockResolvedValue(queuePage([order({ status: 'CANCELLATION_REQUESTED' })]));
     mockedWorkflow.approveCancellation.mockRejectedValue({
       response: { data: { message: '이미 처리된 신청' } },
     });
@@ -208,7 +234,7 @@ describe('OrderApprovalPage', () => {
   });
 
   it('승인되면 그 건이 대기 목록에서 빠진다', async () => {
-    mockedAdmin.getAllOrders.mockResolvedValue([order({ status: 'CANCELLATION_REQUESTED' })] as never);
+    mockedAdmin.getOrders.mockResolvedValue(queuePage([order({ status: 'CANCELLATION_REQUESTED' })]));
     mockedWorkflow.approveCancellation.mockResolvedValue(order({ status: 'CANCELED' }));
     renderPage();
     await screen.findByText('주문 #100');

@@ -46,11 +46,4 @@ class GetOrderServiceTest {
         assertThat(result).isEmpty();
         verify(loadOrderPort).findByUserId(1L);
     }
-
-    @Test @DisplayName("전체 주문 조회")
-    void getAll() {
-        when(loadOrderPort.findAll()).thenReturn(List.of());
-        List<Order> result = service.getAllOrders();
-        assertThat(result).isEmpty();
-    }
 }

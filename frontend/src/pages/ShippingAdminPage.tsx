@@ -16,6 +16,13 @@ import { useToast } from '@/contexts/useToast';
 
 type ShipmentState = Shipment | 'none';
 
+/**
+ * 한 화면에 올릴 주문 수. 여기가 곧 배송 조회 요청 수이기도 하다 — 주문 한 건마다
+ * `GET /shipping/{orderId}` 를 따로 던지기 때문에, 이 값을 키우면 화면 여는 비용이
+ * 그대로 따라 커진다.
+ */
+const PAGE_SIZE = 30;
+
 const ACTION_LABEL: Record<'ship' | 'in-transit' | 'delivered' | 'returned', string> = {
   ship: '출고 처리',
   'in-transit': '배송 중으로',
@@ -367,17 +374,24 @@ const ShippingAdminPage: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [onlyUnshipped, setOnlyUnshipped] = useState(false);
+  const [page, setPage] = useState(0);
+  const [total, setTotal] = useState(0);
+  const [totalPages, setTotalPages] = useState(0);
 
   const load = useCallback(async () => {
     setLoading(true);
     setError(null);
     try {
-      const orderList = await adminApi.getAllOrders();
-      const sorted = [...orderList].sort((a, b) => b.id - a.id);
+      const orderPage = await adminApi.getOrders({ page, size: PAGE_SIZE });
+      const sorted = [...orderPage.content].sort((a, b) => b.id - a.id);
       setOrders(sorted);
+      setTotal(orderPage.totalElements);
+      setTotalPages(orderPage.totalPages);
 
-      // 배송은 주문마다 따로 읽어야 한다(목록 API 가 없다). 한 건 실패가 화면 전체를
-      // 막지 않도록 allSettled 로 모으고, 404 는 '배송 없음'이라는 정상 결과로 기록한다.
+      // 배송은 주문마다 따로 읽어야 한다(목록 API 가 없다). 이 요청 수가 곧 한 페이지
+      // 크기라서, 페이징 없이 전 주문을 받아 오면 화면 한 번 여는 데 요청이 주문 수만큼
+      // 나갔다. 한 건 실패가 화면 전체를 막지 않도록 allSettled 로 모으고,
+      // 404 는 '배송 없음'이라는 정상 결과로 기록한다.
       const results = await Promise.allSettled(
         sorted.map((order) => shippingApi.get(order.id))
       );
@@ -397,7 +411,7 @@ const ShippingAdminPage: React.FC = () => {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [page]);
 
   useEffect(() => {
     void load();
@@ -438,11 +452,21 @@ const ShippingAdminPage: React.FC = () => {
           <TrackingUploadPanel onApplied={() => void load()} />
         </div>
 
-        <label className="flex items-center gap-2 mb-4 text-sm text-gray-700">
-          <input type="checkbox" checked={onlyUnshipped}
-            onChange={(e) => setOnlyUnshipped(e.target.checked)} />
-          출고 전 주문만 보기
-        </label>
+        <div className="flex flex-wrap items-center justify-between gap-2 mb-4">
+          <label className="flex items-center gap-2 text-sm text-gray-700">
+            <input type="checkbox" checked={onlyUnshipped}
+              onChange={(e) => setOnlyUnshipped(e.target.checked)} />
+            출고 전 주문만 보기
+            {/* 이 체크박스는 서버 조건이 아니라 지금 페이지 안에서만 거른다. 뒤 페이지에
+                남아 있는 미출고 주문은 여기 안 뜬다는 걸 옆에 적어 둔다. */}
+            {onlyUnshipped && totalPages > 1 && (
+              <span className="text-xs text-amber-700">(이 페이지 안에서만)</span>
+            )}
+          </label>
+          <p className="text-sm text-gray-500">
+            전체 {total}건 중 {orders.length}건 표시
+          </p>
+        </div>
 
         {loading ? (
           <Spinner size="md" message="배송 정보 불러오는 중..." />
@@ -450,7 +474,11 @@ const ShippingAdminPage: React.FC = () => {
           <p className="text-center text-red-600 py-8">{error}</p>
         ) : visible.length === 0 ? (
           <div className="text-center py-16 text-gray-400 bg-white rounded-xl border border-gray-200">
-            <p className="text-sm">표시할 주문이 없습니다.</p>
+            <p className="text-sm">
+              {onlyUnshipped && orders.length > 0
+                ? '이 페이지에는 출고 전 주문이 없습니다. 다음 페이지에는 있을 수 있습니다.'
+                : '표시할 주문이 없습니다.'}
+            </p>
           </div>
         ) : (
           <div className="space-y-3">
@@ -458,6 +486,22 @@ const ShippingAdminPage: React.FC = () => {
               <ShipmentRow key={order.id} order={order}
                 shipment={shipments.get(order.id)} onChanged={handleChanged} />
             ))}
+          </div>
+        )}
+
+        {totalPages > 1 && (
+          <div className="flex items-center justify-center gap-3 mt-5">
+            <button type="button" disabled={page === 0 || loading}
+              onClick={() => setPage((p) => Math.max(p - 1, 0))}
+              className="px-3 py-1.5 text-sm rounded border border-gray-300 bg-white text-gray-700 disabled:opacity-40">
+              이전
+            </button>
+            <span className="text-sm text-gray-600">{page + 1} / {totalPages}</span>
+            <button type="button" disabled={page + 1 >= totalPages || loading}
+              onClick={() => setPage((p) => p + 1)}
+              className="px-3 py-1.5 text-sm rounded border border-gray-300 bg-white text-gray-700 disabled:opacity-40">
+              다음
+            </button>
           </div>
         )}
       </div>

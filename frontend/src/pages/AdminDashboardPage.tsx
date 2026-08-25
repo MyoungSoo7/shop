@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { Link } from 'react-router-dom';
-import { adminApi, AdminUserResponse } from '@/api/admin';
+import { adminApi, AdminUserResponse, AdminOrderSummary } from '@/api/admin';
 import { productApi } from '@/api/product';
 import { orderApi } from '@/api/order';
 import { couponApi } from '@/api/coupon';
@@ -11,6 +11,12 @@ import Spinner from '@/components/Spinner';
 import { apiErrorMessage } from '@/lib/apiError';
 
 type Tab = 'overview' | 'orders' | 'products' | 'users' | 'coupons';
+
+/** 주문 탭 한 페이지 건수. 서버 상한(200)보다 작게 잡는다. */
+const ORDER_PAGE_SIZE = 50;
+
+/** 개요 탭 "최근 주문" 건수. */
+const RECENT_ORDER_COUNT = 5;
 
 const fmt = (v: number) =>
   new Intl.NumberFormat('ko-KR', { style: 'currency', currency: 'KRW' }).format(v);
@@ -135,6 +141,20 @@ const AdminDashboardPage: React.FC = () => {
   const [couponSuccess, setCouponSuccess] = useState<string | null>(null);
   const [creatingCoupon, setCreatingCoupon] = useState(false);
 
+  /**
+   * 주문 목록은 <b>한 페이지치</b>다. 예전에는 전 주문을 받아 배열에 담고 화면이 세었는데,
+   * 주문은 지우지 않고 계속 쌓이므로 그 방식은 언젠가 반드시 죽는다. 대신 규모를 말하는
+   * 숫자는 전부 아래 {@link orderSummary}(서버 집계)에서 온다 — 배열을 세면 페이징이 붙은
+   * 지금 그 숫자는 "첫 페이지만 센 값"이 되는데, 화면에는 여전히 숫자가 찍힌다.
+   */
+  const [orderPageIndex, setOrderPageIndex] = useState(0);
+  const [ordersLoading, setOrdersLoading] = useState(true);
+  const [orderTotal, setOrderTotal] = useState(0);
+  const [orderTotalPages, setOrderTotalPages] = useState(0);
+  const [orderSummary, setOrderSummary] = useState<AdminOrderSummary | null>(null);
+  /** 개요 탭의 "최근 주문" — 상태 필터와 무관한 최신순 5건이라 목록과 따로 부른다. */
+  const [recentOrders, setRecentOrders] = useState<OrderResponse[]>([]);
+
   // 필터
   const [orderStatusFilter,  setOrderStatusFilter]  = useState('ALL');
   const [productStatusFilter, setProductStatusFilter] = useState('ALL');
@@ -155,23 +175,27 @@ const AdminDashboardPage: React.FC = () => {
       try {
         // MANAGER는 회원 목록/쿠폰 조회 권한이 없으므로 ADMIN일 때만 요청
       const baseRequests = [
-        adminApi.getAllOrders(),
+        // 전 기간 카드·상태 분포의 유일한 출처. 목록을 세지 않는다.
+        adminApi.getOrderSummary(),
+        adminApi.getOrders({ page: 0, size: RECENT_ORDER_COUNT }),
         productApi.getAllProducts(),
       ] as const;
 
       if (isAdmin) {
-        const [orderList, productList, userList, couponList] = await Promise.all([
+        const [summary, recent, productList, userList, couponList] = await Promise.all([
           ...baseRequests,
           adminApi.getAllUsers(),
           couponApi.getAll(),
         ]);
-        setOrders(orderList.sort((a, b) => b.id - a.id));
+        setOrderSummary(summary);
+        setRecentOrders(recent.content);
         setProducts(productList.sort((a, b) => b.id - a.id));
         setUsers(userList.sort((a, b) => a.id - b.id));
         setCoupons(couponList.sort((a, b) => b.id - a.id));
       } else {
-        const [orderList, productList] = await Promise.all(baseRequests);
-        setOrders(orderList.sort((a, b) => b.id - a.id));
+        const [summary, recent, productList] = await Promise.all(baseRequests);
+        setOrderSummary(summary);
+        setRecentOrders(recent.content);
         setProducts(productList.sort((a, b) => b.id - a.id));
       }
       } catch {
@@ -184,6 +208,41 @@ const AdminDashboardPage: React.FC = () => {
     // 의존성에 넣어도 재조회는 역할이 실제로 달라질 때만 일어난다.
     load();
   }, [isAdmin]);
+
+  /**
+   * 주문 목록 한 페이지. 상태 필터·페이지가 바뀔 때마다 서버에 다시 묻는다.
+   *
+   * <p>상태 필터를 <b>서버에서</b> 거는 것이 핵심이다. 받아 온 페이지를 브라우저가 거르면
+   * "50건 중 PAID 3건"이 나오는데, 화면은 그걸 "PAID 3건"으로 보여 준다 — 나머지 페이지에
+   * 있는 PAID 건은 세어지지도, 보이지도 않는다.
+   */
+  useEffect(() => {
+    let canceled = false;
+    setOrdersLoading(true);
+    adminApi
+      .getOrders({
+        status: orderStatusFilter === 'ALL' ? undefined : [orderStatusFilter],
+        page: orderPageIndex,
+        size: ORDER_PAGE_SIZE,
+      })
+      .then((page) => {
+        if (canceled) return;
+        setOrders(page.content);
+        setOrderTotal(page.totalElements);
+        setOrderTotalPages(page.totalPages);
+      })
+      .catch(() => {
+        if (!canceled) setError('데이터를 불러오지 못했습니다.');
+      })
+      .finally(() => {
+        if (!canceled) setOrdersLoading(false);
+      });
+    return () => {
+      // 필터를 빠르게 바꾸면 늦게 도착한 앞 응답이 뒤 응답을 덮어쓴다 — 화면의 필터와
+      // 목록이 어긋나고, 그 상태는 에러 없이 그냥 틀린 화면으로 남는다.
+      canceled = true;
+    };
+  }, [orderStatusFilter, orderPageIndex]);
 
   /**
    * 오늘 집계는 <b>따로</b> 부른다. 위 목록 로드와 한 Promise.all 에 묶으면 운영 서비스가
@@ -202,22 +261,42 @@ const AdminDashboardPage: React.FC = () => {
   }, [isAdmin]);
 
   // ── 통계 계산 ──
+  /**
+   * 주문 쪽 숫자는 <b>전부</b> 서버 집계에서 온다. 목록 배열을 세면 페이징이 붙은 지금
+   * "첫 페이지만 센 값"이 되고, 그 값은 틀렸다는 신호 없이 카드에 그대로 찍힌다.
+   * 상품 재고는 여전히 전건을 받아 오므로 배열에서 센다.
+   */
   const stats = useMemo(() => {
-    const totalRevenue   = orders.filter((o) => o.status === 'PAID').reduce((s, o) => s + o.amount, 0);
-    const paidCount      = orders.filter((o) => o.status === 'PAID').length;
-    const createdCount   = orders.filter((o) => o.status === 'CREATED').length;
-    const canceledCount  = orders.filter((o) => o.status === 'CANCELED').length;
-    const lowStockCount  = products.filter((p) => p.stockQuantity > 0 && p.stockQuantity < 10).length;
-    const outOfStockCount = products.filter((p) => p.stockQuantity === 0).length;
-    return { totalRevenue, paidCount, createdCount, canceledCount, lowStockCount, outOfStockCount };
-  }, [orders, products]);
+    const countOf = (status: string) =>
+      orderSummary?.statuses.find((s) => s.status === status)?.count ?? 0;
+    const amountOf = (status: string) => {
+      const raw = orderSummary?.statuses.find((s) => s.status === status)?.amountSum;
+      return raw === null || raw === undefined ? 0 : Number(raw);
+    };
 
-  // ── 필터된 목록 ──
+    return {
+      totalOrders:    orderSummary?.totalCount ?? 0,
+      totalRevenue:   amountOf('PAID'),
+      paidCount:      countOf('PAID'),
+      createdCount:   countOf('CREATED'),
+      canceledCount:  countOf('CANCELED'),
+      refundedCount:  countOf('REFUNDED'),
+      lowStockCount:  products.filter((p) => p.stockQuantity > 0 && p.stockQuantity < 10).length,
+      outOfStockCount: products.filter((p) => p.stockQuantity === 0).length,
+    };
+  }, [orderSummary, products]);
+
+  /**
+   * ── 필터된 목록 ──
+   *
+   * <p>상태 필터는 서버가 이미 걸었다. 여기 남은 것은 주문ID·회원ID 검색뿐이고, 그건
+   * <b>지금 페이지 안에서만</b> 찾는다. 그 사실은 화면에 적어 둔다 — 안 적으면 "없습니다"가
+   * "존재하지 않는다"로 읽힌다.
+   */
   const filteredOrders = useMemo(() =>
     orders.filter((o) =>
-      (orderStatusFilter === 'ALL' || o.status === orderStatusFilter) &&
-      (orderSearch === '' || String(o.id).includes(orderSearch) || String(o.userId).includes(orderSearch))
-    ), [orders, orderStatusFilter, orderSearch]);
+      orderSearch === '' || String(o.id).includes(orderSearch) || String(o.userId).includes(orderSearch)
+    ), [orders, orderSearch]);
 
   const filteredProducts = useMemo(() =>
     products.filter((p) =>
@@ -237,6 +316,9 @@ const AdminDashboardPage: React.FC = () => {
     try {
       const updated = await orderApi.cancelOrder(orderId);
       setOrders((prev) => prev.map((o) => (o.id === orderId ? updated : o)));
+      // 집계는 서버가 세므로 여기서 손으로 고치지 않고 다시 묻는다. 손으로 고치면
+      // 카드와 목록이 갈라지고, 갈라진 쪽이 어느 쪽인지 화면에서는 알 수 없다.
+      adminApi.getOrderSummary().then(setOrderSummary).catch(() => {});
     } catch {
       alert('주문 취소에 실패했습니다.');
     } finally {
@@ -391,17 +473,17 @@ const AdminDashboardPage: React.FC = () => {
             )}
 
             {/*
-              아래는 전 기간 누계다. 브라우저가 목록 전체를 받아 세는 값이라 데이터가 늘면
-              같이 느려진다(위 오늘 집계와 달리 서버가 미리 세어 둔 값이 아니다).
-              라벨에 기간을 박는 것은 필수다 — 기간이 다른 숫자가 라벨 없이 나란히 있으면
-              반드시 오독된다.
+              아래는 전 기간 누계다. 주문 쪽 숫자는 서버가 GROUP BY 로 세어 준 값이다 —
+              예전에는 브라우저가 전 주문을 받아 세었고, 그건 데이터가 늘면 같이 느려지다
+              언젠가 죽는 구조였다. 라벨에 기간을 박는 것은 필수다 — 기간이 다른 숫자가
+              라벨 없이 나란히 있으면 반드시 오독된다.
             */}
             <h2 className="font-bold text-gray-900">전체 기간</h2>
             {/* 통계 카드 */}
             <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
               <StatCard
                 label="총 주문"
-                value={orders.length.toLocaleString()}
+                value={stats.totalOrders.toLocaleString()}
                 sub={`결제완료 ${stats.paidCount}건`}
                 color="bg-blue-50"
                 icon={<svg className="w-5 h-5 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M16 11V7a4 4 0 00-8 0v4M5 9h14l1 12H4L5 9z"/></svg>}
@@ -437,8 +519,8 @@ const AdminDashboardPage: React.FC = () => {
                   {[
                     { status: 'CREATED',  label: '주문완료',  cls: 'bg-yellow-400', count: stats.createdCount },
                     { status: 'PAID',     label: '결제완료',  cls: 'bg-green-400',  count: stats.paidCount },
-                    { status: 'CANCELED', label: '취소됨',    cls: 'bg-red-400',    count: orders.filter(o=>o.status==='CANCELED').length },
-                    { status: 'REFUNDED', label: '환불됨',    cls: 'bg-purple-400', count: orders.filter(o=>o.status==='REFUNDED').length },
+                    { status: 'CANCELED', label: '취소됨',    cls: 'bg-red-400',    count: stats.canceledCount },
+                    { status: 'REFUNDED', label: '환불됨',    cls: 'bg-purple-400', count: stats.refundedCount },
                   ].map(({ label, cls, count }) => (
                     <div key={label} className="flex items-center gap-3">
                       <div className={`w-3 h-3 rounded-full ${cls}`} />
@@ -446,7 +528,7 @@ const AdminDashboardPage: React.FC = () => {
                       <div className="flex-1 bg-gray-100 rounded-full h-2">
                         <div
                           className={`${cls} h-2 rounded-full transition-all`}
-                          style={{ width: orders.length ? `${(count / orders.length) * 100}%` : '0%' }}
+                          style={{ width: stats.totalOrders ? `${(count / stats.totalOrders) * 100}%` : '0%' }}
                         />
                       </div>
                       <span className="text-sm font-semibold text-gray-800 w-12 text-right">{count}건</span>
@@ -459,7 +541,7 @@ const AdminDashboardPage: React.FC = () => {
               <div className="bg-white rounded-xl border border-gray-200 p-5">
                 <h3 className="font-bold text-gray-900 mb-4">최근 주문</h3>
                 <div className="space-y-2">
-                  {orders.slice(0, 5).map((order) => (
+                  {recentOrders.map((order) => (
                     <div key={order.id} className="flex items-center justify-between py-1.5">
                       <div>
                         <p className="text-sm font-medium text-gray-900">주문 #{order.id}</p>
@@ -497,7 +579,13 @@ const AdminDashboardPage: React.FC = () => {
                 {['ALL', 'CREATED', 'PAID', 'CANCELED', 'REFUNDED'].map((s) => (
                   <button
                     key={s}
-                    onClick={() => setOrderStatusFilter(s)}
+                    onClick={() => {
+                      // 필터를 바꾸면 페이지를 처음으로 되돌린다. 3쪽에 머문 채 필터만
+                      // 바꾸면 결과가 1쪽뿐일 때 빈 화면이 뜨고, 그건 "그런 주문이 없다"로
+                      // 읽힌다.
+                      setOrderStatusFilter(s);
+                      setOrderPageIndex(0);
+                    }}
                     className={`px-3 py-1.5 text-xs font-semibold rounded-lg transition-colors ${
                       orderStatusFilter === s
                         ? 'bg-gray-900 text-white'
@@ -508,7 +596,10 @@ const AdminDashboardPage: React.FC = () => {
                   </button>
                 ))}
               </div>
-              <span className="text-sm text-gray-400 ml-auto">{filteredOrders.length}건</span>
+              {/* 페이지 건수가 아니라 조건에 맞는 전체 건수를 먼저 말한다. */}
+              <span className="text-sm text-gray-400 ml-auto">
+                전체 {orderTotal.toLocaleString()}건 중 {orders.length.toLocaleString()}건 표시
+              </span>
             </div>
 
             {/* 테이블 */}
@@ -524,7 +615,7 @@ const AdminDashboardPage: React.FC = () => {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-100">
-                  {filteredOrders.slice(0, 100).map((order) => (
+                  {filteredOrders.map((order) => (
                     <tr key={order.id} className="hover:bg-gray-50 transition-colors">
                       <td className="px-4 py-3 font-mono text-gray-700">#{order.id}</td>
                       <td className="px-4 py-3 text-gray-600">#{order.userId}</td>
@@ -547,13 +638,47 @@ const AdminDashboardPage: React.FC = () => {
                   ))}
                 </tbody>
               </table>
-              {filteredOrders.length > 100 && (
-                <p className="text-center text-sm text-gray-400 py-3">100건만 표시 중 (전체 {filteredOrders.length}건)</p>
-              )}
-              {filteredOrders.length === 0 && (
-                <p className="text-center text-gray-400 py-10">조건에 맞는 주문이 없습니다.</p>
+              {filteredOrders.length === 0 && !ordersLoading && (
+                <p className="text-center text-gray-400 py-10">
+                  {orderSearch === ''
+                    ? '조건에 맞는 주문이 없습니다.'
+                    : `이 페이지에는 "${orderSearch}" 와 맞는 주문이 없습니다.`}
+                </p>
               )}
             </div>
+
+            {/*
+              검색은 지금 페이지 안에서만 돈다. 여러 쪽이 있는데 그 사실을 안 적으면
+              "없습니다"가 "존재하지 않는다"로 읽히고, 운영자는 다음 쪽을 볼 생각을 못 한다.
+            */}
+            {orderSearch !== '' && orderTotalPages > 1 && (
+              <p className="px-4 py-2 text-xs text-amber-600 border-t border-gray-100">
+                검색은 현재 페이지({orderPageIndex + 1}/{orderTotalPages}쪽) 안에서만 찾습니다.
+              </p>
+            )}
+
+            {/* 페이지 이동 */}
+            {orderTotalPages > 1 && (
+              <div className="flex items-center justify-center gap-3 p-4 border-t border-gray-100">
+                <button
+                  onClick={() => setOrderPageIndex((p) => Math.max(p - 1, 0))}
+                  disabled={orderPageIndex === 0 || ordersLoading}
+                  className="px-3 py-1.5 text-sm rounded-lg bg-gray-100 text-gray-700 hover:bg-gray-200 disabled:opacity-40"
+                >
+                  이전
+                </button>
+                <span className="text-sm text-gray-500">
+                  {orderPageIndex + 1} / {orderTotalPages}
+                </span>
+                <button
+                  onClick={() => setOrderPageIndex((p) => Math.min(p + 1, orderTotalPages - 1))}
+                  disabled={orderPageIndex >= orderTotalPages - 1 || ordersLoading}
+                  className="px-3 py-1.5 text-sm rounded-lg bg-gray-100 text-gray-700 hover:bg-gray-200 disabled:opacity-40"
+                >
+                  다음
+                </button>
+              </div>
+            )}
           </div>
         )}
 

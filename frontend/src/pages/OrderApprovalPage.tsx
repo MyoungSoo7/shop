@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useState } from 'react';
 import { adminApi } from '@/api/admin';
 import {
   orderWorkflowApi,
+  AWAITING_APPROVAL_STATUSES,
   isAwaitingApproval,
   ORDER_STATUS_LABEL,
   OrderStatusValue,
@@ -10,6 +11,12 @@ import { OrderResponse } from '@/types';
 import Spinner from '@/components/Spinner';
 import { errorDetail } from '@/lib/apiError';
 import { useToast } from '@/contexts/useToast';
+
+/**
+ * 승인 큐 한 번에 받는 건수. 서버 상한(200)과 같게 잡는다 — 큐는 밀리면 안 되는 목록이라
+ * 최대한 많이 보여 주되, 그래도 넘치면 넘쳤다고 화면에 적는다.
+ */
+const QUEUE_PAGE_SIZE = 200;
 
 const fmtAmount = (v: number) =>
   new Intl.NumberFormat('ko-KR', { style: 'currency', currency: 'KRW' }).format(v);
@@ -98,15 +105,31 @@ const ApprovalRow: React.FC<{
 ───────────────────────────────────────── */
 const OrderApprovalPage: React.FC = () => {
   const [orders, setOrders] = useState<OrderResponse[]>([]);
+  /** 대기 건 전체 규모. 화면에 실린 건수와 다를 수 있고, 다르면 그렇게 말한다. */
+  const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
+  /**
+   * 승인 대기 건만 <b>서버에서</b> 걸러 받는다.
+   *
+   * <p>예전에는 전 주문을 받아 브라우저가 걸러냈다. 목록에 페이징이 붙은 지금 그 방식은
+   * 첫 페이지 밖의 대기 건을 조용히 빠뜨린다 — 큐가 비어 보이는데 실제로는 밀려 있고,
+   * 화면에는 아무 경고도 뜨지 않는다.
+   *
+   * <p>총 건수는 페이지가 아니라 서버 집계(totalElements)에서 읽는다.
+   */
   const load = useCallback(async () => {
     setLoading(true);
     setError(null);
     try {
-      const all = await adminApi.getAllOrders();
-      setOrders([...all].sort((a, b) => b.id - a.id));
+      const page = await adminApi.getOrders({
+        status: [...AWAITING_APPROVAL_STATUSES],
+        page: 0,
+        size: QUEUE_PAGE_SIZE,
+      });
+      setOrders(page.content);
+      setTotal(page.totalElements);
     } catch (err) {
       setError(errorDetail(err, '주문 목록을 불러오지 못했습니다.'));
     } finally {
@@ -122,8 +145,14 @@ const OrderApprovalPage: React.FC = () => {
     setOrders((prev) => prev.map((o) => (o.id === updated.id ? updated : o)));
   };
 
-  // 승인 대기 = 신청 상태 그 자체. 별도 큐 테이블이 없으므로 상태로 골라낸다.
+  /**
+   * 서버가 이미 대기 상태만 보냈지만 한 번 더 거른다 — 승인 직후 그 자리에서 상태가 바뀐
+   * 행을 큐에서 빼기 위해서다(재조회 없이). 서버 필터를 대신하는 것이 아니다.
+   */
   const pending = orders.filter((o) => isAwaitingApproval(o.status));
+
+  /** 화면에 실리지 못한 대기 건 수. 0 이 아니면 반드시 화면에 적는다. */
+  const hidden = Math.max(total - orders.length, 0);
 
   return (
     <div className="min-h-screen bg-gray-50 py-8 px-4 sm:px-6 lg:px-8">
@@ -153,7 +182,13 @@ const OrderApprovalPage: React.FC = () => {
           </div>
         ) : (
           <div className="space-y-3">
-            <p className="text-sm text-gray-500">{pending.length}건 대기 중</p>
+            <p className="text-sm text-gray-500">
+              {total.toLocaleString()}건 대기 중
+              {hidden > 0 && (
+                // 큐가 한 화면을 넘겼다는 사실을 감추면, 운영자는 보이는 것이 전부라고 믿는다.
+                <span className="text-amber-600"> · {hidden.toLocaleString()}건은 다음 새로고침에서</span>
+              )}
+            </p>
             {pending.map((order) => (
               <ApprovalRow key={order.id} order={order} onApproved={handleApproved} />
             ))}

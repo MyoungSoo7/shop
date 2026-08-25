@@ -143,9 +143,11 @@ public class SecurityConfig {
                         .requestMatchers(HttpMethod.POST, "/coupons").hasAnyRole("ADMIN", "MANAGER")
                         // 쿠폰 운영 콘솔 — 중단/재개는 나가는 할인을 즉시 멈추는 조작이다.
                         .requestMatchers("/admin/coupons/**").hasAnyRole("ADMIN", "MANAGER")
-                        // 전체 주문/사용자 조회 (관리자·매니저)
-                        .requestMatchers("/orders/admin/all").hasAnyRole("ADMIN", "MANAGER")
-                        .requestMatchers("/orders/admin/**").hasAnyRole("ADMIN", "MANAGER")
+                        // 관리자 주문 콘솔 (관리자·매니저). `/**` 는 0개 세그먼트도 매치하므로
+                        // 목록 자체인 `/orders/admin` 도 이 한 줄이 덮는다 — 없어진
+                        // `/orders/admin/all` 처럼 경로마다 줄을 따로 두면, 새 경로를 늘릴 때
+                        // 줄 추가를 잊은 그 경로만 anyRequest().authenticated() 로 샌다.
+                        .requestMatchers("/orders/admin", "/orders/admin/**").hasAnyRole("ADMIN", "MANAGER")
                         .requestMatchers("/users/admin/all").hasRole("ADMIN")
                         // 배송 상태 전이 — 출고/집화/배송완료/반품은 운영자 조작이다. 특히 반품은
                         // 재고를 되돌리므로 고객이 부를 수 있으면 재고 수량이 조작된다.

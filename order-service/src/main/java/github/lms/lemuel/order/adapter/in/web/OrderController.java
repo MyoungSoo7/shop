@@ -10,6 +10,7 @@ import github.lms.lemuel.order.application.port.in.CreateOrderUseCase;
 import github.lms.lemuel.order.application.port.in.GetOrderUseCase;
 import github.lms.lemuel.order.application.port.in.IdempotentMultiItemOrderUseCase;
 import github.lms.lemuel.order.application.port.in.PreviewCouponUseCase;
+import github.lms.lemuel.order.application.port.in.SearchOrdersUseCase;
 import github.lms.lemuel.order.domain.Order;
 import github.lms.lemuel.web.security.ResourceOwnership;
 import io.swagger.v3.oas.annotations.Operation;
@@ -47,6 +48,7 @@ public class OrderController {
     private final ChangeOrderStatusUseCase changeOrderStatusUseCase;
     private final CancelOrderItemsUseCase cancelOrderItemsUseCase;
     private final PreviewCouponUseCase previewCouponUseCase;
+    private final SearchOrdersUseCase searchOrdersUseCase;
     private final github.lms.lemuel.order.application.port.in.WithdrawOrderRequestUseCase withdrawOrderRequestUseCase;
 
     @Operation(summary = "주문 생성 (단건)", description = "단일 상품 주문 — 레거시 호환 경로.")
@@ -172,19 +174,98 @@ public class OrderController {
         return ResponseEntity.ok(orders);
     }
 
-    @Operation(summary = "전체 주문 조회 (관리자)", description = "시스템의 모든 주문을 조회한다.")
+    /**
+     * 관리자 주문 목록 — 페이지.
+     *
+     * <p>이 자리에 있던 {@code GET /orders/admin/all} 은 전 주문을 한 응답에 실어 보냈다.
+     * 주문은 지우지 않고 계속 쌓이므로 그 API 는 반드시 느려지다 죽는데, 죽기 전까지는 잘
+     * 도는 것처럼 보인다. 대신 화면이 한 화면치만 가져가고, 전체 규모는 아래 요약이 말한다.
+     *
+     * <p>{@code status} 는 <b>반복 가능</b>하다({@code ?status=A&status=B}). 승인 큐가 두 상태를
+     * 한 화면에서 보기 때문인데, 전건을 받아 클라이언트가 걸러내던 방식은 페이징이 붙는 순간
+     * 대기 건을 조용히 빠뜨린다.
+     */
+    @Operation(summary = "주문 목록 조회 (관리자)",
+            description = "상태·기간으로 거른 주문을 최신순 페이지로 조회한다. status 는 반복 지정할 수 있다.")
     @ApiResponses({
             @ApiResponse(responseCode = "200", description = "조회 성공"),
             @ApiResponse(responseCode = "403", description = "권한 없음")
     })
-    @GetMapping("/admin/all")
-    public ResponseEntity<List<OrderResponse>> getAllOrders() {
-        List<OrderResponse> orders = getOrderUseCase.getAllOrders()
-                .stream()
-                .map(OrderResponse::from)
-                .collect(Collectors.toList());
-        return ResponseEntity.ok(orders);
+    @GetMapping("/admin")
+    public ResponseEntity<AdminOrderPageResponse> searchOrders(
+            @RequestParam(required = false) List<String> status,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) LocalDateTime from,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) LocalDateTime to,
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "50") int size) {
+
+        SearchOrdersUseCase.OrderPage result = searchOrdersUseCase.search(
+                new SearchOrdersUseCase.OrderQuery(
+                        status == null ? List.of() : status, from, to, page, size));
+
+        return ResponseEntity.ok(new AdminOrderPageResponse(
+                result.content().stream().map(OrderResponse::from).collect(Collectors.toList()),
+                result.page(), result.size(), result.totalElements(), result.totalPages()));
     }
+
+    /**
+     * 관리자 주문 요약 — 같은 조건의 상태별 건수·금액 합계.
+     *
+     * <p>목록과 <b>반드시 짝으로</b> 쓴다. 대시보드의 "총 주문"·"매출"·상태 분포를 목록 배열에서
+     * 세면 페이징이 붙은 순간 그 숫자는 "첫 페이지만 센 값"이 되는데, 화면에는 여전히 숫자가
+     * 찍히고 틀렸다고 말해 주는 것이 없다.
+     */
+    @Operation(summary = "주문 요약 (관리자)", description = "같은 조건의 상태별 건수와 금액 합계. 페이지에 잘리지 않는다.")
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "조회 성공"),
+            @ApiResponse(responseCode = "403", description = "권한 없음")
+    })
+    @GetMapping("/admin/summary")
+    public ResponseEntity<AdminOrderSummaryResponse> orderSummary(
+            @RequestParam(required = false) List<String> status,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) LocalDateTime from,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) LocalDateTime to) {
+
+        List<SearchOrdersUseCase.OrderStatusCount> counts = searchOrdersUseCase.countByStatus(
+                new SearchOrdersUseCase.OrderQuery(
+                        status == null ? List.of() : status, from, to, 0, 1));
+
+        long totalCount = counts.stream().mapToLong(SearchOrdersUseCase.OrderStatusCount::count).sum();
+        java.math.BigDecimal totalAmount = counts.stream()
+                .map(SearchOrdersUseCase.OrderStatusCount::amountSum)
+                .filter(java.util.Objects::nonNull)
+                .reduce(java.math.BigDecimal.ZERO, java.math.BigDecimal::add);
+
+        return ResponseEntity.ok(new AdminOrderSummaryResponse(totalCount, totalAmount, counts.stream()
+                .map(c -> new AdminOrderStatusCountResponse(c.status(), c.count(), c.amountSum()))
+                .collect(Collectors.toList())));
+    }
+
+    /** 관리자 주문 목록 한 페이지. */
+    public record AdminOrderPageResponse(
+            List<OrderResponse> content,
+            int page,
+            int size,
+            long totalElements,
+            int totalPages) {}
+
+    /**
+     * 관리자 주문 요약.
+     *
+     * <p>{@code totalAmount} 는 상태를 가리지 않은 <b>금액 총합</b>이다. "매출"이 아니다 —
+     * 취소·환불 건도 포함한다. 무엇을 매출로 볼지는 화면의 정책이라 서버가 미리 정하지 않고,
+     * 상태별 값을 그대로 함께 준다.
+     */
+    public record AdminOrderSummaryResponse(
+            long totalCount,
+            java.math.BigDecimal totalAmount,
+            List<AdminOrderStatusCountResponse> statuses) {}
+
+    /** 상태 한 줄. {@code status} 는 DB 에 적힌 값 그대로다. */
+    public record AdminOrderStatusCountResponse(
+            String status,
+            long count,
+            java.math.BigDecimal amountSum) {}
 
     @Operation(summary = "주문 취소", description = "주문 상태를 CANCELED로 변경한다.")
     @ApiResponses({

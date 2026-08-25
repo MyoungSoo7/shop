@@ -10,7 +10,7 @@ import { couponApi } from '@/api/coupon';
 import { authApi } from '@/api/auth';
 
 vi.mock('@/api/admin', () => ({
-  adminApi: { getAllOrders: vi.fn(), getAllUsers: vi.fn() },
+  adminApi: { getOrders: vi.fn(), getOrderSummary: vi.fn(), getAllUsers: vi.fn() },
 }));
 vi.mock('@/api/product', () => ({
   productApi: { getAllProducts: vi.fn() },
@@ -40,6 +40,33 @@ const order = (over: Record<string, unknown> = {}) =>
     status: 'CREATED',
     createdAt: '2026-08-01T00:00:00Z',
     ...over,
+  }) as never;
+
+/** 한 페이지 응답. totalElements 를 안 주면 배열 길이로 둔다(= 1쪽짜리 목록). */
+const orderPage = (content: unknown[], over: Record<string, unknown> = {}) =>
+  ({
+    content,
+    page: 0,
+    size: 50,
+    totalElements: content.length,
+    totalPages: content.length === 0 ? 0 : 1,
+    ...over,
+  }) as never;
+
+/**
+ * 상태별 집계 응답. 화면의 건수·매출은 전부 여기서 온다 — 주문 배열을 세지 않는다.
+ * 배열을 세던 시절에는 페이징이 붙는 순간 모든 숫자가 "첫 페이지만 센 값"으로
+ * 조용히 바뀌었고, 화면에는 여전히 숫자가 찍혔다.
+ */
+const orderSummary = (
+  statuses: Array<{ status: string; count: number; amountSum: string | null }> = [
+    { status: 'CREATED', count: 1, amountSum: '20000' },
+  ],
+) =>
+  ({
+    totalCount: statuses.reduce((sum, s) => sum + s.count, 0),
+    totalAmount: String(statuses.reduce((sum, s) => sum + Number(s.amountSum ?? 0), 0)),
+    statuses,
   }) as never;
 
 const product = (over: Record<string, unknown> = {}) =>
@@ -80,7 +107,8 @@ let alertSpy: ReturnType<typeof vi.spyOn>;
 beforeEach(() => {
   vi.clearAllMocks();
   mockedAuth.getCurrentUser.mockReturnValue({ id: 1, email: 'a@e.com', role: 'ADMIN' } as never);
-  mockedAdmin.getAllOrders.mockResolvedValue([order()] as never);
+  mockedAdmin.getOrders.mockResolvedValue(orderPage([order()]));
+  mockedAdmin.getOrderSummary.mockResolvedValue(orderSummary());
   mockedAdmin.getAllUsers.mockResolvedValue([user()] as never);
   mockedProduct.getAllProducts.mockResolvedValue([product()] as never);
   mockedCoupon.getAll.mockResolvedValue([coupon()] as never);
@@ -122,7 +150,7 @@ describe('AdminDashboardPage — 로드·권한', () => {
   });
 
   it('조회가 실패하면 화면 전체를 오류 문구로 대체한다', async () => {
-    mockedAdmin.getAllOrders.mockRejectedValue(new Error('down'));
+    mockedAdmin.getOrders.mockRejectedValue(new Error('down'));
     renderPage();
 
     expect(await screen.findByText('데이터를 불러오지 못했습니다.')).toBeInTheDocument();
@@ -131,17 +159,33 @@ describe('AdminDashboardPage — 로드·권한', () => {
 
 describe('AdminDashboardPage — 개요 탭', () => {
   it('결제완료 주문만 매출로 집계한다', async () => {
-    mockedAdmin.getAllOrders.mockResolvedValue([
-      order({ id: 1, status: 'PAID', amount: 30000 }),
-      order({ id: 2, status: 'CREATED', amount: 50000 }),
-      order({ id: 3, status: 'CANCELED', amount: 10000 }),
-    ] as never);
+    mockedAdmin.getOrderSummary.mockResolvedValue(orderSummary([
+      { status: 'PAID', count: 1, amountSum: '30000' },
+      { status: 'CREATED', count: 1, amountSum: '50000' },
+      { status: 'CANCELED', count: 1, amountSum: '10000' },
+    ]));
     renderPage();
 
     // 같은 금액이 최근 주문 카드에도 찍히므로 매출 카드 안으로 범위를 좁힌다
     const revenueCard = (await screen.findByText('총 매출')).closest('div')!.parentElement!;
     expect(within(revenueCard).getByText('₩30,000')).toBeInTheDocument();
     expect(screen.getByText('결제완료 1건')).toBeInTheDocument();
+  });
+
+  it('건수는 목록 배열이 아니라 서버 집계에서 온다 — 한 페이지만 받아도 전체가 찍힌다', async () => {
+    // 목록은 3건짜리 한 페이지, 집계는 137건. 배열을 세던 코드로 되돌아가면 여기서 3이 나온다.
+    mockedAdmin.getOrders.mockResolvedValue(
+      orderPage([order({ id: 1 }), order({ id: 2 }), order({ id: 3 })],
+        { totalElements: 137, totalPages: 3 }),
+    );
+    mockedAdmin.getOrderSummary.mockResolvedValue(orderSummary([
+      { status: 'PAID', count: 100, amountSum: '1000000' },
+      { status: 'CREATED', count: 37, amountSum: '370000' },
+    ]));
+    renderPage();
+
+    const totalCard = (await screen.findByText('총 주문')).closest('div')!.parentElement!;
+    expect(within(totalCard).getByText('137')).toBeInTheDocument();
   });
 
   it('재고 부족·품절 개수를 상품 카드에 적는다', async () => {
@@ -172,24 +216,39 @@ describe('AdminDashboardPage — 주문 관리', () => {
     await userEvent.click(screen.getByRole('button', { name: /주문 관리/ }));
   };
 
-  it('상태 필터로 걸러 본다', async () => {
-    mockedAdmin.getAllOrders.mockResolvedValue([
-      order({ id: 1, status: 'PAID' }),
-      order({ id: 2, status: 'CREATED' }),
-    ] as never);
+  it('상태 필터는 서버 조건으로 나간다 — 받아 온 배열을 다시 거르지 않는다', async () => {
+    mockedAdmin.getOrders.mockResolvedValue(
+      orderPage([order({ id: 1, status: 'PAID' }), order({ id: 2, status: 'CREATED' })]),
+    );
     await gotoOrders();
 
+    mockedAdmin.getOrders.mockResolvedValue(orderPage([order({ id: 1, status: 'PAID' })]));
     await userEvent.click(screen.getByRole('button', { name: '결제완료' }));
 
-    expect(screen.getByText('#1')).toBeInTheDocument();
-    expect(screen.queryByText('#2')).not.toBeInTheDocument();
+    await waitFor(() =>
+      expect(mockedAdmin.getOrders).toHaveBeenCalledWith(
+        expect.objectContaining({ status: ['PAID'], page: 0 }),
+      ));
+    expect(await screen.findByText('#1')).toBeInTheDocument();
+    await waitFor(() => expect(screen.queryByText('#2')).not.toBeInTheDocument());
+  });
+
+  it('다음 쪽으로 넘기면 그 페이지를 서버에서 새로 받아 온다', async () => {
+    mockedAdmin.getOrders.mockResolvedValue(
+      orderPage([order({ id: 1 })], { totalElements: 60, totalPages: 2 }),
+    );
+    await gotoOrders();
+
+    await userEvent.click(await screen.findByRole('button', { name: '다음' }));
+
+    await waitFor(() =>
+      expect(mockedAdmin.getOrders).toHaveBeenCalledWith(expect.objectContaining({ page: 1 })));
   });
 
   it('주문ID·회원ID 로 검색한다', async () => {
-    mockedAdmin.getAllOrders.mockResolvedValue([
-      order({ id: 11, userId: 7 }),
-      order({ id: 22, userId: 9 }),
-    ] as never);
+    mockedAdmin.getOrders.mockResolvedValue(
+      orderPage([order({ id: 11, userId: 7 }), order({ id: 22, userId: 9 })]),
+    );
     await gotoOrders();
 
     await userEvent.type(screen.getByPlaceholderText('주문ID / 회원ID 검색'), '22');
@@ -203,7 +262,8 @@ describe('AdminDashboardPage — 주문 관리', () => {
 
     await userEvent.type(screen.getByPlaceholderText('주문ID / 회원ID 검색'), '9999');
 
-    expect(screen.getByText('조건에 맞는 주문이 없습니다.')).toBeInTheDocument();
+    // 검색은 받아 온 페이지 안에서만 도므로 "없다"가 아니라 "이 페이지에 없다"고 적는다
+    expect(screen.getByText(/이 페이지에는 "9999" 와 맞는 주문이 없습니다/)).toBeInTheDocument();
   });
 
   it('CREATED 주문만 취소할 수 있고, 확인 후 목록의 그 행만 갱신한다', async () => {

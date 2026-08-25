@@ -15,5 +15,5 @@ public interface GetOrderUseCase {
 
     List<Order> getOrdersByUserId(Long userId, String status, java.time.LocalDateTime from, java.time.LocalDateTime to);
 
-    List<Order> getAllOrders();
+    // getAllOrders() 는 SearchOrdersUseCase.search() 로 대체됐다 — 무페이징 전건 조회.
 }

@@ -54,9 +54,18 @@ export const canRequestCancellation = (status: string): boolean =>
 export const canRequestRefund = (status: string): boolean =>
   ['PAID', 'SHIPPING_PENDING', 'IN_TRANSIT', 'DELIVERED', 'CANCELLATION_APPROVED'].includes(status);
 
+/**
+ * 운영자 승인 대기 상태 — 이 두 개가 곧 승인 큐다.
+ *
+ * 서버 조회의 status 파라미터로 그대로 넘긴다. 예전에는 전 주문을 받아 아래
+ * {@link isAwaitingApproval} 로 걸러냈는데, 그 방식은 목록에 페이징이 붙는 순간
+ * <b>첫 페이지 밖의 대기 건을 조용히 빠뜨린다</b> — 큐가 비어 보이는데 실제로는 밀려 있다.
+ */
+export const AWAITING_APPROVAL_STATUSES = ['CANCELLATION_REQUESTED', 'REFUND_REQUESTED'] as const;
+
 /** 운영자 승인 대기 — 이 두 상태가 곧 승인 큐다. */
 export const isAwaitingApproval = (status: string): boolean =>
-  status === 'CANCELLATION_REQUESTED' || status === 'REFUND_REQUESTED';
+  (AWAITING_APPROVAL_STATUSES as readonly string[]).includes(status);
 
 export const orderWorkflowApi = {
   /** POST /orders/{id}/cancellation-request — 사용자 취소 신청. */

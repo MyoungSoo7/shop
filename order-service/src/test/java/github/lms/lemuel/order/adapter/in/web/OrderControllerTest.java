@@ -45,6 +45,7 @@ class OrderControllerTest {
     @MockitoBean github.lms.lemuel.order.application.port.in.CancelOrderItemsUseCase cancelOrderItemsUseCase;
     @MockitoBean github.lms.lemuel.order.application.port.in.WithdrawOrderRequestUseCase withdrawOrderRequestUseCase;
     @MockitoBean github.lms.lemuel.order.application.port.in.PreviewCouponUseCase previewCouponUseCase;
+    @MockitoBean github.lms.lemuel.order.application.port.in.SearchOrdersUseCase searchOrdersUseCase;
 
     /** JWT 주체를 SecurityContext 에 직접 세팅(addFilters=false 슬라이스 대응). */
     private static void login(long uid, String role) {

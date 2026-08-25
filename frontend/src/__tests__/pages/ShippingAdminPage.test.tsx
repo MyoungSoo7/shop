@@ -9,7 +9,7 @@ const showToast = vi.fn();
 
 vi.mock('@/contexts/useToast', () => ({ useToast: () => ({ showToast }) }));
 
-vi.mock('@/api/admin', () => ({ adminApi: { getAllOrders: vi.fn() } }));
+vi.mock('@/api/admin', () => ({ adminApi: { getOrders: vi.fn() } }));
 
 vi.mock('@/api/shipping', async (importOriginal) => {
   const actual = await importOriginal<typeof import('@/api/shipping')>();
@@ -52,9 +52,24 @@ const shipment = (over: Record<string, unknown> = {}) =>
 
 const notFound = { response: { status: 404 } };
 
+/**
+ * 주문 한 페이지. 이 화면은 주문 한 건마다 배송을 따로 읽으므로, 페이지 크기가 곧
+ * 배송 요청 수다 — 페이징 없이 전 주문을 받던 시절엔 화면 한 번 여는 데 요청이
+ * 주문 수만큼 나갔다.
+ */
+const orderPage = (content: unknown[], over: Record<string, unknown> = {}) =>
+  ({
+    content,
+    page: 0,
+    size: 30,
+    totalElements: content.length,
+    totalPages: content.length === 0 ? 0 : 1,
+    ...over,
+  }) as never;
+
 beforeEach(() => {
   vi.clearAllMocks();
-  mockedAdmin.getAllOrders.mockResolvedValue([order()] as never);
+  mockedAdmin.getOrders.mockResolvedValue(orderPage([order()]));
   mockedShipping.get.mockResolvedValue(shipment());
 });
 
@@ -87,14 +102,14 @@ describe('ShippingAdminPage — 로드', () => {
   });
 
   it('주문 조회 실패는 화면에 사유를 남긴다', async () => {
-    mockedAdmin.getAllOrders.mockRejectedValue({ response: { data: { message: '권한 없음' } } });
+    mockedAdmin.getOrders.mockRejectedValue({ response: { data: { message: '권한 없음' } } });
     render(<ShippingAdminPage />);
 
     expect(await screen.findByText('권한 없음')).toBeInTheDocument();
   });
 
   it('주문이 없으면 그 사실을 알린다', async () => {
-    mockedAdmin.getAllOrders.mockResolvedValue([] as never);
+    mockedAdmin.getOrders.mockResolvedValue(orderPage([]));
     render(<ShippingAdminPage />);
 
     expect(await screen.findByText('표시할 주문이 없습니다.')).toBeInTheDocument();
@@ -105,7 +120,7 @@ describe('ShippingAdminPage — 로드', () => {
 
     await userEvent.click(screen.getByRole('button', { name: '새로고침' }));
 
-    await waitFor(() => expect(mockedAdmin.getAllOrders).toHaveBeenCalledTimes(2));
+    await waitFor(() => expect(mockedAdmin.getOrders).toHaveBeenCalledTimes(2));
   });
 
   it('출고 전 주문만 보기 필터는 배송 완료 건을 숨긴다', async () => {
@@ -114,7 +129,9 @@ describe('ShippingAdminPage — 로드', () => {
 
     await userEvent.click(screen.getByRole('checkbox'));
 
-    expect(screen.getByText('표시할 주문이 없습니다.')).toBeInTheDocument();
+    // "주문이 없다"가 아니라 "이 페이지에 없다"고 적는다 — 필터는 서버 조건이 아니라
+    // 받아 온 페이지 안에서만 걸리기 때문이다.
+    expect(screen.getByText(/이 페이지에는 출고 전 주문이 없습니다/)).toBeInTheDocument();
   });
 
   it('출고 전 주문만 보기 필터는 미생성·PENDING 을 남긴다', async () => {
@@ -124,6 +141,31 @@ describe('ShippingAdminPage — 로드', () => {
     await userEvent.click(screen.getByRole('checkbox'));
 
     expect(screen.getByText('주문 #1')).toBeInTheDocument();
+  });
+
+  it('한 페이지 분량만 읽는다 — 배송 조회도 그만큼만 나간다', async () => {
+    mockedAdmin.getOrders.mockResolvedValue(
+      orderPage([order({ id: 1 }), order({ id: 2 })], { totalElements: 90, totalPages: 3 }),
+    );
+    render(<ShippingAdminPage />);
+    await screen.findByText('주문 #1');
+
+    expect(mockedAdmin.getOrders).toHaveBeenCalledWith({ page: 0, size: 30 });
+    expect(mockedShipping.get).toHaveBeenCalledTimes(2);
+    expect(screen.getByText('전체 90건 중 2건 표시')).toBeInTheDocument();
+  });
+
+  it('다음 쪽으로 넘기면 그 페이지를 서버에서 새로 받아 온다', async () => {
+    mockedAdmin.getOrders.mockResolvedValue(
+      orderPage([order({ id: 1 })], { totalElements: 90, totalPages: 3 }),
+    );
+    render(<ShippingAdminPage />);
+    await screen.findByText('주문 #1');
+
+    await userEvent.click(screen.getByRole('button', { name: '다음' }));
+
+    await waitFor(() =>
+      expect(mockedAdmin.getOrders).toHaveBeenLastCalledWith({ page: 1, size: 30 }));
   });
 });
 
@@ -369,12 +411,12 @@ describe('ShippingAdminPage — 송장 일괄 업로드', () => {
     await waitFor(() => expect(screen.getByRole('button', { name: '2건 반영' })).toBeEnabled());
 
     mockedShipping.uploadTracking.mockResolvedValue(result({ dryRun: false }));
-    mockedAdmin.getAllOrders.mockClear();
+    mockedAdmin.getOrders.mockClear();
     await user.click(screen.getByRole('button', { name: '2건 반영' }));
 
     await waitFor(() =>
       expect(mockedShipping.uploadTracking).toHaveBeenLastCalledWith(expect.any(File), false));
     expect(screen.getByText(/반영 완료/)).toBeInTheDocument();
-    await waitFor(() => expect(mockedAdmin.getAllOrders).toHaveBeenCalled());
+    await waitFor(() => expect(mockedAdmin.getOrders).toHaveBeenCalled());
   });
 });
