@@ -35,6 +35,10 @@ const MemberAdminPage = lazy(() => import('./pages/system/MemberAdminPage'));
 const OrganizationConsolePage = lazy(() => import('./pages/system/OrganizationConsolePage'));
 const ReviewAdminPage = lazy(() => import('./pages/system/ReviewAdminPage'));
 const CouponAdminPage = lazy(() => import('./pages/system/CouponAdminPage'));
+const OperatorAdminPage = lazy(() => import('./pages/system/OperatorAdminPage'));
+const MetricTrendPage = lazy(() => import('./pages/system/MetricTrendPage'));
+const SalesStatsPage = lazy(() => import('./pages/system/SalesStatsPage'));
+const OrderQueuePage = lazy(() => import('./pages/system/OrderQueuePage'));
 
 // 관리자 페이지 (lazy load)
 const ProductPage = lazy(() => import('./pages/ProductPage'));
@@ -201,6 +205,20 @@ function App() {
             {/* 셀러 등급 — 서버 /admin/seller-tiers/** 가 ADMIN 전용이라 라우트도 같은 등급. */}
             <Route path="/admin/system/seller-tiers"
               element={<AdminOnlyRoute><SideNavLayout><SellerTierAdminPage /></SideNavLayout></AdminOnlyRoute>} />
+            {/* 권한 계정 — 서버 /admin/operators/** 가 ADMIN 전용. 화면 URL 을 그 API 와 같게 두면
+                새로고침 때 명부 JSON 이 그대로 브라우저에 뜬다. */}
+            <Route path="/admin/system/operators"
+              element={<AdminOnlyRoute><SideNavLayout><OperatorAdminPage /></SideNavLayout></AdminOnlyRoute>} />
+            {/* 지표 추이 — operation-service /api/ops/** 가 ADMIN 전용이라 라우트도 같은 등급. */}
+            <Route path="/admin/system/trends"
+              element={<AdminOnlyRoute><SideNavLayout><MetricTrendPage /></SideNavLayout></AdminOnlyRoute>} />
+            {/* 판매 통계 — 서버 /admin/sales/** 가 ADMIN 전용. */}
+            <Route path="/admin/system/sales-stats"
+              element={<AdminOnlyRoute><SideNavLayout><SalesStatsPage /></SideNavLayout></AdminOnlyRoute>} />
+            {/* 작업 큐 — 서버 /admin/order-queues 는 ADMIN·MANAGER 다. 밀린 주문을 실제로 처리하는
+                쪽이 MANAGER 이므로 라우트도 그에 맞춘다. */}
+            <Route path="/admin/system/order-queues"
+              element={<AdminManagerRoute><SideNavLayout><OrderQueuePage /></SideNavLayout></AdminManagerRoute>} />
 
           </Routes>
           </Suspense>

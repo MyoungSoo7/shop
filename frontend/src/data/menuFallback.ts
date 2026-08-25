@@ -75,6 +75,11 @@ export const FALLBACK_MENUS: FallbackMenuNode[] = [
       // 환불 운영은 서버가 ADMIN·MANAGER 로 막는다 — 시스템 그룹 안에서 유일하게 등급이 낮다.
       { id: -117, name: '환불 운영', path: '/admin/system/refunds', icon: '↩️', description: '재시도 소진 건 · 결제별 환불 이력', area: 'SYSTEM', type: 'ITEM', roles: ['ADMIN', 'MANAGER'] },
       { id: -112, name: '셀러 등급', path: '/admin/system/seller-tiers', icon: '🏅', description: '등급 재산정 · 관리자 지정 · 캐시 정합', area: 'SYSTEM', type: 'ITEM', roles: ['ADMIN'] },
+      { id: -118, name: '권한 계정', path: '/admin/system/operators', icon: '🛡️', description: '조작 권한 계정 명부 · 미사용 회수 · 잠금 해제', area: 'SYSTEM', type: 'ITEM', roles: ['ADMIN'] },
+      { id: -119, name: '지표 추이', path: '/admin/system/trends', icon: '📈', description: '대시보드 지표의 일자별 추이 · 기간 합계', area: 'SYSTEM', type: 'ITEM', roles: ['ADMIN'] },
+      { id: -120, name: '판매 통계', path: '/admin/system/sales-stats', icon: '📊', description: '상품 판매 랭킹 · 카테고리별 분포', area: 'SYSTEM', type: 'ITEM', roles: ['ADMIN'] },
+      // 작업 큐도 환불 운영과 같은 이유로 등급이 낮다 — 밀린 주문을 실제로 처리하는 쪽이 MANAGER 다.
+      { id: -121, name: '작업 큐', path: '/admin/system/order-queues', icon: '📮', description: '밀린 주문 · 기한 초과 · 최장 대기', area: 'SYSTEM', type: 'ITEM', roles: ['ADMIN', 'MANAGER'] },
     ],
   },
   {
