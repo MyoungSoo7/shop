@@ -123,7 +123,7 @@ jobs:
               - '**'
               - '!frontend/**'
             # shared: 전 서비스 이미지에 영향 → 변경 시 17개 전부 재빌드
-            # (건수 정본은 settings.gradle.kts — harness-audit 의 ci-matrix 규칙이 대조한다)
+            # (건수 정본은 settings.gradle.kts — 아래 커버리지 대조 스텝이 같은 출처를 읽는다)
             shared:
               - 'shared-common/**'
               - 'build.gradle.kts'
@@ -489,7 +489,7 @@ jobs:
           #   ARCHITECTURE.md CLAUDE.md Dockerfile …" — 그 실행의 백엔드 테스트는 skipped 였다.
           #   글로브 결과를 for 로 받으면 nullglob 에서 루프가 0회 돌아 의도대로 빈 값이 된다.
           restored=$(for f in */build/reports/jacoco/test/jacocoTestReport.xml; do echo "${f%%/*}"; done | sort -u)
-          # 모듈 로스터 정본은 settings.gradle.kts (harness-audit 의 ci-matrix 규칙과 같은 출처)
+          # 모듈 로스터 정본은 settings.gradle.kts (coverage-scope-gate 테스트와 같은 출처)
           all=$(sed -n '/^include(/,/^)/p' settings.gradle.kts | grep -oE '"[a-z-]+-service"' | tr -d '"' | sort -u)
           # jq 실패를 2>/dev/null 로 삼키지 않는다 — 삼키면 expected 가 비어 대조가 통째로 무력화되고
           # 가드가 "이상 없음"으로 오판한다(정확히 이 가드가 없애려는 실패 양식이다).

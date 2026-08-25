@@ -41,7 +41,7 @@ description: hookify 로 캡처한 훅 규칙(.claude/hookify.*.local.md)을 분
    - hookify 는 `new_text` 전체 매칭, guard 는 **라인 단위** — `^`/`$` 의미가 달라진다.
 4. **green 확인 + 감사**:
    ```bash
-   node --test scripts/harness/test/
+   node --test 'scripts/harness/test/*.test.mjs'   # 디렉토리를 그냥 주면 node 가 못 읽는다
    node scripts/harness/harness-audit.mjs
    ```
 5. **원본 제거**: 이식된 `.claude/hookify.{이름}.local.md` 를 삭제한다.

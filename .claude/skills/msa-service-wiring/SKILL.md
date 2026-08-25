@@ -38,10 +38,14 @@ description: 신규 마이크로서비스 모듈을 추가하거나 기존 서�
 ## C. 하네스 배선 (코드 밖 — 잊기 쉬움)
 
 - `{서비스}-rules` 스킬 생성 + `HARNESS.md` 라우팅 맵에 트리거 행 1개 추가.
-- `node scripts/harness/harness-audit.mjs` 로 라우팅 dangling·수치 드리프트 확인.
+- `node scripts/harness/harness-audit.mjs` 로 등록부(manifest.json)에 적힌 하네스 자산이
+  실제로 추적되고 있는지 확인. 라우팅 dangling·수치 드리프트는 이 감사가 아니라
+  `node --test 'scripts/harness/test/*.test.mjs'` 의 개별 게이트(gateway-route-gate,
+  coverage-scope-gate 등)가 본다.
 
 ## 완료 검증
 
 - [ ] 직접 포트·gateway·nginx 3층 모두 대표 경로 200
 - [ ] `./gradlew :<module>:test` + `jacocoTestCoverageVerification` 통과
-- [ ] `harness-audit.mjs` 통과 (라우팅·인벤토리)
+- [ ] `harness-audit.mjs` 통과 (하네스 자산 등록부)
+- [ ] `node --test 'scripts/harness/test/*.test.mjs'` 통과 (라우팅·인벤토리 게이트)

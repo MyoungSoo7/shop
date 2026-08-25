@@ -26,8 +26,15 @@
     "HARNESS.md",
     ".claude/skills/oo-score/SKILL.md",
     ".claude/settings.json",
-    ".github/workflows/harness-guard.yml"
+    ".github/workflows/harness-guard.yml",
+    "scripts/harness/harness-audit.mjs",
+    "scripts/harness/test/harness-audit-gate.test.mjs",
+    "scripts/verify.sh"
   ],
   "docLinkIgnorePrefixes": [],
-  "criticalContractPairs": []
+  "criticalContractPairs": [],
+  "requiredExecutableFiles": [
+    "scripts/verify.sh",
+    "scripts/harness/hooks/pre-commit"
+  ]
 }
