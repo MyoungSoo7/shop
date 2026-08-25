@@ -9,10 +9,38 @@ import StarRating from '@/components/review/StarRating';
 import ReviewForm from '@/components/review/ReviewForm';
 import ReviewList from '@/components/review/ReviewList';
 import CashReceiptPanel from '@/components/CashReceiptPanel';
+import OrderRequestActions from '@/components/order/OrderRequestActions';
+import { ORDER_STATUS_LABEL, OrderStatusValue } from '@/api/orderWorkflow';
 
 const USER_ID = 1;
 
 type Tab = 'orders' | 'reviews';
+
+/**
+ * 상태 배지의 색만 여기서 정하고, 라벨은 {@link ORDER_STATUS_LABEL} 을 그대로 쓴다.
+ *
+ * 예전엔 이 표가 라벨까지 들고 있었는데 CREATED·PAID·CANCELED·REFUNDED 네 개뿐이었다.
+ * 그래서 취소·환불을 신청한 주문은 자기 주문 내역에서 "REFUND_REQUESTED" 라는 영문 enum
+ * 그대로 보였다. 상태가 늘어날 때 빠뜨리기 쉬운 표를 둘로 두지 않는다.
+ */
+const STATUS_CLASS: Record<string, string> = {
+  CREATED: 'bg-yellow-100 text-yellow-800',
+  PAID: 'bg-green-100 text-green-800',
+  SHIPPING_PENDING: 'bg-sky-100 text-sky-800',
+  IN_TRANSIT: 'bg-sky-100 text-sky-800',
+  DELIVERED: 'bg-blue-100 text-blue-800',
+  CANCELLATION_REQUESTED: 'bg-orange-100 text-orange-800',
+  CANCELLATION_APPROVED: 'bg-orange-100 text-orange-800',
+  REFUND_REQUESTED: 'bg-orange-100 text-orange-800',
+  REFUND_COMPLETED: 'bg-purple-100 text-purple-800',
+  CANCELED: 'bg-red-100 text-red-800',
+  REFUNDED: 'bg-purple-100 text-purple-800',
+};
+
+const statusOf = (status: string) => ({
+  label: ORDER_STATUS_LABEL[status as OrderStatusValue] ?? status,
+  cls: STATUS_CLASS[status] ?? 'bg-gray-100 text-gray-700',
+});
 
 const MyPage: React.FC = () => {
   const user = authApi.getCurrentUser();
@@ -76,12 +104,9 @@ const MyPage: React.FC = () => {
       year: 'numeric', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit',
     });
 
-  const statusConfig: Record<string, { label: string; cls: string }> = {
-    CREATED:  { label: '주문 완료', cls: 'bg-yellow-100 text-yellow-800' },
-    PAID:     { label: '결제 완료', cls: 'bg-green-100 text-green-800' },
-    CANCELED: { label: '취소됨',   cls: 'bg-red-100 text-red-800' },
-    REFUNDED: { label: '환불됨',   cls: 'bg-purple-100 text-purple-800' },
-  };
+  /** 신청·철회로 바뀐 주문을 목록에 반영한다(서버 응답이 곧 새 상태다). */
+  const handleOrderUpdated = (updated: OrderResponse) =>
+    setOrders((prev) => prev.map((o) => (o.id === updated.id ? updated : o)));
 
   // 리뷰 성공 처리
   const handleReviewSuccess = (saved: ReviewResponse) => {
@@ -172,7 +197,7 @@ const MyPage: React.FC = () => {
             <div className="space-y-4">
               {orders.map((order) => {
                 const product = order.productId ? products.get(order.productId) : null;
-                const status  = statusConfig[order.status] ?? { label: order.status, cls: 'bg-gray-100 text-gray-700' };
+                const status = statusOf(order.status);
                 const existingReview = getReviewForProduct(order.productId);
                 const canReview = order.status === 'PAID' && order.productId;
 
@@ -250,6 +275,12 @@ const MyPage: React.FC = () => {
                     {/* 현금영수증 — 계좌이체·가상계좌 결제만 대상(카드는 카드사 전표로 이미 신고됨).
                         결제된 주문에만 노출한다: 입금 전에는 발급할 것이 없다. */}
                     {order.status === 'PAID' && <CashReceiptPanel orderId={order.id} />}
+
+                    {/* 취소·환불 신청과 철회 — 고객이 주문에 닿을 수 있는 화면이 여기뿐이라,
+                        이 자리가 곧 반품 신청의 진입점이다. 노출 조건은 컴포넌트가 서버
+                        전이표를 옮겨 둔 판정으로 정한다. */}
+                    <OrderRequestActions order={order} onUpdated={handleOrderUpdated} />
+
                   </div>
                 );
               })}

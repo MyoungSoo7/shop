@@ -171,12 +171,24 @@ class OrderControllerTest {
     }
 
     @Test @DisplayName("PATCH /orders/{id}/cancel") void cancelOrder() throws Exception {
+        login(1L, "USER");
         Order order = Order.create(1L, 1L, new BigDecimal("10000"));
+        when(getOrderUseCase.getOrderById(1L)).thenReturn(order);
         order.cancel();
         when(changeOrderStatusUseCase.cancelOrder(1L)).thenReturn(order);
 
         mockMvc.perform(patch("/orders/1/cancel"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.status").value("CANCELED"));
+    }
+
+    @Test @DisplayName("PATCH /orders/{id}/cancel - 타인 주문은 403 (IDOR)") void cancelOrder_otherForbidden() throws Exception {
+        login(2L, "USER");
+        when(getOrderUseCase.getOrderById(1L)).thenReturn(Order.create(1L, 1L, new BigDecimal("10000")));
+
+        mockMvc.perform(patch("/orders/1/cancel"))
+                .andExpect(status().isForbidden());
+
+        verify(changeOrderStatusUseCase, never()).cancelOrder(anyLong());
     }
 }

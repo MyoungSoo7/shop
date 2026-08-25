@@ -24,6 +24,7 @@ import java.util.List;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
@@ -274,6 +275,8 @@ class OrderControllerMoreTest {
     @Test
     @DisplayName("POST /orders/{id}/cancellation-request: 취소 신청 (principal actor)")
     void requestCancellation() throws Exception {
+        login(1L, "USER");
+        when(getOrderUseCase.getOrderById(7L)).thenReturn(order());
         when(changeOrderStatusUseCase.requestCancellation(eq(7L), eq("변심"), eq("alice")))
                 .thenReturn(order());
 
@@ -290,6 +293,9 @@ class OrderControllerMoreTest {
     @Test
     @DisplayName("POST /orders/{id}/refund-request: 환불 신청 (principal 없으면 system)")
     void requestRefund() throws Exception {
+        // 이력에 남는 actor 는 요청 Principal 에서 오고, 소유권 대조는 JWT 주체에서 온다 — 출처가 다르다.
+        login(1L, "USER");
+        when(getOrderUseCase.getOrderById(7L)).thenReturn(order());
         when(changeOrderStatusUseCase.requestRefund(eq(7L), eq("불량"), eq("system")))
                 .thenReturn(order());
 
@@ -300,6 +306,57 @@ class OrderControllerMoreTest {
                                 """))
                 .andExpect(status().isOk());
         verify(changeOrderStatusUseCase).requestRefund(7L, "불량", "system");
+    }
+
+    /**
+     * 남의 주문에 환불 신청을 밀어 넣는 것은 "대신 환불해 주는" 정도로 끝나지 않는다.
+     * 전이표상 REFUND_REQUESTED 에서 갈 수 있는 곳은 REFUNDED 뿐이라, 신청이 꽂히는 순간
+     * 그 주문의 배송은 운영자가 손대기 전까지 멈춘다 — 즉 서비스 거부다.
+     */
+    @Test
+    @DisplayName("POST /orders/{id}/refund-request: 타인 주문은 403 (IDOR — 남의 배송을 멈출 수 있다)")
+    void requestRefund_otherForbidden() throws Exception {
+        login(2L, "USER");
+        when(getOrderUseCase.getOrderById(7L)).thenReturn(order());   // 주인은 1L
+
+        mockMvc.perform(post("/orders/7/refund-request")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"reason":"불량"}
+                                """))
+                .andExpect(status().isForbidden());
+        verify(changeOrderStatusUseCase, never()).requestRefund(anyLong(), any(), any());
+    }
+
+    @Test
+    @DisplayName("POST /orders/{id}/cancellation-request: 타인 주문은 403 (IDOR)")
+    void requestCancellation_otherForbidden() throws Exception {
+        login(2L, "USER");
+        when(getOrderUseCase.getOrderById(7L)).thenReturn(order());
+
+        mockMvc.perform(post("/orders/7/cancellation-request")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"reason":"변심"}
+                                """))
+                .andExpect(status().isForbidden());
+        verify(changeOrderStatusUseCase, never()).requestCancellation(anyLong(), any(), any());
+    }
+
+    /** CS 처리를 하려면 운영자는 남의 주문을 대신 신청할 수 있어야 한다. */
+    @Test
+    @DisplayName("POST /orders/{id}/refund-request: ADMIN 은 남의 주문도 대신 신청한다")
+    void requestRefund_adminBypasses() throws Exception {
+        login(999L, "ADMIN");
+        when(getOrderUseCase.getOrderById(7L)).thenReturn(order());
+        when(changeOrderStatusUseCase.requestRefund(eq(7L), eq("CS 접수"), any())).thenReturn(order());
+
+        mockMvc.perform(post("/orders/7/refund-request")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"reason":"CS 접수"}
+                                """))
+                .andExpect(status().isOk());
     }
 
     @Test

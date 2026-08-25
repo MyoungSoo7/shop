@@ -276,26 +276,39 @@ public class OrderController {
     @PatchMapping("/{id}/cancel")
     public ResponseEntity<OrderResponse> cancelOrder(
             @Parameter(description = "주문 ID", required = true) @PathVariable @Positive(message = "주문 ID는 양수여야 합니다") Long id) {
+        requireOwner(id);
         Order order = changeOrderStatusUseCase.cancelOrder(id);
         return ResponseEntity.ok(OrderResponse.from(order));
     }
 
     @Operation(summary = "주문 취소 신청", description = "사용자가 주문 취소를 신청한다.")
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "신청 성공"),
+            @ApiResponse(responseCode = "403", description = "타인 주문"),
+            @ApiResponse(responseCode = "409", description = "취소를 신청할 수 없는 상태")
+    })
     @PostMapping("/{id}/cancellation-request")
     public ResponseEntity<OrderResponse> requestCancellation(
             @PathVariable Long id,
             @RequestBody StatusReasonRequest request,
             Principal principal) {
+        requireOwner(id);
         Order order = changeOrderStatusUseCase.requestCancellation(id, request.reason(), actor(principal));
         return ResponseEntity.ok(OrderResponse.from(order));
     }
 
     @Operation(summary = "환불 신청", description = "사용자가 결제 완료 주문의 환불을 신청한다.")
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "신청 성공"),
+            @ApiResponse(responseCode = "403", description = "타인 주문"),
+            @ApiResponse(responseCode = "409", description = "환불을 신청할 수 없는 상태")
+    })
     @PostMapping("/{id}/refund-request")
     public ResponseEntity<OrderResponse> requestRefund(
             @PathVariable Long id,
             @RequestBody StatusReasonRequest request,
             Principal principal) {
+        requireOwner(id);
         Order order = changeOrderStatusUseCase.requestRefund(id, request.reason(), actor(principal));
         return ResponseEntity.ok(OrderResponse.from(order));
     }
@@ -344,8 +357,7 @@ public class OrderController {
             @PathVariable @Positive Long id,
             @RequestBody(required = false) StatusReasonRequest request,
             Principal principal) {
-        Order order = getOrderUseCase.getOrderById(id);
-        ResourceOwnership.requireSelfOrAdmin(order.getUserId());
+        requireOwner(id);
         String reason = request == null ? null : request.reason();
         return ResponseEntity.ok(OrderResponse.from(
                 withdrawOrderRequestUseCase.withdraw(id, reason, actor(principal))));
@@ -366,10 +378,25 @@ public class OrderController {
             @Valid @RequestBody CancelItemsRequest request,
             Principal principal) {
         // IDOR 방지 — 취소 대상 주문의 소유자를 JWT 주체와 대조한다(요청 파라미터의 userId 를 믿지 않는다).
-        Order order = getOrderUseCase.getOrderById(id);
-        ResourceOwnership.requireSelfOrAdmin(order.getUserId());
+        requireOwner(id);
         return ResponseEntity.ok(cancelOrderItemsUseCase.cancelItems(
                 id, request.itemIds(), request.reason(), actor(principal)));
+    }
+
+    /**
+     * 주문 단건을 대상으로 하는 사용자 조작의 IDOR 방어 — 경로 변수의 주문 번호가 <b>내 주문</b>인지
+     * JWT 주체와 대조한다. ADMIN·MANAGER 는 CS 처리를 위해 통과한다.
+     *
+     * <p>이 저장소의 인가는 {@code SecurityConfig} 의 URL 매처가 전부인데, 매처는 역할만 볼 뿐
+     * "이 {@code {id}} 가 누구 것인가"를 가르지 못한다. 그래서 신청·취소처럼 주문 번호 하나로
+     * 남의 주문을 건드릴 수 있는 경로는 컨트롤러가 직접 대조해야 한다.
+     *
+     * <p>빠뜨렸을 때의 실제 피해가 "남이 내 환불을 대신 신청해 준다" 정도로 끝나지 않는다는 점이
+     * 중요하다. 전이표상 {@code REFUND_REQUESTED} 에서 갈 수 있는 곳은 {@code REFUNDED} 뿐이라,
+     * 아무 주문에나 환불 신청을 밀어 넣으면 그 주문의 배송이 운영자가 손대기 전까지 멈춘다.
+     */
+    private void requireOwner(Long orderId) {
+        ResourceOwnership.requireSelfOrAdmin(getOrderUseCase.getOrderById(orderId).getUserId());
     }
 
     private static String actor(Principal principal) {

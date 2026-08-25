@@ -35,6 +35,24 @@ describe('orderWorkflowApi', () => {
   });
 
   /**
+   * 되돌아갈 상태를 클라이언트가 고르지 않는다는 것이 이 경로의 핵심이다. 본문에 목표 상태가
+   * 실리면 화면이 전이표를 다시 쓰는 셈이 되고, 신청한 적 없는 상태로도 갈 수 있게 된다.
+   */
+  it('철회는 사유만 싣고 돌아갈 상태를 지정하지 않는다', async () => {
+    await orderWorkflowApi.withdrawRequest(42, '다시 받기로 했습니다');
+
+    expect(api.post).toHaveBeenCalledWith('/orders/42/request-withdraw', {
+      reason: '다시 받기로 했습니다',
+    });
+  });
+
+  it('사유 없이 철회하면 reason 은 null 로 간다', async () => {
+    await orderWorkflowApi.withdrawRequest(42);
+
+    expect(api.post).toHaveBeenCalledWith('/orders/42/request-withdraw', { reason: null });
+  });
+
+  /**
    * 신청과 승인이 다른 경로라는 것이 곧 권한 모델이다 — /orders/admin/** 만 ADMIN·MANAGER 게이트다.
    * 승인이 사용자 경로로 새면 사용자가 스스로 환불을 완결시킬 수 있다.
    */

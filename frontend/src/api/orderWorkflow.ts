@@ -80,6 +80,18 @@ export const orderWorkflowApi = {
     return response.data;
   },
 
+  /**
+   * POST /orders/{id}/request-withdraw — 사용자가 낸 취소·환불 신청을 철회한다.
+   *
+   * 되돌아갈 상태는 클라이언트가 고르지 않는다. 서버가 상태 이력에서 신청 직전 상태를 읽어
+   * 복귀시키므로, 배송 중이던 주문의 환불 신청을 철회하면 배송 중으로 돌아간다.
+   */
+  withdrawRequest: async (orderId: number, reason?: string): Promise<OrderResponse> => {
+    const response = await api.post<OrderResponse>(
+      `/orders/${orderId}/request-withdraw`, { reason: reason ?? null });
+    return response.data;
+  },
+
   /** POST /orders/admin/{id}/cancellation-approve — 운영자 취소 승인 (ADMIN/MANAGER). */
   approveCancellation: async (orderId: number, reason: string): Promise<OrderResponse> => {
     const response = await api.post<OrderResponse>(

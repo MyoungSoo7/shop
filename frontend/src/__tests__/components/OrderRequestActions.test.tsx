@@ -9,7 +9,11 @@ vi.mock('@/api/orderWorkflow', async (importOriginal) => {
   const actual = await importOriginal<typeof import('@/api/orderWorkflow')>();
   return {
     ...actual,
-    orderWorkflowApi: { requestCancellation: vi.fn(), requestRefund: vi.fn() },
+    orderWorkflowApi: {
+      requestCancellation: vi.fn(),
+      requestRefund: vi.fn(),
+      withdrawRequest: vi.fn(),
+    },
   };
 });
 
@@ -95,6 +99,36 @@ describe('OrderRequestActions', () => {
     await waitFor(() =>
       expect(orderWorkflowApi.requestRefund).toHaveBeenCalledWith(42, '상품 파손')
     );
+  });
+
+  /**
+   * 철회가 없으면 마음이 바뀐 고객의 주문은 운영자가 손대기 전까지 신청 상태에 묶인다.
+   * 특히 REFUND_REQUESTED 에서 전이표가 허용하는 곳은 REFUNDED 뿐이라 배송도 함께 멈춘다.
+   */
+  it('신청 상태에서는 신청 버튼 대신 철회만 보인다', () => {
+    renderWith('REFUND_REQUESTED');
+
+    expect(screen.queryByRole('button', { name: '환불 신청' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: '취소 신청' })).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '신청 철회' })).toBeInTheDocument();
+  });
+
+  it('취소 신청 상태에서도 철회가 열린다', () => {
+    renderWith('CANCELLATION_REQUESTED');
+
+    expect(screen.getByRole('button', { name: '신청 철회' })).toBeInTheDocument();
+  });
+
+  it('철회하면 서버가 돌려준 주문이 그대로 부모로 올라간다', async () => {
+    const restored = order('IN_TRANSIT');
+    vi.mocked(orderWorkflowApi.withdrawRequest).mockResolvedValue(restored);
+    const onUpdated = renderWith('REFUND_REQUESTED');
+
+    fireEvent.click(screen.getByRole('button', { name: '신청 철회' }));
+
+    await waitFor(() => expect(orderWorkflowApi.withdrawRequest).toHaveBeenCalledWith(42));
+    // 돌아갈 상태를 화면이 고르지 않는다 — 배송 중이던 주문은 배송 중으로 돌아간다.
+    await waitFor(() => expect(onUpdated).toHaveBeenCalledWith(restored));
   });
 
   it('앞뒤 공백만 있는 사유는 신청되지 않는다', () => {

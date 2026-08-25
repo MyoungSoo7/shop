@@ -4,6 +4,7 @@ import {
   orderWorkflowApi,
   canRequestCancellation,
   canRequestRefund,
+  isAwaitingApproval,
 } from '@/api/orderWorkflow';
 import { errorDetail } from '@/lib/apiError';
 import { useToast } from '@/contexts/useToast';
@@ -20,6 +21,10 @@ interface OrderRequestActionsProps {
  * 운영자 승인이 만든다. 사용자가 스스로 환불을 완료시킬 수 있으면 그건 워크플로가 아니라 구멍이다.
  *
  * <p>사유는 필수로 받는다 — 승인 화면에서 운영자가 판단할 근거가 그것뿐이다.
+ *
+ * <p>신청한 뒤에는 <b>철회</b>만 남는다. 철회가 없으면 마음이 바뀐 고객의 주문은 운영자가
+ * 처리할 때까지 신청 상태에 묶인다 — 환불 신청 상태에서 전이표가 허용하는 곳은 환불 완료뿐이라
+ * 배송도 함께 멈춘다.
  */
 const OrderRequestActions: React.FC<OrderRequestActionsProps> = ({ order, onUpdated }) => {
   const { showToast } = useToast();
@@ -29,6 +34,35 @@ const OrderRequestActions: React.FC<OrderRequestActionsProps> = ({ order, onUpda
 
   const cancellable = canRequestCancellation(order.status);
   const refundable = canRequestRefund(order.status);
+  const withdrawable = isAwaitingApproval(order.status);
+
+  const withdraw = async () => {
+    setBusy(true);
+    try {
+      onUpdated(await orderWorkflowApi.withdrawRequest(order.id));
+      showToast('신청을 철회했습니다.', 'success');
+    } catch (err) {
+      showToast(errorDetail(err, '철회에 실패했습니다.'), 'error');
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  if (withdrawable) {
+    return (
+      <div className="mt-3 pt-3 border-t border-gray-100 flex items-center justify-between gap-2">
+        <span className="text-xs text-gray-500">운영자 승인을 기다리는 중입니다.</span>
+        <button
+          type="button"
+          disabled={busy}
+          onClick={() => void withdraw()}
+          className="px-3 py-1.5 text-xs font-medium rounded border border-gray-300 text-gray-700 disabled:opacity-40"
+        >
+          신청 철회
+        </button>
+      </div>
+    );
+  }
 
   if (!cancellable && !refundable) return null;
 
