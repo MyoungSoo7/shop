@@ -2,13 +2,16 @@ package github.lms.lemuel.order.application.service;
 
 import github.lms.lemuel.order.application.port.in.ChangeOrderStatusUseCase;
 import github.lms.lemuel.order.application.port.out.LoadOrderPort;
+import github.lms.lemuel.order.application.port.out.LoadUserForOrderPort;
 import github.lms.lemuel.order.application.port.out.OrderCouponRestorePort;
 import github.lms.lemuel.order.application.port.out.OrderPointRewardPort;
 import github.lms.lemuel.order.application.port.out.RefundOrderPaymentPort;
 import github.lms.lemuel.order.application.port.out.SaveOrderStatusHistoryPort;
 import github.lms.lemuel.order.application.port.out.SaveOrderPort;
+import github.lms.lemuel.order.application.port.out.SendOrderNotificationPort;
 import github.lms.lemuel.order.domain.Order;
 import github.lms.lemuel.order.domain.OrderItem;
+import github.lms.lemuel.order.domain.OrderNotifiableEvent;
 import github.lms.lemuel.order.domain.OrderStatus;
 import github.lms.lemuel.order.domain.RefundPolicy;
 import github.lms.lemuel.order.domain.exception.InvalidOrderStateException;
@@ -21,8 +24,12 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionSynchronization;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 
+import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
 
 /**
  * 주문 상태 변경 서비스
@@ -33,6 +40,9 @@ public class ChangeOrderStatusService implements ChangeOrderStatusUseCase {
 
     private static final Logger log = LoggerFactory.getLogger(ChangeOrderStatusService.class);
 
+    /** 트랜잭션 스코프 통지 선점 장부의 키 — {@link #claimNotification} 참고. */
+    private static final Object NOTIFY_CLAIM_KEY = new Object();
+
     private final LoadOrderPort loadOrderPort;
     private final SaveOrderPort saveOrderPort;
     private final SaveOrderStatusHistoryPort historyPort;
@@ -41,6 +51,8 @@ public class ChangeOrderStatusService implements ChangeOrderStatusUseCase {
     private final IncreaseVariantStockUseCase increaseVariantStockUseCase;
     private final OrderPointRewardPort orderPointRewardPort;
     private final OrderCouponRestorePort orderCouponRestorePort;
+    private final LoadUserForOrderPort loadUserForOrderPort;
+    private final SendOrderNotificationPort sendOrderNotificationPort;
 
     @Override
     @Transactional
@@ -48,6 +60,9 @@ public class ChangeOrderStatusService implements ChangeOrderStatusUseCase {
         Order order = loadOrderPort.findById(orderId)
                 .orElseThrow(() -> new OrderNotFoundException(orderId));
 
+        // 이력은 이 경로만 예전부터 시작 상태를 CREATED 로 적어 왔다(실제 전이 전 상태와 다를 수 있다).
+        // 통지에는 진짜 이전 상태를 쓴다 — 이력의 그 표기는 이 변경의 범위 밖이라 건드리지 않는다.
+        OrderStatus previous = order.getStatus();
         order.cancel();
 
         Order saved = saveOrderPort.save(order);
@@ -56,6 +71,7 @@ public class ChangeOrderStatusService implements ChangeOrderStatusUseCase {
         // 이 호출이 없으면 직접 취소된 수량만큼 재고가 영구히 판매 불가 상태로 남는다.
         restoreStock(saved);
         applyPointReward(saved, saved.getStatus());
+        notifyStatusChanged(saved, previous);
         return saved;
     }
 
@@ -101,6 +117,7 @@ public class ChangeOrderStatusService implements ChangeOrderStatusUseCase {
                 operator == null || operator.isBlank() ? "system" : operator, reason);
         restoreStock(finalOrder);
         applyPointReward(finalOrder, finalOrder.getStatus());
+        notifyStatusChanged(finalOrder, previous);
         return finalOrder;
     }
 
@@ -152,6 +169,7 @@ public class ChangeOrderStatusService implements ChangeOrderStatusUseCase {
                 operator == null || operator.isBlank() ? "system" : operator, reason);
         restoreStock(refunded);
         applyPointReward(refunded, refunded.getStatus());
+        notifyStatusChanged(refunded, previous);
         if (outcome.deductsShippingFee()) {
             log.info("환불 승인(배송비 차감): orderId={}, 환불액={}, 차감 배송비={}",
                     orderId, outcome.refundableAmount(), outcome.deductedShippingFee());
@@ -240,6 +258,7 @@ public class ChangeOrderStatusService implements ChangeOrderStatusUseCase {
             restoreStock(saved);
         }
         applyPointReward(saved, target);
+        notifyStatusChanged(saved, previous);
         return saved;
     }
 
@@ -266,6 +285,7 @@ public class ChangeOrderStatusService implements ChangeOrderStatusUseCase {
         historyPort.save(orderId, OrderStatus.CREATED.name(), saved.getStatus().name(), "system", reason);
         restoreStock(saved);
         applyPointReward(saved, saved.getStatus());
+        notifyStatusChanged(saved, OrderStatus.CREATED);   // 위 가드가 이전 상태를 CREATED 로 못박았다.
         return true;
     }
 
@@ -278,6 +298,7 @@ public class ChangeOrderStatusService implements ChangeOrderStatusUseCase {
         historyPort.save(orderId, previous.name(), target.name(),
                 changedBy == null || changedBy.isBlank() ? "system" : changedBy, reason);
         applyPointReward(saved, target);
+        notifyStatusChanged(saved, previous);
         return saved;
     }
 
@@ -301,5 +322,70 @@ public class ChangeOrderStatusService implements ChangeOrderStatusUseCase {
             // couponsts 를 미사용으로 되돌리던 처리와 같은 의도다.
             orderCouponRestorePort.restoreOnCanceled(saved.getId(), "주문 " + target.name());
         }
+    }
+
+    /**
+     * 상태 전이를 고객에게 알린다 — 이 서비스가 오래 안 하던 일.
+     *
+     * <p>주문 확인 메일 한 통만 나가고 그 뒤로는 배송이 시작돼도, 환불 신청이 접수돼도 아무 통지가
+     * 없었다. 알릴 사건인지의 판정은 {@link OrderNotifiableEvent} 가, 채널 팬아웃과 실패 격리는
+     * 어댑터가 한다. 여기서는 <b>언제 부를지</b>만 정한다 — {@link #applyPointReward} 를 부르는
+     * 자리와 정확히 같은 자리다.
+     *
+     * <p><b>커밋 후에 보낸다.</b> 트랜잭션 안에서 바로 보내면 뒤이어 롤백된 전이도 고객에게는
+     * 이미 통지된 상태가 된다. "환불 접수됐다"는 문자를 받았는데 주문은 그대로인 상황은 되돌릴 수
+     * 없다 — 재고·포인트와 달리 발송은 보상 트랜잭션이 없다. 트랜잭션이 없는 호출(단위 테스트 등)
+     * 에서는 동기화가 비활성이므로 그 자리에서 보낸다.
+     */
+    private void notifyStatusChanged(Order saved, OrderStatus previous) {
+        OrderNotifiableEvent event = OrderNotifiableEvent.of(previous, saved.getStatus()).orElse(null);
+        if (event == null) {
+            return;   // 알릴 사건이 아니면 이메일 조회조차 하지 않는다.
+        }
+        if (!claimNotification(saved.getId(), event)) {
+            return;
+        }
+        String email = loadUserForOrderPort.findEmailById(saved.getUserId()).orElse(null);
+        afterCommit(() -> sendOrderNotificationPort.sendStatusChanged(email, saved, previous));
+    }
+
+    /**
+     * 한 트랜잭션 안에서 같은 (주문, 사건) 조합을 한 번만 통지하도록 선점한다.
+     *
+     * <p>없으면 환불 한 건에 문자가 두 번 간다. 환불 승인은 PG 환불을 부르고, 결제 컨텍스트가 그
+     * 결과로 주문을 {@code REFUNDED} 로 올리며 {@link #updateStatus} 를 다시 태운다 — 재고 원복과
+     * 포인트 회수가 <b>도메인 멱등</b> 으로 막고 있는 바로 그 겹침이다. 발송에는 그런 멱등이 없어
+     * 여기서 막는다. 커밋 전에는 여러 번 부딪히고 커밋 뒤에 한 번만 나가면 된다.
+     */
+    @SuppressWarnings("unchecked")
+    private static boolean claimNotification(Long orderId, OrderNotifiableEvent event) {
+        if (!TransactionSynchronizationManager.isSynchronizationActive()) {
+            return true;   // 트랜잭션 밖(단위 테스트 등) — 겹칠 일이 없다.
+        }
+        Set<String> claimed = (Set<String>) TransactionSynchronizationManager.getResource(NOTIFY_CLAIM_KEY);
+        if (claimed == null) {
+            claimed = new HashSet<>();
+            TransactionSynchronizationManager.bindResource(NOTIFY_CLAIM_KEY, claimed);
+            TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+                @Override
+                public void afterCompletion(int status) {
+                    TransactionSynchronizationManager.unbindResourceIfPossible(NOTIFY_CLAIM_KEY);
+                }
+            });
+        }
+        return claimed.add(orderId + ":" + event);
+    }
+
+    private static void afterCommit(Runnable action) {
+        if (!TransactionSynchronizationManager.isSynchronizationActive()) {
+            action.run();
+            return;
+        }
+        TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+            @Override
+            public void afterCommit() {
+                action.run();
+            }
+        });
     }
 }

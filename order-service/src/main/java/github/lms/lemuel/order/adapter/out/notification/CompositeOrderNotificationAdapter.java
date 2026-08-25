@@ -2,10 +2,14 @@ package github.lms.lemuel.order.adapter.out.notification;
 
 import github.lms.lemuel.order.application.port.out.SendOrderNotificationPort;
 import github.lms.lemuel.order.domain.Order;
+import github.lms.lemuel.order.domain.OrderNotifiableEvent;
+import github.lms.lemuel.order.domain.OrderStatus;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
 
 import java.util.List;
+import java.util.Optional;
+import java.util.function.Consumer;
 
 /**
  * 주문 알림 디스패처 — <b>Composite + Strategy</b>.
@@ -29,12 +33,32 @@ public class CompositeOrderNotificationAdapter implements SendOrderNotificationP
 
     @Override
     public void sendOrderConfirmation(String email, Order order) {
+        fanOut(order, channel -> channel.sendOrderConfirmation(email, order));
+    }
+
+    /**
+     * {@inheritDoc}
+     *
+     * <p>알릴 사건인지의 판정을 여기서 한 번만 한다. 채널마다 전이표를 다시 읽게 두면 채널이 늘 때마다
+     * "메일은 울렸는데 알림톡은 안 울린다" 류의 어긋남이 생긴다.
+     */
+    @Override
+    public void sendStatusChanged(String email, Order order, OrderStatus previous) {
+        Optional<OrderNotifiableEvent> event = OrderNotifiableEvent.of(previous, order.getStatus());
+        if (event.isEmpty()) {
+            return;
+        }
+        fanOut(order, channel -> channel.sendStatusChanged(email, order, event.get()));
+    }
+
+    /** 활성 채널에 팬아웃하되 한 채널의 실패를 다른 채널·호출 트랜잭션으로 번지지 않게 가둔다. */
+    private void fanOut(Order order, Consumer<OrderNotificationChannel> send) {
         for (OrderNotificationChannel channel : channels) {
             if (!channel.isEnabled()) {
                 continue;
             }
             try {
-                channel.sendOrderConfirmation(email, order);
+                send.accept(channel);
             } catch (Exception e) {
                 // 채널 실패 격리 — 다른 채널·주문 생성에 영향 없음
                 log.error("알림 채널 '{}' 전송 실패: orderId={}, error={}",

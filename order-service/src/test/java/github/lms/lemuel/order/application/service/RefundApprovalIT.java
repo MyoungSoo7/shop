@@ -12,6 +12,7 @@ import github.lms.lemuel.order.application.port.out.SaveOrderStatusHistoryPort;
 import github.lms.lemuel.order.application.port.out.SendOrderNotificationPort;
 import github.lms.lemuel.order.domain.Order;
 import github.lms.lemuel.order.application.port.in.GetPendingStockReclaimUseCase.PendingReclaim;
+import github.lms.lemuel.order.domain.OrderNotifiableEvent;
 import github.lms.lemuel.order.domain.OrderStatus;
 import github.lms.lemuel.payment.adapter.out.persistence.PaymentMapper;
 import github.lms.lemuel.payment.adapter.out.persistence.PaymentPersistenceAdapter;
@@ -60,6 +61,7 @@ import org.testcontainers.junit.jupiter.Testcontainers;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
 import java.util.function.Supplier;
@@ -117,8 +119,12 @@ class RefundApprovalIT {
     private CreateMultiItemOrderService createOrderService;
     private ChangeOrderStatusService changeStatusService;
 
+    /** 커밋 후 실제로 나간 통지("{orderId}:{event}"). 중복 발송을 세기 위한 장부다. */
+    private final List<String> sentEvents = new ArrayList<>();
+
     @BeforeEach
     void setup() {
+        sentEvents.clear();
         var decVariant = new DecreaseVariantStockService(variantAdapter, variantAdapter,
                 new TransactionTemplate(txManager), new SimpleMeterRegistry());
         var decProduct = new DecreaseProductStockService(productAdapter, productAdapter,
@@ -127,7 +133,12 @@ class RefundApprovalIT {
             @Override public boolean existsById(Long id) { return true; }
             @Override public Optional<String> findEmailById(Long id) { return Optional.of("buyer@test.com"); }
         };
-        SendOrderNotificationPort notify = (email, order) -> { };
+        // 포트가 생애주기 통지까지 갖게 되면서 더 이상 람다 하나로 못 만든다 — 이 IT 의 관심사는
+        // 알림이 아니므로 두 메서드 모두 무해하게 흘려보낸다.
+        SendOrderNotificationPort notify = new SendOrderNotificationPort() {
+            @Override public void sendOrderConfirmation(String email, Order order) { }
+            @Override public void sendStatusChanged(String email, Order order, OrderStatus previous) { }
+        };
         PublishOrderEventPort publishOrder = (orderId, uid, pid, status, amount, createdAt) -> { };
         CouponUseCase coupon = Mockito.mock(CouponUseCase.class); // 쿠폰 미사용 경로
         createOrderService = new CreateMultiItemOrderService(loadUser, productAdapter, variantAdapter,
@@ -207,8 +218,19 @@ class RefundApprovalIT {
         // 쿠폰 회수도 이 시나리오의 관심사가 아니다(이 주문은 쿠폰을 쓰지 않았다).
         github.lms.lemuel.order.application.port.out.OrderCouponRestorePort noopCoupon =
                 (orderId, reason) -> { };
+        // 통지는 실제 포트를 물려 두고 무엇이 나갔는지 기록만 한다 — 환불 승인 한 건에 통지가
+        // 몇 번 나가는지가 이 시나리오에서 실제로 확인 가능한 유일한 자리다(결제 컨텍스트가
+        // updateStatus 를 겹쳐 태우는 경로가 여기서만 진짜로 돈다).
+        SendOrderNotificationPort recordingNotify = new SendOrderNotificationPort() {
+            @Override public void sendOrderConfirmation(String email, Order order) { }
+            @Override public void sendStatusChanged(String email, Order order, OrderStatus previous) {
+                OrderNotifiableEvent.of(previous, order.getStatus())
+                        .ifPresent(e -> sentEvents.add(order.getId() + ":" + e));
+            }
+        };
         changeStatusService = new ChangeOrderStatusService(orderAdapter, orderAdapter, history,
-                refundOrderPaymentPort, increaseProduct, increaseVariant, noopReward, noopCoupon);
+                refundOrderPaymentPort, increaseProduct, increaseVariant, noopReward, noopCoupon,
+                loadUser, recordingNotify);
     }
 
     @Test
@@ -226,6 +248,27 @@ class RefundApprovalIT {
         assertThat(pay.getRefundedAmount()).isEqualByComparingTo("20000");
         assertThat(productAdapter.findById(f.productId).orElseThrow().getStockQuantity())
                 .as("재고 원복(98→100)").isEqualTo(100);
+    }
+
+    /**
+     * 환불 승인 한 번은 <b>통지도 한 번</b>이어야 한다.
+     *
+     * <p>이 경로는 한 트랜잭션 안에서 주문 상태가 두 번 만져진다 — approveRefund 가 PG 환불을 부르고,
+     * 결제 컨텍스트가 주문을 REFUNDED 로 올리면서 updateStatus 로 다시 들어온다. 재고 원복과 포인트
+     * 회수는 도메인 멱등이 이 겹침을 막아 주지만 <b>발송에는 되돌릴 방법이 없다</b> — 그래서 트랜잭션
+     * 단위 통지 선점(claim)이 있다. 이 테스트가 깨지면 고객 휴대폰이 같은 환불로 두 번 울린다.
+     */
+    @Test
+    @DisplayName("환불 승인 한 건은 환불 완료 통지를 정확히 한 번만 낸다")
+    void approveRefund_notifiesExactlyOnce() {
+        Fixture f = seedPaidOrder(100, new BigDecimal("10000"), 2);
+        prepareOrder(f.orderId, BigDecimal.ZERO, /*ship*/false, OrderStatus.REFUND_REQUESTED);
+
+        inNewTx(() -> changeStatusService.approveRefund(f.orderId, "변심", "admin"));
+
+        assertThat(sentEvents)
+                .as("같은 트랜잭션에서 REFUNDED 가 두 번 확정돼도 통지는 한 번")
+                .containsExactly(f.orderId + ":" + OrderNotifiableEvent.REFUND_COMPLETED);
     }
 
     @Test

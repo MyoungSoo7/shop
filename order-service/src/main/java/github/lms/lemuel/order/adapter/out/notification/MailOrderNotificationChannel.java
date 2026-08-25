@@ -1,6 +1,7 @@
 package github.lms.lemuel.order.adapter.out.notification;
 
 import github.lms.lemuel.order.domain.Order;
+import github.lms.lemuel.order.domain.OrderNotifiableEvent;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
@@ -57,5 +58,36 @@ public class MailOrderNotificationChannel implements OrderNotificationChannel {
 
         mailSender.send(message);
         log.info("주문 확인 메일 발송 완료: to={}, orderId={}", email, order.getId());
+    }
+
+    /**
+     * {@inheritDoc}
+     *
+     * <p>수신 주소를 모르면(레거시 주문·탈퇴 회원) 보낼 곳이 없으므로 조용히 건너뛴다. 여기서
+     * 예외를 던지면 디스패처가 그걸 <b>전송 실패</b> 로 기록해, 애초에 보낼 수 없던 건과 정말 실패한
+     * 건이 같은 로그로 섞인다.
+     */
+    @Override
+    public void sendStatusChanged(String email, Order order, OrderNotifiableEvent event) {
+        if (email == null || email.isBlank()) {
+            log.debug("수신 주소가 없어 상태 변경 메일 생략: orderId={}, event={}", order.getId(), event);
+            return;
+        }
+
+        SimpleMailMessage message = new SimpleMailMessage();
+        message.setFrom(fromEmail);
+        message.setTo(email);
+        message.setSubject("[Lemuel] " + event.summary() + " (주문 %d)".formatted(order.getId()));
+        message.setText("""
+                안녕하세요.
+
+                주문 번호: %d
+                안내: %s
+                현재 상태: %s
+
+                이용해 주셔서 감사합니다.""".formatted(order.getId(), event.summary(), order.getStatus()));
+
+        mailSender.send(message);
+        log.info("상태 변경 메일 발송 완료: to={}, orderId={}, event={}", email, order.getId(), event);
     }
 }

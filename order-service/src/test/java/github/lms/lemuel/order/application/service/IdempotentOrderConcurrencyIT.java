@@ -12,6 +12,7 @@ import github.lms.lemuel.order.application.port.out.LoadUserForOrderPort;
 import github.lms.lemuel.order.application.port.out.PublishOrderEventPort;
 import github.lms.lemuel.order.application.port.out.SendOrderNotificationPort;
 import github.lms.lemuel.order.domain.Order;
+import github.lms.lemuel.order.domain.OrderStatus;
 import github.lms.lemuel.product.adapter.out.persistence.ProductPersistenceAdapter;
 import github.lms.lemuel.product.adapter.out.persistence.ProductPersistenceMapperImpl;
 import github.lms.lemuel.product.adapter.out.persistence.ProductVariantPersistenceAdapter;
@@ -135,7 +136,12 @@ class IdempotentOrderConcurrencyIT {
             @Override public boolean existsById(Long id) { return true; }
             @Override public Optional<String> findEmailById(Long id) { return Optional.of("buyer@test.com"); }
         };
-        SendOrderNotificationPort notify = (email, order) -> { };
+        // 포트가 생애주기 통지까지 갖게 되면서 더 이상 람다 하나로 못 만든다 — 이 IT 의 관심사는
+        // 알림이 아니므로 두 메서드 모두 무해하게 흘려보낸다.
+        SendOrderNotificationPort notify = new SendOrderNotificationPort() {
+            @Override public void sendOrderConfirmation(String email, Order order) { }
+            @Override public void sendStatusChanged(String email, Order order, OrderStatus previous) { }
+        };
         PublishOrderEventPort publish = (orderId, uid, pid, status, amount, createdAt) -> { };
         CouponUseCase coupon = Mockito.mock(CouponUseCase.class); // 쿠폰 미사용 경로
         var delegate = new CreateMultiItemOrderService(loadUser, productAdapter, variantAdapter,

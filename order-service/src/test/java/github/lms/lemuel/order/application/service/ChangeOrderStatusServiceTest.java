@@ -38,6 +38,8 @@ class ChangeOrderStatusServiceTest {
     @Mock IncreaseVariantStockUseCase increaseVariantStockUseCase;
     @Mock github.lms.lemuel.order.application.port.out.OrderPointRewardPort orderPointRewardPort;
     @Mock github.lms.lemuel.order.application.port.out.OrderCouponRestorePort orderCouponRestorePort;
+    @Mock github.lms.lemuel.order.application.port.out.LoadUserForOrderPort loadUserForOrderPort;
+    @Mock github.lms.lemuel.order.application.port.out.SendOrderNotificationPort sendOrderNotificationPort;
     @InjectMocks ChangeOrderStatusService service;
 
     @Test @DisplayName("주문 취소 성공")
@@ -382,6 +384,77 @@ class ChangeOrderStatusServiceTest {
 
         org.mockito.Mockito.verify(orderPointRewardPort, org.mockito.Mockito.never())
                 .earnOnDelivered(org.mockito.ArgumentMatchers.any());
+    }
+
+    // ── 상태 변경 통지 ────────────────────────────────────────────────
+    // 이 서비스는 오래 알림을 아예 부르지 않았다. 주문 확인 메일 한 통이 전부였고 배송이 시작돼도,
+    // 환불 신청이 접수돼도 고객에게는 아무 소식이 없었다. 아래는 "언제 부르는가"를 못박는다.
+
+    @Test @DisplayName("환불 신청이 접수되면 이전 상태와 함께 통지한다")
+    void requestRefund_notifies() {
+        Order order = orderInStatus(OrderStatus.PAID);
+        when(loadOrderPort.findById(1L)).thenReturn(Optional.of(order));
+        when(saveOrderPort.save(any())).thenAnswer(inv -> inv.getArgument(0));
+        when(loadUserForOrderPort.findEmailById(42L)).thenReturn(Optional.of("buyer@test.com"));
+
+        service.requestRefund(1L, "파손", "user");
+
+        verify(sendOrderNotificationPort).sendStatusChanged("buyer@test.com", order, OrderStatus.PAID);
+    }
+
+    @Test @DisplayName("배송 시작도 통지 대상이다 — 고객이 가장 기다리는 사건")
+    void shippingStarted_notifies() {
+        Order order = orderInStatus(OrderStatus.SHIPPING_PENDING);
+        when(loadOrderPort.findById(1L)).thenReturn(Optional.of(order));
+        when(saveOrderPort.save(any())).thenAnswer(inv -> inv.getArgument(0));
+
+        service.changeShippingStatus(1L, "IN_TRANSIT", "출고", "admin");
+
+        verify(sendOrderNotificationPort)
+                .sendStatusChanged(null, order, OrderStatus.SHIPPING_PENDING);
+    }
+
+    /**
+     * 출고 준비는 창고 내부 사정이라 고객에게 알릴 사건이 아니다. 알릴 게 없으면 이메일 조회조차
+     * 하지 않는다 — 통지 대상 판정이 포트 호출보다 앞이라는 뜻이다.
+     */
+    @Test @DisplayName("출고 준비 전이는 통지하지 않고 이메일도 조회하지 않는다")
+    void shippingPending_doesNotNotify() {
+        Order order = orderInStatus(OrderStatus.PAID);
+        when(loadOrderPort.findById(1L)).thenReturn(Optional.of(order));
+        when(saveOrderPort.save(any())).thenAnswer(inv -> inv.getArgument(0));
+
+        service.changeShippingStatus(1L, "SHIPPING_PENDING", "출고 준비", "admin");
+
+        verify(sendOrderNotificationPort, never()).sendStatusChanged(any(), any(), any());
+        verify(loadUserForOrderPort, never()).findEmailById(any());
+    }
+
+    /**
+     * 수신 주소를 몰라도 통지 호출 자체는 나간다. 이메일 채널만 건너뛰면 되고, 알림톡·Slack 은
+     * 이메일과 무관하게 보낼 수 있기 때문이다 — 여기서 막으면 다른 채널까지 같이 죽는다.
+     */
+    @Test @DisplayName("이메일을 몰라도 통지는 부른다 — 건너뛸지는 채널이 정한다")
+    void unknownEmail_stillNotifies() {
+        Order order = orderInStatus(OrderStatus.PAID);
+        when(loadOrderPort.findById(1L)).thenReturn(Optional.of(order));
+        when(saveOrderPort.save(any())).thenAnswer(inv -> inv.getArgument(0));
+        when(loadUserForOrderPort.findEmailById(42L)).thenReturn(Optional.empty());
+
+        service.requestCancellation(1L, "변심", "user");
+
+        verify(sendOrderNotificationPort).sendStatusChanged(null, order, OrderStatus.PAID);
+    }
+
+    @Test @DisplayName("미결제 취소도 통지한다 — 고객은 자기 주문이 사라진 이유를 알아야 한다")
+    void cancelUnpaid_notifies() {
+        Order order = Order.create(1L, 1L, new BigDecimal("10000"));
+        when(loadOrderPort.findById(1L)).thenReturn(Optional.of(order));
+        when(saveOrderPort.save(any())).thenAnswer(inv -> inv.getArgument(0));
+
+        service.cancelUnpaidOrder(1L, "입금 기한 경과");
+
+        verify(sendOrderNotificationPort).sendStatusChanged(null, order, OrderStatus.CREATED);
     }
 
     /** 지정 상태의 주문을 만든다 — 전이 규칙을 통과할 수 있는 최소 형태. */
