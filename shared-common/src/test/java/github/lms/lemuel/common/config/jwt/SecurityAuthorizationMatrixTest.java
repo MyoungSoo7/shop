@@ -205,6 +205,55 @@ class SecurityAuthorizationMatrixTest {
     }
 
     /**
+     * 판매 통계 콘솔({@code /admin/sales}).
+     *
+     * <p>이 표면은 <b>전사 매출</b>이다 — 무엇이 얼마에 얼마나 팔리는지, 어느 카테고리가 죽었는지.
+     * 매처를 빠뜨리면 {@code anyRequest().authenticated()} 로 떨어져 <b>가입만 한 사용자</b>가
+     * 경쟁사에 그대로 넘길 수 있는 파일을 CSV 로 받아 간다. 개인정보가 아니라서 유출 감지에도
+     * 걸리지 않는다.
+     *
+     * <p>MANAGER 도 403 인지 함께 본다. 같은 {@code /admin} 아래 리뷰·환불 콘솔이 MANAGER 에게
+     * 열려 있어 "관리자 화면이니 매니저도"라는 편의 수정이 언제든 들어올 수 있는 자리다.
+     */
+    @Nested
+    @DisplayName("판매 통계 콘솔 — ADMIN 전용")
+    class SalesStatsConsole {
+
+        @ParameterizedTest(name = "USER → 403: {0}")
+        @ValueSource(strings = {
+                "/admin/sales/products",
+                "/admin/sales/products/export",
+                "/admin/sales/categories",
+                "/admin/sales/categories/export"
+        })
+        void 일반_사용자는_403(String path) throws Exception {
+            mvc.perform(get(path).with(user("u").roles("USER")))
+                    .andExpect(status().isForbidden());
+        }
+
+        @Test
+        @DisplayName("MANAGER 도 못 본다 — CS 업무가 아니라 경영 정보다")
+        void 매니저도_403() throws Exception {
+            mvc.perform(get("/admin/sales/products").with(user("m").roles("MANAGER")))
+                    .andExpect(status().isForbidden());
+        }
+
+        @Test
+        @DisplayName("미인증은 401 — 403 과 구분돼야 화면이 재로그인을 안내할 수 있다")
+        void 미인증은_401() throws Exception {
+            mvc.perform(get("/admin/sales/products"))
+                    .andExpect(status().isUnauthorized());
+        }
+
+        @Test
+        @DisplayName("ADMIN 은 통과한다 — 매처가 너무 좁게 잠겨 콘솔 자체가 죽는 것도 회귀다")
+        void ADMIN_은_통과한다() throws Exception {
+            mvc.perform(get("/admin/sales/categories").with(user("a").roles("ADMIN")))
+                    .andExpect(status().isOk());
+        }
+    }
+
+    /**
      * 프로브 — 모든 경로를 200 으로 받는다.
      *
      * <p>핸들러가 없으면 인가를 통과한 요청이 404 로 떨어져 "통과"와 "경로 없음"이 섞인다.

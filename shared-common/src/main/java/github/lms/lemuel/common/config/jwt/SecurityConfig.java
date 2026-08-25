@@ -224,6 +224,9 @@ public class SecurityConfig {
                         // 아무도 눈치채지 못하는가) 회원 콘솔과 같은 이유로 MANAGER 에게도 열지 않는다.
                         // 잠금 해제도 여기에 있다 — 무차별 대입 대응을 사람이 되돌리는 조작이다.
                         .requestMatchers("/admin/operators/**").hasRole("ADMIN")
+                        // 판매 통계 콘솔 — 상품 랭킹·카테고리별 분포. 리뷰·환불 콘솔과 달리 CS 업무가
+                        // 아니라 경영 정보(무엇이 얼마에 얼마나 팔리는가)라 MANAGER 에게 열지 않는다.
+                        .requestMatchers("/admin/sales/**").hasRole("ADMIN")
                         // 리뷰 관리 콘솔 — 다루는 것이 개인정보가 아니라 공개된 게시물이고, 신고 대응은
                         // CS 업무의 일부라 MANAGER 까지 연다(회원 콘솔과 다른 판단).
                         .requestMatchers("/admin/reviews/**").hasAnyRole("ADMIN", "MANAGER")
