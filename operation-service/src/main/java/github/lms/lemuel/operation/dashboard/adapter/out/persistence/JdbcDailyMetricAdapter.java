@@ -55,6 +55,23 @@ public class JdbcDailyMetricAdapter implements UpsertDailyMetricPort, LoadDailyM
             """;
 
     /**
+     * 기간 조회.
+     *
+     * <p>기본키가 {@code (metric_date, metric_key)} 라 선두 컬럼 범위 스캔으로 끝난다 —
+     * 추이를 위해 인덱스를 새로 만들 필요가 없다.
+     *
+     * <p>정렬을 SQL 에 고정하는 이유는 서비스가 날짜 순서를 다시 세우지 않게 하기 위해서다.
+     * 정렬 없는 결과를 화면이 그대로 그리면 꺾은선이 시간 순서를 잃는데, 개발 DB 처럼 행이
+     * 몇 개 없을 때는 우연히 순서가 맞아 보여 테스트를 통과한다.
+     */
+    private static final String SELECT_BETWEEN = """
+            SELECT metric_date, metric_key, event_count, amount_sum, amount_unknown_count, updated_at
+              FROM opslab.ops_daily_metric
+             WHERE metric_date BETWEEN ? AND ?
+             ORDER BY metric_date, metric_key
+            """;
+
+    /**
      * 모르는 {@code metric_key} 는 예외가 아니라 <b>건너뛴다</b>.
      *
      * <p>지표를 enum 에서 빼는 것은 정상적인 변경인데, 그 순간 이미 쌓인 옛 행 때문에 화면
@@ -102,6 +119,16 @@ public class JdbcDailyMetricAdapter implements UpsertDailyMetricPort, LoadDailyM
     @Transactional(readOnly = true)
     public List<DailyMetric> findByDate(LocalDate date) {
         return jdbc.query(SELECT_BY_DATE, ROW_MAPPER, Date.valueOf(date)).stream()
+                .filter(Objects::nonNull)
+                .toList();
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public List<DailyMetric> findBetween(LocalDate from, LocalDate to) {
+        // ROW_MAPPER 가 모르는 metric_key 에 null 을 돌려주므로 여기서도 걸러 낸다.
+        // enum 에서 뺀 옛 지표가 한 줄 남아 있다고 추이 화면 전체가 죽으면 안 된다.
+        return jdbc.query(SELECT_BETWEEN, ROW_MAPPER, Date.valueOf(from), Date.valueOf(to)).stream()
                 .filter(Objects::nonNull)
                 .toList();
     }
