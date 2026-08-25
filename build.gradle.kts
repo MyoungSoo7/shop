@@ -45,6 +45,21 @@ fun requireNonEmptyCoverageScope(taskName: String, classDirectories: FileCollect
     }
 }
 
+// 커버리지 게이트 제외 목록은 gradle/coverage-excludes.txt 하나뿐이다.
+// shared-common 은 독립 빌드라 이 subprojects {} 를 상속받지 않으므로, 목록을 두 빌드 스크립트에
+// 나눠 적으면 반드시 갈라진다(실제로 갈라져 있었다 — 파일 머리말 참조). 파일에서 읽어 양쪽이
+// 같은 것을 쓰게 한다.
+fun readCoverageExcludes(file: File): List<String> {
+    require(file.isFile) { "커버리지 제외 목록 정본이 없다: $file — 게이트가 무엇을 빼는지 알 수 없다." }
+    val patterns = file.readLines()
+        .map { it.substringBefore('#').trim() }
+        .filter { it.isNotEmpty() }
+    require(patterns.isNotEmpty()) { "커버리지 제외 목록이 비었다: $file" }
+    return patterns
+}
+
+val coverageExcludes = readCoverageExcludes(rootDir.resolve("gradle/coverage-excludes.txt"))
+
 // 측정 대상 0개가 *정상*인 모듈. 잴 코드가 없는 것이지 게이트가 공전하는 것이 아니다.
 // gateway-service 는 Spring Cloud Gateway 라우팅 설정만 있는 모듈로 자바 소스가
 // GatewayServiceApplication 하나뿐이고, 그 하나는 아래 검증 제외 목록에 이미 들어 있다.
@@ -131,39 +146,10 @@ subprojects {
     tasks.named<JacocoCoverageVerification>("jacocoTestCoverageVerification") {
         dependsOn(tasks.named("jacocoTestReport"))
 
-        // persistence adapter, config, mapper 는 통합 테스트 대상 → 단위 테스트 커버리지에서 제외
+        // persistence adapter, config, mapper 는 통합 테스트 대상 → 단위 테스트 커버리지에서 제외.
+        // 목록 정본은 gradle/coverage-excludes.txt — 여기에 패턴을 직접 적지 말 것.
         classDirectories.setFrom(classDirectories.files.map { dir ->
-            fileTree(dir) {
-                exclude(
-                    "**/adapter/out/persistence/**",
-                    "**/adapter/out/readmodel/**",
-                    "**/adapter/out/search/**",
-                    "**/adapter/out/event/**",
-                    "**/adapter/out/pdf/**",
-                    "**/adapter/out/external/**",
-                    "**/adapter/out/notification/**",
-                    "**/adapter/out/mail/**",
-                    "**/adapter/out/security/**",
-                    "**/adapter/out/monitoring/**",
-                    "**/adapter/out/user/**",
-                    "**/adapter/out/pg/**",
-                    "**/adapter/out/llm/**",
-                    "**/adapter/in/web/**",
-                    "**/adapter/in/kafka/**",
-                    "**/adapter/in/batch/**",
-                    "**/adapter/in/api/**",
-                    "**/adapter/in/dto/**",
-                    "**/config/**",
-                    "**/util/**",
-                    // 부트 진입점(@SpringBootApplication main)은 측정 대상이 아니다.
-                    // 이 저장소에 실재하는 세 개만 적는다 — settlement 시절의 13개를 그대로 두면
-                    // "이 서비스들도 여기 있다"는 인상만 남기고 아무것도 제외하지 않는다.
-                    // 새 서비스를 추가하면 여기에도 한 줄 추가할 것.
-                    "**/LemuelApplication*",            // order-service
-                    "**/GatewayServiceApplication*",    // gateway-service
-                    "**/OperationServiceApplication*",  // operation-service
-                )
-            }
+            fileTree(dir) { exclude(coverageExcludes) }
         })
 
         violationRules {

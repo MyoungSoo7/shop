@@ -204,12 +204,27 @@ tasks.named<JacocoReport>("jacocoTestReport") {
     doFirst { requireNonEmptyCoverageScope("jacocoTestReport", classDirectories) }
 }
 
+// 커버리지 게이트 제외 목록은 저장소에 하나뿐이다 — gradle/coverage-excludes.txt.
+// 이 빌드는 독립 빌드라 루트의 subprojects {} 를 상속받지 않는다. 그래서 목록을 여기에 따로
+// 적어 두면 반드시 갈라진다: 실제로 루트가 어댑터·config·util 22개를 빼는 동안 여기는
+// `**/common/pdf/**` 하나만 빼고 있었고, 그 결과 이 모듈의 LINE 은 81% 로 90% 문턱 아래였다.
+// `test` 는 이 검증에 의존하지 않으므로 `:shared-common:test` 는 계속 초록불이었다.
+// rootDir 은 이 빌드의 루트(=shared-common/)이므로 한 단계 위를 본다.
+fun readCoverageExcludes(file: File): List<String> {
+    require(file.isFile) { "커버리지 제외 목록 정본이 없다: $file — 게이트가 무엇을 빼는지 알 수 없다." }
+    val patterns = file.readLines()
+        .map { it.substringBefore('#').trim() }
+        .filter { it.isNotEmpty() }
+    require(patterns.isNotEmpty()) { "커버리지 제외 목록이 비었다: $file" }
+    return patterns
+}
+
+val coverageExcludes = readCoverageExcludes(rootDir.resolveSibling("gradle").resolve("coverage-excludes.txt"))
+
 tasks.named<JacocoCoverageVerification>("jacocoTestCoverageVerification") {
     dependsOn(tasks.named("jacocoTestReport"))
-    // common.pdf 는 Ghostscript 외부 바이너리 래퍼 — 루트 게이트가 adapter/out/pdf/** 를 제외하는
-    // 것과 같은 이유(바이너리 없는 환경에서 측정 불가)로 LINE 게이트에서 제외한다.
     classDirectories.setFrom(classDirectories.files.map { dir ->
-        fileTree(dir) { exclude("**/common/pdf/**") }
+        fileTree(dir) { exclude(coverageExcludes) }
     })
     violationRules {
         // 서비스 모듈과 동일한 번들 게이트 (루트 build.gradle.kts 의 LINE 90% 와 정합)

@@ -1,0 +1,56 @@
+# 커버리지 게이트(jacocoTestCoverageVerification) 제외 목록 — 정본.
+#
+# 이 파일이 생긴 이유(실측): 같은 목록이 build.gradle.kts 와 shared-common/build.gradle.kts 에
+# 따로 적혀 있었고 갈라졌다. 루트는 어댑터·config·util 22개 패턴을 제외하는데 shared-common 은
+# `**/common/pdf/**` 하나만 제외했다. shared-common 은 독립 빌드라 루트 subprojects {} 를
+# 상속받지 않으므로, 한쪽을 고쳐도 다른 쪽은 그대로 남는다.
+#
+# 갈라진 결과는 "더 엄격"이 아니라 **꺼진 게이트**였다. shared-common 은 LINE 81% 로 90% 문턱을
+# 넘지 못한 채였고, `test` 는 `jacocoTestCoverageVerification` 에 의존하지 않으므로
+# `:shared-common:test` 는 계속 초록불이었다. 문턱을 못 넘는 게이트는 아무도 안 켜게 된다.
+#
+# 규칙:
+#   - 한 줄에 Ant 패턴 하나. `#` 뒤는 주석. 빈 줄은 무시.
+#   - 두 빌드가 **이 파일만** 읽는다. 빌드 스크립트에 패턴을 직접 적으면 드리프트가 다시 시작된다
+#     (scripts/harness/test/coverage-excludes-gate.test.mjs 가 막는다).
+#   - 여기서 뺀 코드는 "검증 안 함"이 아니라 "다른 데서 검증함"이다. persistence 어댑터는
+#     TestContainers IT, 웹 어댑터는 MockMvc 슬라이스가 담당한다.
+
+# 아웃바운드 어댑터 — 외부 시스템 경계. TestContainers IT / 계약 테스트에서 검증한다.
+**/adapter/out/persistence/**
+**/adapter/out/readmodel/**
+**/adapter/out/search/**
+**/adapter/out/event/**
+**/adapter/out/pdf/**
+**/adapter/out/external/**
+**/adapter/out/notification/**
+**/adapter/out/mail/**
+**/adapter/out/security/**
+**/adapter/out/monitoring/**
+**/adapter/out/user/**
+**/adapter/out/pg/**
+**/adapter/out/llm/**
+
+# 인바운드 어댑터 — MockMvc 슬라이스·컨슈머 테스트에서 검증한다.
+**/adapter/in/web/**
+**/adapter/in/kafka/**
+**/adapter/in/batch/**
+**/adapter/in/api/**
+**/adapter/in/dto/**
+
+# 스프링 배선과 순수 유틸.
+**/config/**
+**/util/**
+
+# Ghostscript 외부 바이너리 래퍼 — 바이너리 없는 환경에서 측정 불가.
+# 루트가 `**/adapter/out/pdf/**` 를 빼는 것과 같은 이유다. shared-common 은 헥사고날 밖
+# `common/pdf` 에 두고 있어 경로가 다르다 — 두 패턴이 모두 필요하다.
+**/common/pdf/**
+
+# 부트 진입점(@SpringBootApplication main)은 측정 대상이 아니다.
+# 이 저장소에 실재하는 세 개만 적는다 — settlement 시절의 13개를 그대로 두면
+# "이 서비스들도 여기 있다"는 인상만 남기고 아무것도 제외하지 않는다.
+# 새 서비스를 추가하면 여기에도 한 줄 추가할 것.
+**/LemuelApplication*
+**/GatewayServiceApplication*
+**/OperationServiceApplication*
