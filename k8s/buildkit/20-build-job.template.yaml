@@ -44,7 +44,7 @@ spec:
             - build
             - --frontend=dockerfile.v0
             - --opt
-            - context=https://github.com/MyoungSoo7/settlement.git#__GIT_REF__
+            - context=https://github.com/MyoungSoo7/shop.git#__GIT_REF__
             - --opt
             - filename=Dockerfile
             # ARG MODULE 가 비면 `gradle ::bootJar` 로 빈 세그먼트가 되어 빌드가 깨진다(ci.yml 주석 참조).

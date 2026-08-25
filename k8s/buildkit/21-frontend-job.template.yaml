@@ -57,7 +57,7 @@ spec:
               echo "VITE_API_BASE_URL=${VITE_API_BASE_URL:-(빈 값)}"
               exec buildctl build \
                 --frontend=dockerfile.v0 \
-                --opt context=https://github.com/MyoungSoo7/settlement.git#__GIT_REF__:frontend \
+                --opt context=https://github.com/MyoungSoo7/shop.git#__GIT_REF__:frontend \
                 --opt filename=Dockerfile \
                 --opt build-arg:VITE_API_BASE_URL="$VITE_API_BASE_URL" \
                 --opt build-arg:VITE_TOSS_CLIENT_KEY="$VITE_TOSS_CLIENT_KEY" \
