@@ -24,6 +24,32 @@ describe('orderApi', () => {
     expect(result.id).toBe(100);
   });
 
+  it('다건 주문은 금액 없이 라인만 보낸다', async () => {
+    vi.mocked(api.post).mockResolvedValueOnce({ data: { ...order, amount: 27000 } });
+
+    const result = await orderApi.createMultiItemOrder(
+      7, [{ productId: 1, quantity: 3 }], 'WELCOME10', 'key-1');
+
+    expect(api.post).toHaveBeenCalledWith(
+      '/orders/multi',
+      { userId: 7, lines: [{ productId: 1, quantity: 3 }], couponCode: 'WELCOME10' },
+      { headers: { 'Idempotency-Key': 'key-1' } },
+    );
+    expect(result.amount).toBe(27000);
+  });
+
+  it('쿠폰·멱등 키가 없으면 couponCode 는 null 이고 헤더는 붙지 않는다', async () => {
+    vi.mocked(api.post).mockResolvedValueOnce({ data: order });
+
+    await orderApi.createMultiItemOrder(7, [{ productId: 1, quantity: 1 }]);
+
+    expect(api.post).toHaveBeenCalledWith(
+      '/orders/multi',
+      { userId: 7, lines: [{ productId: 1, quantity: 1 }], couponCode: null },
+      undefined,
+    );
+  });
+
   it('주문 단건을 조회한다', async () => {
     vi.mocked(api.get).mockResolvedValueOnce({ data: order });
 

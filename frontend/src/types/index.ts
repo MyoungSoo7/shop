@@ -99,6 +99,45 @@ export interface OrderResponse {
   updatedAt: string;
 }
 
+/**
+ * 주문 생성·쿠폰 미리보기에 공통으로 넘기는 라인.
+ *
+ * 금액이 없다는 점이 핵심이다 — 단가·할인·배송비는 전부 서버가 상품 마스터에서 확정한다.
+ * 클라이언트는 "무엇을 몇 개" 까지만 말한다.
+ */
+export interface OrderLineRequest {
+  productId: number;
+  variantId?: number | null;
+  quantity: number;
+}
+
+/** 다건 주문의 라인 결과. allocatedDiscount 는 이 라인이 짊어진 할인 몫(부분취소 환불 단위). */
+export interface MultiItemOrderLine {
+  id: number;
+  productId: number;
+  variantId?: number | null;
+  sku?: string | null;
+  productName: string;
+  unitPrice: number;
+  quantity: number;
+  lineAmount: number;
+  allocatedDiscount: number;
+  netAmount: number;
+}
+
+/** POST /orders/multi 응답. amount = subtotal - discountAmount + shippingFee (서버가 확정). */
+export interface MultiItemOrderResponse {
+  id: number;
+  userId: number;
+  amount: number;
+  status: string;
+  subtotal: number;
+  discountAmount: number;
+  shippingFee: number;
+  createdAt: string;
+  items: MultiItemOrderLine[];
+}
+
 // Payment Types
 export interface PaymentRequest {
   orderId: number;
@@ -296,12 +335,12 @@ export interface CouponValidateResponse {
   finalAmount: number;
 }
 
-/** 쿠폰 미리보기에 넘기는 장바구니 한 줄. 주문 생성의 라인과 같은 형식이다. */
-export interface CouponPreviewLine {
-  productId: number;
-  variantId?: number | null;
-  quantity: number;
-}
+/**
+ * 쿠폰 미리보기에 넘기는 장바구니 한 줄.
+ *
+ * 주문 생성 라인과 <b>같은 타입</b>이다. 미리보기와 결제가 같은 입력을 받아야 두 금액이 갈라지지 않는다.
+ */
+export type CouponPreviewLine = OrderLineRequest;
 
 /**
  * 장바구니 기준 쿠폰 계산 결과.

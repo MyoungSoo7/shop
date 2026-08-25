@@ -19,7 +19,7 @@ vi.mock('@/api/product', () => ({
   productApi: { getAvailableProducts: vi.fn() },
 }));
 vi.mock('@/api/order', () => ({
-  orderApi: { createOrder: vi.fn() },
+  orderApi: { createMultiItemOrder: vi.fn() },
 }));
 vi.mock('@/api/payment', () => ({
   paymentApi: { createPayment: vi.fn(), authorizePayment: vi.fn(), capturePayment: vi.fn() },
@@ -56,8 +56,18 @@ const product = (over: Record<string, unknown> = {}) =>
     ...over,
   }) as never;
 
+/** 서버가 확정해 돌려주는 주문. 단건도 다건과 같은 경로(/orders/multi)를 쓴다. */
 const order = (over: Record<string, unknown> = {}) =>
-  ({ id: 100, userId: 1, amount: 20000, status: 'CREATED', ...over }) as never;
+  ({
+    id: 100, userId: 1, amount: 20000, status: 'CREATED',
+    subtotal: 20000, discountAmount: 0, shippingFee: 0,
+    createdAt: '2026-01-01T00:00:00Z',
+    items: [{
+      id: 900, productId: 1, variantId: null, sku: null, productName: '티셔츠',
+      unitPrice: 20000, quantity: 1, lineAmount: 20000, allocatedDiscount: 0, netAmount: 20000,
+    }],
+    ...over,
+  }) as never;
 
 const payment = (over: Record<string, unknown> = {}) =>
   ({
@@ -180,7 +190,7 @@ describe('OrderPage — 상품 선택 후', () => {
 
 describe('OrderPage — 주문·결제 흐름', () => {
   it('주문 생성 → 결제 생성 → 승인 → 확정까지 진행한다', async () => {
-    mockedOrder.createOrder.mockResolvedValue(order());
+    mockedOrder.createMultiItemOrder.mockResolvedValue(order());
     mockedPayment.createPayment.mockResolvedValue(payment());
     mockedPayment.authorizePayment.mockResolvedValue(payment({ status: 'AUTHORIZED' }));
     mockedPayment.capturePayment.mockResolvedValue(payment({ status: 'CAPTURED' }));
@@ -188,7 +198,10 @@ describe('OrderPage — 주문·결제 흐름', () => {
 
     await userEvent.click(screen.getByRole('button', { name: '주문하기' }));
     expect(await screen.findByText('주문이 생성되었습니다')).toBeInTheDocument();
-    expect(mockedOrder.createOrder).toHaveBeenCalledWith({ userId: 1, productId: 1, amount: 20000 });
+    // 금액은 보내지 않는다 — 라인만 보내고 서버가 확정한다.
+    expect(mockedOrder.createMultiItemOrder).toHaveBeenCalledWith(
+      1, [{ productId: 1, quantity: 1 }], null, expect.any(String),
+    );
 
     await userEvent.click(screen.getByRole('button', { name: '결제 진행하기' }));
     expect(await screen.findByText('결제 정보')).toBeInTheDocument();
@@ -203,7 +216,7 @@ describe('OrderPage — 주문·결제 흐름', () => {
   });
 
   it('완료 후 새 주문을 누르면 처음 상태로 돌아간다', async () => {
-    mockedOrder.createOrder.mockResolvedValue(order());
+    mockedOrder.createMultiItemOrder.mockResolvedValue(order());
     mockedPayment.createPayment.mockResolvedValue(payment());
     mockedPayment.authorizePayment.mockResolvedValue(payment({ status: 'AUTHORIZED' }));
     mockedPayment.capturePayment.mockResolvedValue(payment({ status: 'CAPTURED' }));
@@ -219,7 +232,7 @@ describe('OrderPage — 주문·결제 흐름', () => {
   });
 
   it('주문 생성 실패는 사유를 남긴다', async () => {
-    mockedOrder.createOrder.mockRejectedValue({ response: { data: { message: '재고 부족' } } });
+    mockedOrder.createMultiItemOrder.mockRejectedValue({ response: { data: { message: '재고 부족' } } });
     await selectProduct();
 
     await userEvent.click(screen.getByRole('button', { name: '주문하기' }));
@@ -228,7 +241,7 @@ describe('OrderPage — 주문·결제 흐름', () => {
   });
 
   it('결제 생성 실패도 사유를 남긴다', async () => {
-    mockedOrder.createOrder.mockResolvedValue(order());
+    mockedOrder.createMultiItemOrder.mockResolvedValue(order());
     mockedPayment.createPayment.mockRejectedValue(new Error('down'));
     await selectProduct();
     await userEvent.click(screen.getByRole('button', { name: '주문하기' }));
@@ -239,7 +252,7 @@ describe('OrderPage — 주문·결제 흐름', () => {
   });
 
   it('승인 실패도 사유를 남긴다', async () => {
-    mockedOrder.createOrder.mockResolvedValue(order());
+    mockedOrder.createMultiItemOrder.mockResolvedValue(order());
     mockedPayment.createPayment.mockResolvedValue(payment());
     mockedPayment.authorizePayment.mockRejectedValue(new Error('down'));
     await selectProduct();
@@ -251,7 +264,7 @@ describe('OrderPage — 주문·결제 흐름', () => {
     expect(await screen.findByText('결제 승인에 실패했습니다.')).toBeInTheDocument();
   });
 
-  it('쿠폰이 적용된 주문은 할인가로 생성하고 쿠폰 사용을 기록한다', async () => {
+  it('쿠폰 코드를 함께 보내고, 사용 기록은 서버에 맡긴다', async () => {
     mockedCoupon.preview.mockResolvedValue({
       valid: true,
       message: '',
@@ -260,8 +273,7 @@ describe('OrderPage — 주문·결제 흐름', () => {
       eligibleAmount: 20000,
       finalAmount: 18000,
     } as never);
-    mockedCoupon.use.mockResolvedValue(undefined as never);
-    mockedOrder.createOrder.mockResolvedValue(order({ amount: 18000 }));
+    mockedOrder.createMultiItemOrder.mockResolvedValue(order({ amount: 18000, discountAmount: 2000 }));
     await selectProduct();
     await userEvent.type(screen.getByPlaceholderText(/쿠폰 코드 입력/), 'welcome10');
     await userEvent.click(screen.getByRole('button', { name: '적용' }));
@@ -270,16 +282,15 @@ describe('OrderPage — 주문·결제 흐름', () => {
     await userEvent.click(screen.getByRole('button', { name: '주문하기' }));
 
     await waitFor(() =>
-      expect(mockedOrder.createOrder).toHaveBeenCalledWith({
-        userId: 1,
-        productId: 1,
-        amount: 18000,
-      }),
+      expect(mockedOrder.createMultiItemOrder).toHaveBeenCalledWith(
+        1, [{ productId: 1, quantity: 1 }], 'WELCOME10', expect.any(String),
+      ),
     );
-    expect(mockedCoupon.use).toHaveBeenCalledWith('WELCOME10', 1, 100);
+    // 서버가 같은 트랜잭션에서 기록한다. 여기서 또 부르면 쿠폰이 두 번 소진된다.
+    expect(mockedCoupon.use).not.toHaveBeenCalled();
   });
 
-  it('쿠폰 사용 기록이 실패해도 주문은 유지된다', async () => {
+  it('주문 금액은 서버가 확정한 값을 그대로 보여 준다', async () => {
     mockedCoupon.preview.mockResolvedValue({
       valid: true,
       message: '',
@@ -288,8 +299,9 @@ describe('OrderPage — 주문·결제 흐름', () => {
       eligibleAmount: 20000,
       finalAmount: 18000,
     } as never);
-    mockedCoupon.use.mockRejectedValue(new Error('down'));
-    mockedOrder.createOrder.mockResolvedValue(order({ amount: 18000 }));
+    // 화면 예상가(18000)와 서버 확정가(21000: 배송비 3000 포함)가 다른 상황.
+    mockedOrder.createMultiItemOrder.mockResolvedValue(
+      order({ amount: 21000, discountAmount: 2000, shippingFee: 3000 }));
     await selectProduct();
     await userEvent.type(screen.getByPlaceholderText(/쿠폰 코드 입력/), 'welcome10');
     await userEvent.click(screen.getByRole('button', { name: '적용' }));
@@ -298,6 +310,8 @@ describe('OrderPage — 주문·결제 흐름', () => {
     await userEvent.click(screen.getByRole('button', { name: '주문하기' }));
 
     expect(await screen.findByText('주문이 생성되었습니다')).toBeInTheDocument();
+    expect(screen.getByText('₩21,000')).toBeInTheDocument();
+    expect(screen.getByText('배송비 ₩3,000 포함')).toBeInTheDocument();
   });
 });
 
@@ -316,7 +330,7 @@ describe('OrderPage — 토스페이먼츠', () => {
   it('주문하면 토스 결제창을 연다', async () => {
     const requestPayment = vi.fn().mockResolvedValue(undefined);
     vi.stubGlobal('TossPayments', vi.fn(() => ({ requestPayment })));
-    mockedOrder.createOrder.mockResolvedValue(order());
+    mockedOrder.createMultiItemOrder.mockResolvedValue(order());
     await selectTossMethod();
 
     await userEvent.click(screen.getByRole('button', { name: '주문하기' }));
@@ -331,7 +345,7 @@ describe('OrderPage — 토스페이먼츠', () => {
     vi.stubGlobal('TossPayments', vi.fn(() => ({
       requestPayment: vi.fn().mockRejectedValue(new Error('사용자가 취소했습니다')),
     })));
-    mockedOrder.createOrder.mockResolvedValue(order());
+    mockedOrder.createMultiItemOrder.mockResolvedValue(order());
     await selectTossMethod();
 
     await userEvent.click(screen.getByRole('button', { name: '주문하기' }));

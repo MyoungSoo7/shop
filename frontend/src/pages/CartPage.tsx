@@ -3,8 +3,7 @@ import { Link } from 'react-router-dom';
 import { useCart, CartItem } from '@/contexts/useCart';
 import { orderApi } from '@/api/order';
 import { paymentApi } from '@/api/payment';
-import { couponApi } from '@/api/coupon';
-import { CouponPreviewResponse } from '@/types';
+import { CouponPreviewResponse, MultiItemOrderResponse } from '@/types';
 import Spinner from '@/components/Spinner';
 import CouponInput from '@/components/coupon/CouponInput';
 import { errorDetail } from '@/lib/apiError';
@@ -92,14 +91,13 @@ const CartItemRow: React.FC<CartItemRowProps> = ({ item, onRemove, onQuantityCha
   );
 };
 
-/* ─────────────────────────────────────────
-   OrderResult 타입
-───────────────────────────────────────── */
-interface OrderResult {
-  productName: string;
-  orderId: number;
-  amount: number;
-}
+/**
+ * 멱등 키 — 같은 키의 재요청은 새 주문을 만들지 않고 기존 주문을 돌려준다.
+ * 네트워크 재시도로 주문이 두 건 생기는 것을 막는다.
+ */
+const newIdempotencyKey = (): string =>
+  globalThis.crypto?.randomUUID?.() ??
+  `cart-${Date.now()}-${Math.random().toString(36).slice(2)}`;
 
 /* ─────────────────────────────────────────
    CartPage
@@ -109,16 +107,19 @@ const CartPage: React.FC = () => {
   const [paymentMethod, setPaymentMethod] = useState('CARD');
   const [checkoutStep, setCheckoutStep] = useState<'cart' | 'processing' | 'done'>('cart');
   const [processingMsg, setProcessingMsg] = useState('');
-  const [processingIdx, setProcessingIdx] = useState(0);
-  const [results, setResults] = useState<OrderResult[]>([]);
+  const [placedOrder, setPlacedOrder] = useState<MultiItemOrderResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [couponResult, setCouponResult] = useState<CouponPreviewResponse | null>(null);
   const [appliedCouponCode, setAppliedCouponCode] = useState<string | undefined>(undefined);
 
+  // 화면에 보여줄 예상 금액. 확정 금액은 주문을 만든 서버 응답에서 온다.
   const discountedTotal = couponResult ? couponResult.finalAmount : totalAmount;
 
-  // 쿠폰 미리보기에 넘길 라인 — 단가·카테고리는 서버가 상품 마스터에서 해석한다.
-  const couponLines = useMemo(
+  /**
+   * 서버로 보낼 주문 라인. 금액이 없다는 게 요점이다 — 단가·쿠폰 할인·배송비는 서버가 상품
+   * 마스터에서 확정한다. 쿠폰 미리보기도 같은 라인을 쓰므로 미리보기 금액과 결제 금액이 갈라지지 않는다.
+   */
+  const orderLines = useMemo(
     () => items.map(({ product, quantity }) => ({ productId: product.id, quantity })),
     [items],
   );
@@ -127,45 +128,26 @@ const CartPage: React.FC = () => {
   const handleNormalCheckout = async () => {
     setCheckoutStep('processing');
     setError(null);
-    const completed: OrderResult[] = [];
-    const discountRatio = totalAmount > 0 ? discountedTotal / totalAmount : 1;
+    setProcessingMsg('주문을 만드는 중...');
 
-    for (let idx = 0; idx < items.length; idx++) {
-      setProcessingIdx(idx);
-      setProcessingMsg(`주문 처리 중... (${idx + 1}/${items.length})`);
-      const { product, quantity } = items[idx];
-      const itemOriginal = product.price * quantity;
-      const itemFinal = idx === items.length - 1
-        ? Math.max(1, discountedTotal - completed.reduce((s, r) => s + r.amount, 0))
-        : Math.round(itemOriginal * discountRatio);
-      try {
-        const order = await orderApi.createOrder({
-          userId: USER_ID,
-          productId: product.id,
-          amount: itemFinal,
-        });
-        const payment = await paymentApi.createPayment({ orderId: order.id, paymentMethod });
-        const authorized = await paymentApi.authorizePayment(payment.id);
-        await paymentApi.capturePayment(authorized.id);
-        completed.push({ productName: product.name, orderId: order.id, amount: order.amount });
-      } catch (err) {
-        const msg = errorDetail(err, '알 수 없는 오류');
-        setError(`"${product.name}" 주문 실패: ${msg}`);
-        setResults(completed);
-        setCheckoutStep('done');
-        return;
-      }
+    try {
+      // 장바구니 전체가 주문 1건. 쿠폰 사용 기록·재고 차감도 서버가 같은 트랜잭션에서 하므로
+      // 여기서 couponApi.use 를 부르면 안 된다(두 번 소진된다).
+      const created = await orderApi.createMultiItemOrder(
+        USER_ID, orderLines, appliedCouponCode ?? null, newIdempotencyKey());
+
+      setProcessingMsg('결제 승인 중...');
+      const payment = await paymentApi.createPayment({ orderId: created.id, paymentMethod });
+      const authorized = await paymentApi.authorizePayment(payment.id);
+      await paymentApi.capturePayment(authorized.id);
+
+      setPlacedOrder(created);
+      clearCart();
+      setCheckoutStep('done');
+    } catch (err) {
+      setError(errorDetail(err, '알 수 없는 오류'));
+      setCheckoutStep('done');
     }
-
-    if (appliedCouponCode && completed.length > 0) {
-      try {
-        await couponApi.use(appliedCouponCode, USER_ID, completed[0].orderId);
-      } catch { /* 쿠폰 사용 기록 실패 무시 */ }
-    }
-
-    setResults(completed);
-    clearCart();
-    setCheckoutStep('done');
   };
 
   /* ── 토스페이먼츠 결제 ── */
@@ -174,24 +156,15 @@ const CartPage: React.FC = () => {
     setProcessingMsg('주문을 생성하는 중...');
     setError(null);
 
-    // 1. 모든 주문 선생성 (CREATED 상태)
-    const orderIds: number[] = [];
-    for (let idx = 0; idx < items.length; idx++) {
-      setProcessingMsg(`주문 생성 중... (${idx + 1}/${items.length})`);
-      const { product, quantity } = items[idx];
-      try {
-        const order = await orderApi.createOrder({
-          userId: USER_ID,
-          productId: product.id,
-          amount: product.price * quantity,
-        });
-        orderIds.push(order.id);
-      } catch (err) {
-        const msg = errorDetail(err, '알 수 없는 오류');
-        setError(`"${product.name}" 주문 생성 실패: ${msg}`);
-        setCheckoutStep('cart');
-        return;
-      }
+    // 1. 주문 선생성 (CREATED 상태) — 장바구니 전체가 한 건이다.
+    let created: MultiItemOrderResponse;
+    try {
+      created = await orderApi.createMultiItemOrder(
+        USER_ID, orderLines, appliedCouponCode ?? null, newIdempotencyKey());
+    } catch (err) {
+      setError(`주문 생성 실패: ${errorDetail(err, '알 수 없는 오류')}`);
+      setCheckoutStep('cart');
+      return;
     }
 
     // 2. Toss SDK 로드 후 결제 요청
@@ -206,13 +179,14 @@ const CartPage: React.FC = () => {
         ? `${firstName} 외 ${items.length - 1}개`
         : firstName;
 
-      // 성공 URL에 모든 주문 ID를 콤마 구분으로 전달
       const successUrl =
         `${window.location.origin}/order/toss/success` +
-        `?type=cart&dbOrderIds=${orderIds.join(',')}`;
+        `?type=cart&dbOrderIds=${created.id}`;
 
       await tossPayments.requestPayment('카드', {
-        amount: Math.round(discountedTotal),
+        // 화면에서 계산한 값이 아니라 서버가 주문에 못박은 금액. 결제 승인 때 서버가
+        // 주문 금액과 결제 금액이 같은지 다시 검사하므로, 여기서 다른 값을 넣으면 승인이 거절된다.
+        amount: created.amount,
         orderId: tossOrderId,
         orderName,
         customerName: '테스트 고객',
@@ -264,9 +238,9 @@ const CartPage: React.FC = () => {
           <h1 className="text-3xl font-bold text-gray-900 text-center mb-8">장바구니</h1>
           <div className="bg-white rounded-2xl shadow-sm border border-gray-200 p-12 text-center">
             <Spinner size="lg" message={processingMsg} />
-            {paymentMethod !== 'TOSS_PAYMENTS' && items[processingIdx] && (
+            {paymentMethod !== 'TOSS_PAYMENTS' && (
               <p className="text-sm text-gray-400 mt-4">
-                "{items[processingIdx].product.name}" 처리 중
+                {totalCount}개 상품을 한 건으로 주문합니다.
               </p>
             )}
             {paymentMethod === 'TOSS_PAYMENTS' && (
@@ -282,8 +256,6 @@ const CartPage: React.FC = () => {
 
   /* ── 주문 완료 ── */
   if (checkoutStep === 'done') {
-    const successCount = results.length;
-    const itemCount = results.length + (error ? 1 : 0);
     return (
       <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-50 py-10 px-4">
         <div className="max-w-2xl mx-auto">
@@ -291,15 +263,17 @@ const CartPage: React.FC = () => {
           <div className="bg-white rounded-2xl shadow-sm border border-gray-200 p-8">
 
             <div className="text-center mb-6">
-              {!error ? (
+              {placedOrder && !error ? (
                 <>
                   <div className="mx-auto flex items-center justify-center h-16 w-16 rounded-full bg-green-100 mb-4">
                     <svg className="h-9 w-9 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M5 13l4 4L19 7" />
                     </svg>
                   </div>
-                  <h2 className="text-xl font-bold text-gray-900">전체 주문 완료!</h2>
-                  <p className="text-sm text-gray-500 mt-1">{successCount}개 상품 주문이 완료되었습니다.</p>
+                  <h2 className="text-xl font-bold text-gray-900">주문 완료!</h2>
+                  <p className="text-sm text-gray-500 mt-1">
+                    주문 #{placedOrder.id} · {placedOrder.items.length}개 상품
+                  </p>
                 </>
               ) : (
                 <>
@@ -309,31 +283,46 @@ const CartPage: React.FC = () => {
                         d="M12 9v2m0 4h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z" />
                     </svg>
                   </div>
-                  <h2 className="text-xl font-bold text-gray-900">
-                    {successCount > 0 ? `${successCount}/${itemCount}개 완료` : '주문 실패'}
-                  </h2>
+                  <h2 className="text-xl font-bold text-gray-900">주문 실패</h2>
                   <p className="text-sm text-red-600 mt-1">{error}</p>
                 </>
               )}
             </div>
 
-            {results.length > 0 && (
+            {placedOrder && (
               <div className="bg-gray-50 rounded-xl p-4 mb-6 space-y-2">
-                {results.map((r) => (
-                  <div key={r.orderId} className="flex justify-between items-center text-sm">
+                {placedOrder.items.map((line) => (
+                  <div key={line.id} className="flex justify-between items-center text-sm">
                     <div className="flex items-center gap-2">
                       <svg className="w-4 h-4 text-green-500 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M5 13l4 4L19 7" />
                       </svg>
-                      <span className="text-gray-700 truncate max-w-[200px]">{r.productName}</span>
-                      <span className="text-gray-400 text-xs">#{r.orderId}</span>
+                      <span className="text-gray-700 truncate max-w-[200px]">{line.productName}</span>
+                      <span className="text-gray-400 text-xs">× {line.quantity}</span>
                     </div>
-                    <span className="font-semibold text-gray-900 flex-shrink-0">{fmt(r.amount)}</span>
+                    <span className="font-semibold text-gray-900 flex-shrink-0">{fmt(line.lineAmount)}</span>
                   </div>
                 ))}
+                {/* 금액 구성은 전부 서버가 확정한 값이다. 화면에서 다시 계산하지 않는다. */}
+                <div className="flex justify-between items-center pt-2 border-t border-gray-200 text-sm">
+                  <span className="text-gray-500">상품 합계</span>
+                  <span className="text-gray-700">{fmt(placedOrder.subtotal)}</span>
+                </div>
+                {placedOrder.discountAmount > 0 && (
+                  <div className="flex justify-between items-center text-sm">
+                    <span className="text-green-600 font-medium">쿠폰 할인</span>
+                    <span className="text-green-600 font-medium">-{fmt(placedOrder.discountAmount)}</span>
+                  </div>
+                )}
+                <div className="flex justify-between items-center text-sm">
+                  <span className="text-gray-500">배송비</span>
+                  <span className="text-gray-700">
+                    {placedOrder.shippingFee > 0 ? fmt(placedOrder.shippingFee) : '무료'}
+                  </span>
+                </div>
                 <div className="flex justify-between items-center pt-2 border-t border-gray-200 font-bold">
-                  <span>합계</span>
-                  <span className="text-blue-600">{fmt(results.reduce((s, r) => s + r.amount, 0))}</span>
+                  <span>결제 금액</span>
+                  <span className="text-blue-600">{fmt(placedOrder.amount)}</span>
                 </div>
               </div>
             )}
@@ -407,7 +396,7 @@ const CartPage: React.FC = () => {
                 <label className="block text-sm font-medium text-gray-700 mb-1.5">쿠폰 코드</label>
                 <CouponInput
                   userId={USER_ID}
-                  lines={couponLines}
+                  lines={orderLines}
                   onApply={(result, code) => { setCouponResult(result); setAppliedCouponCode(code); }}
                   onRemove={() => { setCouponResult(null); setAppliedCouponCode(undefined); }}
                   appliedCode={appliedCouponCode}

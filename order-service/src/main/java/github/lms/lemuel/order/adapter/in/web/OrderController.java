@@ -1,6 +1,7 @@
 package github.lms.lemuel.order.adapter.in.web;
 
 import github.lms.lemuel.order.adapter.in.web.request.CreateOrderRequest;
+import github.lms.lemuel.order.adapter.in.web.response.MultiItemOrderResponse;
 import github.lms.lemuel.order.adapter.in.web.response.OrderResponse;
 import github.lms.lemuel.order.application.port.in.CancelOrderItemsUseCase;
 import github.lms.lemuel.order.application.port.in.ChangeOrderStatusUseCase;
@@ -55,6 +56,9 @@ public class OrderController {
     })
     @PostMapping
     public ResponseEntity<OrderResponse> createOrder(@Valid @RequestBody CreateOrderRequest request) {
+        // 주문의 주인은 요청 본문이 아니라 토큰이 정한다. 없으면 로그인한 아무나 남의 이름으로
+        // 주문을 만들 수 있다.
+        ResourceOwnership.requireSelfOrAdmin(request.getUserId());
         Order order = createOrderUseCase.createOrder(
                 new CreateOrderUseCase.CreateOrderCommand(request.getUserId(), request.getProductId(), request.getAmount())
         );
@@ -70,15 +74,17 @@ public class OrderController {
             @ApiResponse(responseCode = "409", description = "재고 부족·동시성 충돌·중복 제출 충돌")
     })
     @PostMapping("/multi")
-    public ResponseEntity<OrderResponse> createMultiItemOrder(
+    public ResponseEntity<MultiItemOrderResponse> createMultiItemOrder(
             @Valid @RequestBody MultiItemOrderRequest request,
             @Parameter(description = "중복 주문 방지용 멱등 키(선택). 같은 키 재요청은 동일 주문을 반환.")
             @RequestHeader(value = "Idempotency-Key", required = false) String idempotencyKey) {
+        // 남의 userId 로 주문하면 그 사람의 1회용 쿠폰까지 소진된다(쿠폰 검증·사용이 userId 기준).
+        ResourceOwnership.requireSelfOrAdmin(request.userId());
         List<CreateMultiItemOrderUseCase.Line> lines = request.lines().stream()
                 .map(l -> new CreateMultiItemOrderUseCase.Line(l.productId(), l.variantId(), l.quantity()))
                 .toList();
         Order order = createMultiItemOrderUseCase.create(request.userId(), lines, request.couponCode(), idempotencyKey);
-        return ResponseEntity.status(HttpStatus.CREATED).body(OrderResponse.from(order));
+        return ResponseEntity.status(HttpStatus.CREATED).body(MultiItemOrderResponse.from(order));
     }
 
     @Operation(summary = "쿠폰 미리보기 (장바구니 기준)",

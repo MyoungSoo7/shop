@@ -157,6 +157,7 @@ class OrderControllerTest {
     }
 
     @Test @DisplayName("POST /orders - 생성") void createOrder() throws Exception {
+        login(1L, "USER");   // 주문의 주인은 요청 본문이 아니라 토큰이 정한다
         Order order = Order.create(1L, 1L, new BigDecimal("15000"));
         when(createOrderUseCase.createOrder(any())).thenReturn(order);
 

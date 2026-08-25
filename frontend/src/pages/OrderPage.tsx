@@ -8,8 +8,7 @@ import { orderApi } from '@/api/order';
 import { paymentApi } from '@/api/payment';
 import { productApi } from '@/api/product';
 import { reviewApi } from '@/api/review';
-import { couponApi } from '@/api/coupon';
-import { OrderResponse, PaymentResponse, ProductResponse, ReviewResponse, CouponPreviewResponse } from '@/types';
+import { MultiItemOrderResponse, PaymentResponse, ProductResponse, ReviewResponse, CouponPreviewResponse } from '@/types';
 import { useCart } from '@/contexts/useCart';
 import Card from '@/components/Card';
 import Spinner from '@/components/Spinner';
@@ -20,6 +19,14 @@ import { apiErrorMessage, errorDetail } from '@/lib/apiError';
 
 const PRODUCTS_PER_PAGE = 5;
 const TOSS_CLIENT_KEY = import.meta.env.VITE_TOSS_CLIENT_KEY as string;
+
+/**
+ * 멱등 키 — 같은 키의 재요청은 새 주문을 만들지 않고 기존 주문을 돌려준다.
+ * 네트워크 재시도로 주문이 두 건 생기는 것을 막는다.
+ */
+const newIdempotencyKey = (): string =>
+  globalThis.crypto?.randomUUID?.() ??
+  `order-${Date.now()}-${Math.random().toString(36).slice(2)}`;
 
 const loadTossScript = (): Promise<void> =>
   new Promise((resolve, reject) => {
@@ -47,7 +54,7 @@ const OrderFormTab: React.FC = () => {
   const [paymentMethod, setPaymentMethod] = useState('CARD');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [order, setOrder] = useState<OrderResponse | null>(null);
+  const [order, setOrder] = useState<MultiItemOrderResponse | null>(null);
   const [payment, setPayment] = useState<PaymentResponse | null>(null);
   const [step, setStep] = useState<'input' | 'order-created' | 'payment-ready' | 'completed'>('input');
 
@@ -120,22 +127,16 @@ const OrderFormTab: React.FC = () => {
     setLoading(true);
     setError(null);
     try {
-      const finalAmount = couponResult ? couponResult.finalAmount : selectedProduct.price;
-      const orderRes = await orderApi.createOrder({
+      // 장바구니와 같은 경로로 통일. 금액은 보내지 않는다 — 단가·쿠폰 할인·배송비는 서버가
+      // 상품 마스터에서 확정하고, 쿠폰 사용 기록도 같은 트랜잭션에서 남긴다(그래서 여기서
+      // couponApi.use 를 부르지 않는다. 부르면 두 번 소진된다).
+      const orderRes = await orderApi.createMultiItemOrder(
         userId,
-        productId: selectedProduct.id,
-        amount: finalAmount,
-      });
+        [{ productId: selectedProduct.id, quantity: 1 }],
+        appliedCouponCode ?? null,
+        newIdempotencyKey(),
+      );
       setOrder(orderRes);
-
-      // 쿠폰 사용 처리
-      if (appliedCouponCode) {
-        try {
-          await couponApi.use(appliedCouponCode, userId, orderRes.id);
-        } catch {
-          // 쿠폰 사용 실패해도 주문은 유지
-        }
-      }
 
       if (paymentMethod === 'TOSS_PAYMENTS') {
         await handleTossPayment(orderRes);
@@ -149,7 +150,7 @@ const OrderFormTab: React.FC = () => {
     }
   };
 
-  const handleTossPayment = async (orderRes: OrderResponse) => {
+  const handleTossPayment = async (orderRes: MultiItemOrderResponse) => {
     try {
       await loadTossScript();
       const tossPayments = window.TossPayments?.(TOSS_CLIENT_KEY);
@@ -157,7 +158,8 @@ const OrderFormTab: React.FC = () => {
       const tossOrderId = `ORDER-${orderRes.id}-${Date.now()}`;
 
       await tossPayments.requestPayment('카드', {
-        amount: Math.round(orderRes.amount),
+        // 서버가 주문에 못박은 금액. 결제 승인 때 서버가 다시 대조하므로 다른 값이면 거절된다.
+        amount: orderRes.amount,
         orderId: tossOrderId,
         orderName: selectedProduct!.name,
         customerName: '테스트 고객',
@@ -487,12 +489,18 @@ const OrderFormTab: React.FC = () => {
             <div className="flex justify-between py-2.5 border-b">
               <span className="text-gray-500 text-sm">주문 금액</span>
               <div className="text-right">
-                {couponResult && (
-                  <p className="text-xs text-gray-400 line-through">{fmt(selectedProduct!.price)}</p>
+                {/* 서버가 확정한 금액 구성. 화면에서 다시 계산하지 않는다. */}
+                {order.discountAmount > 0 && (
+                  <p className="text-xs text-gray-400 line-through">{fmt(order.subtotal)}</p>
                 )}
                 <span className="font-bold">{fmt(order.amount)}</span>
-                {couponResult && (
-                  <p className="text-xs text-green-600">{appliedCouponCode} 적용</p>
+                {order.discountAmount > 0 && (
+                  <p className="text-xs text-green-600">
+                    {appliedCouponCode} 적용 -{fmt(order.discountAmount)}
+                  </p>
+                )}
+                {order.shippingFee > 0 && (
+                  <p className="text-xs text-gray-400">배송비 {fmt(order.shippingFee)} 포함</p>
                 )}
               </div>
             </div>

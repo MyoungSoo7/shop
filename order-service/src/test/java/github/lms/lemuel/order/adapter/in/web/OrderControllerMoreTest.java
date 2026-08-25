@@ -72,9 +72,22 @@ class OrderControllerMoreTest {
         return o;
     }
 
+    /** 할인·배송비가 붙은 2라인 주문 — 응답의 금액 구성을 확인하기 위한 고정물. */
+    private Order multiItemOrder() {
+        Order o = Order.createMultiItem(1L, List.of(
+                        github.lms.lemuel.order.domain.OrderItem.newItem(
+                                1L, null, "SKU-1", "티셔츠", new BigDecimal("10000"), 2),
+                        github.lms.lemuel.order.domain.OrderItem.newItem(
+                                2L, null, "SKU-2", "바지", new BigDecimal("30000"), 1)),
+                new BigDecimal("5000"), new BigDecimal("3000"));
+        o.assignId(7L);
+        return o;
+    }
+
     @Test
     @DisplayName("POST /orders/multi: Idempotency-Key 와 함께 다건 주문 생성")
     void createMultiItemOrder() throws Exception {
+        login(1L, "USER");
         when(createMultiItemOrderUseCase.create(eq(1L), any(), eq("SAVE10"), eq("idem-1")))
                 .thenReturn(order());
 
@@ -88,6 +101,60 @@ class OrderControllerMoreTest {
                 .andExpect(status().isCreated())
                 .andExpect(jsonPath("$.id").value(7));
         verify(createMultiItemOrderUseCase).create(eq(1L), any(), eq("SAVE10"), eq("idem-1"));
+    }
+
+    @Test
+    @DisplayName("POST /orders/multi: 라인과 금액 구성(소계·할인·배송비)을 함께 돌려준다")
+    void createMultiItemOrder_returnsBreakdown() throws Exception {
+        login(1L, "USER");
+        when(createMultiItemOrderUseCase.create(eq(1L), any(), any(), any()))
+                .thenReturn(multiItemOrder());
+
+        mockMvc.perform(post("/orders/multi")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"userId":1,"lines":[{"productId":1,"variantId":null,"quantity":2},
+                                                     {"productId":2,"variantId":null,"quantity":1}]}
+                                """))
+                .andExpect(status().isCreated())
+                // 20000 + 30000 - 5000 + 3000
+                .andExpect(jsonPath("$.subtotal").value(50000))
+                .andExpect(jsonPath("$.discountAmount").value(5000))
+                .andExpect(jsonPath("$.shippingFee").value(3000))
+                .andExpect(jsonPath("$.amount").value(48000))
+                .andExpect(jsonPath("$.items.length()").value(2))
+                .andExpect(jsonPath("$.items[0].productName").value("티셔츠"))
+                .andExpect(jsonPath("$.items[0].quantity").value(2))
+                .andExpect(jsonPath("$.items[0].lineAmount").value(20000));
+    }
+
+    @Test
+    @DisplayName("POST /orders/multi: 남의 userId 로는 주문할 수 없다 (쿠폰이 대신 소진된다)")
+    void createMultiItemOrder_otherUserForbidden() throws Exception {
+        login(2L, "USER");
+
+        mockMvc.perform(post("/orders/multi")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"userId":1,"lines":[{"productId":1,"variantId":null,"quantity":1}],
+                                 "couponCode":"SAVE10"}
+                                """))
+                .andExpect(status().isForbidden());
+        verify(createMultiItemOrderUseCase, org.mockito.Mockito.never())
+                .create(anyLong(), any(), any(), any());
+    }
+
+    @Test
+    @DisplayName("POST /orders: 남의 userId 로는 주문할 수 없다")
+    void createOrder_otherUserForbidden() throws Exception {
+        login(2L, "USER");
+
+        mockMvc.perform(post("/orders")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"userId\":1,\"productId\":1,\"amount\":10000}"))
+                .andExpect(status().isForbidden());
+        verify(createOrderUseCase, org.mockito.Mockito.never())
+                .createOrder(any());
     }
 
     @Test

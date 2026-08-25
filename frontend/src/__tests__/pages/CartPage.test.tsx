@@ -33,7 +33,7 @@ vi.mock('@/contexts/useCart', async (importOriginal) => {
   };
 });
 
-vi.mock('@/api/order', () => ({ orderApi: { createOrder: vi.fn() } }));
+vi.mock('@/api/order', () => ({ orderApi: { createMultiItemOrder: vi.fn() } }));
 vi.mock('@/api/payment', () => ({
   paymentApi: { createPayment: vi.fn(), authorizePayment: vi.fn(), capturePayment: vi.fn() },
 }));
@@ -63,12 +63,30 @@ const item = (over: Record<string, unknown> = {}, quantity = 1): CartItem =>
 
 const renderPage = () => render(<MemoryRouter><CartPage /></MemoryRouter>);
 
+/**
+ * 서버가 돌려주는 다건 주문. 금액을 서버가 확정한다는 게 이 경로의 요점이라, 테스트에서도
+ * 화면이 보낸 값이 아니라 <b>여기 적힌 값</b>이 화면에 그대로 나와야 한다.
+ */
+const serverOrder = (over: Record<string, unknown> = {}) => ({
+  id: 100,
+  userId: 1,
+  amount: 20000,
+  status: 'CREATED',
+  subtotal: 20000,
+  discountAmount: 0,
+  shippingFee: 0,
+  createdAt: '2026-01-01T00:00:00Z',
+  items: [{
+    id: 900, productId: 1, variantId: null, sku: null, productName: '티셔츠',
+    unitPrice: 20000, quantity: 1, lineAmount: 20000, allocatedDiscount: 0, netAmount: 20000,
+  }],
+  ...over,
+});
+
 beforeEach(() => {
   vi.clearAllMocks();
   cartItems = [item()];
-  mockedOrder.createOrder.mockImplementation((req) =>
-    Promise.resolve({ id: 100, userId: 1, amount: (req as { amount: number }).amount, status: 'CREATED' }) as never,
-  );
+  mockedOrder.createMultiItemOrder.mockResolvedValue(serverOrder() as never);
   mockedPayment.createPayment.mockResolvedValue({ id: 500, amount: 20000, status: 'READY' } as never);
   mockedPayment.authorizePayment.mockResolvedValue({ id: 500, status: 'AUTHORIZED' } as never);
   mockedPayment.capturePayment.mockResolvedValue({ id: 500, status: 'CAPTURED' } as never);
@@ -130,42 +148,51 @@ describe('CartPage — 목록', () => {
 });
 
 describe('CartPage — 일반 결제', () => {
-  it('상품마다 주문→결제→승인→확정을 순서대로 처리하고 카트를 비운다', async () => {
-    cartItems = [item({ id: 1, name: '티셔츠' }), item({ id: 2, name: '바지', price: 30000 })];
+  it('장바구니 전체를 주문 1건으로 만들고 결제→승인→확정 후 카트를 비운다', async () => {
+    cartItems = [item({ id: 1, name: '티셔츠' }), item({ id: 2, name: '바지', price: 30000 }, 2)];
+    mockedOrder.createMultiItemOrder.mockResolvedValue(serverOrder({
+      amount: 80000, subtotal: 80000,
+      items: [
+        { id: 900, productId: 1, productName: '티셔츠', unitPrice: 20000, quantity: 1, lineAmount: 20000, allocatedDiscount: 0, netAmount: 20000 },
+        { id: 901, productId: 2, productName: '바지', unitPrice: 30000, quantity: 2, lineAmount: 60000, allocatedDiscount: 0, netAmount: 60000 },
+      ],
+    }) as never);
     renderPage();
 
     await userEvent.click(screen.getByRole('button', { name: '2개 상품 전체 주문하기' }));
 
-    expect(await screen.findByText('전체 주문 완료!')).toBeInTheDocument();
-    expect(mockedOrder.createOrder).toHaveBeenCalledTimes(2);
-    expect(mockedPayment.capturePayment).toHaveBeenCalledTimes(2);
+    expect(await screen.findByText('주문 완료!')).toBeInTheDocument();
+    // 주문도 결제도 한 건. 상품 수만큼 쪼개지 않는다.
+    expect(mockedOrder.createMultiItemOrder).toHaveBeenCalledTimes(1);
+    expect(mockedPayment.capturePayment).toHaveBeenCalledTimes(1);
     expect(clearCart).toHaveBeenCalled();
   });
 
-  it('중간에 실패하면 성공분만 남기고 실패 사유를 보여 준다', async () => {
-    cartItems = [item({ id: 1, name: '티셔츠' }), item({ id: 2, name: '바지' })];
-    mockedOrder.createOrder
-      .mockResolvedValueOnce({ id: 100, amount: 20000, status: 'CREATED' } as never)
-      .mockRejectedValueOnce({ response: { data: { message: '재고 부족' } } });
+  it('금액이 아니라 라인(무엇을 몇 개)만 보낸다', async () => {
+    cartItems = [item({ id: 1 }, 3)];
     renderPage();
 
-    await userEvent.click(screen.getByRole('button', { name: '2개 상품 전체 주문하기' }));
+    await userEvent.click(screen.getByRole('button', { name: '1개 상품 전체 주문하기' }));
 
-    expect(await screen.findByText('1/2개 완료')).toBeInTheDocument();
-    expect(screen.getByText('"바지" 주문 실패: 재고 부족')).toBeInTheDocument();
-    expect(clearCart).not.toHaveBeenCalled();
+    await waitFor(() =>
+      expect(mockedOrder.createMultiItemOrder).toHaveBeenCalledWith(
+        1, [{ productId: 1, quantity: 3 }], null, expect.any(String),
+      ),
+    );
   });
 
-  it('첫 상품부터 실패하면 주문 실패로 표시한다', async () => {
-    mockedOrder.createOrder.mockRejectedValue(new Error('네트워크'));
+  it('주문이 실패하면 사유를 남기고 카트를 비우지 않는다', async () => {
+    mockedOrder.createMultiItemOrder.mockRejectedValue({ response: { data: { message: '재고 부족' } } });
     renderPage();
 
     await userEvent.click(screen.getByRole('button', { name: '1개 상품 전체 주문하기' }));
 
     expect(await screen.findByText('주문 실패')).toBeInTheDocument();
+    expect(screen.getByText('재고 부족')).toBeInTheDocument();
+    expect(clearCart).not.toHaveBeenCalled();
   });
 
-  it('쿠폰을 적용하면 할인가로 결제하고 사용 기록을 남긴다', async () => {
+  it('쿠폰 코드를 함께 보내고, 사용 기록은 서버에 맡긴다', async () => {
     mockedCoupon.preview.mockResolvedValue({
       valid: true,
       message: '',
@@ -174,7 +201,9 @@ describe('CartPage — 일반 결제', () => {
       eligibleAmount: 20000,
       finalAmount: 18000,
     } as never);
-    mockedCoupon.use.mockResolvedValue(undefined as never);
+    mockedOrder.createMultiItemOrder.mockResolvedValue(serverOrder({
+      amount: 18000, discountAmount: 2000,
+    }) as never);
     renderPage();
     await userEvent.type(screen.getByPlaceholderText(/쿠폰 코드 입력/), 'welcome10');
     await userEvent.click(screen.getByRole('button', { name: '적용' }));
@@ -183,33 +212,26 @@ describe('CartPage — 일반 결제', () => {
     await userEvent.click(screen.getByRole('button', { name: '1개 상품 전체 주문하기' }));
 
     await waitFor(() =>
-      expect(mockedOrder.createOrder).toHaveBeenCalledWith({
-        userId: 1,
-        productId: 1,
-        amount: 18000,
-      }),
+      expect(mockedOrder.createMultiItemOrder).toHaveBeenCalledWith(
+        1, [{ productId: 1, quantity: 1 }], 'WELCOME10', expect.any(String),
+      ),
     );
-    expect(mockedCoupon.use).toHaveBeenCalledWith('WELCOME10', 1, 100);
+    // 서버가 같은 트랜잭션에서 기록한다. 여기서 또 부르면 쿠폰이 두 번 소진된다.
+    expect(mockedCoupon.use).not.toHaveBeenCalled();
   });
 
-  it('쿠폰 사용 기록 실패는 주문 결과를 뒤집지 않는다', async () => {
-    mockedCoupon.preview.mockResolvedValue({
-      valid: true,
-      message: '',
-      subtotal: 20000,
-      discountAmount: 2000,
-      eligibleAmount: 20000,
-      finalAmount: 18000,
-    } as never);
-    mockedCoupon.use.mockRejectedValue(new Error('down'));
+  it('완료 화면의 금액은 서버가 확정한 값을 그대로 보여 준다', async () => {
+    mockedOrder.createMultiItemOrder.mockResolvedValue(serverOrder({
+      amount: 21000, subtotal: 20000, discountAmount: 2000, shippingFee: 3000,
+    }) as never);
     renderPage();
-    await userEvent.type(screen.getByPlaceholderText(/쿠폰 코드 입력/), 'welcome10');
-    await userEvent.click(screen.getByRole('button', { name: '적용' }));
-    await screen.findByText('쿠폰 적용됨:');
 
     await userEvent.click(screen.getByRole('button', { name: '1개 상품 전체 주문하기' }));
 
-    expect(await screen.findByText('전체 주문 완료!')).toBeInTheDocument();
+    await screen.findByText('주문 완료!');
+    expect(screen.getByText('₩21,000')).toBeInTheDocument();
+    expect(screen.getByText('-₩2,000')).toBeInTheDocument();
+    expect(screen.getByText('₩3,000')).toBeInTheDocument();
   });
 });
 
@@ -225,7 +247,11 @@ describe('CartPage — 토스페이먼츠', () => {
     expect(screen.getByRole('button', { name: /토스페이먼츠로 ₩20,000 결제/ })).toBeInTheDocument();
   });
 
-  it('주문을 먼저 만들고 결제창을 연다 (성공 URL 에 주문 ID 를 싣는다)', async () => {
+  it('주문을 먼저 만들고, 서버가 준 금액으로 결제창을 연다', async () => {
+    // 화면 예상가(20000)와 서버 확정가(18500)가 다른 상황. 결제창에 가야 할 것은 후자다.
+    mockedOrder.createMultiItemOrder.mockResolvedValue(serverOrder({
+      amount: 18500, discountAmount: 2000, shippingFee: 500,
+    }) as never);
     const requestPayment = vi.fn().mockResolvedValue(undefined);
     vi.stubGlobal('TossPayments', vi.fn(() => ({ requestPayment })));
     await chooseToss();
@@ -234,7 +260,7 @@ describe('CartPage — 토스페이먼츠', () => {
 
     await waitFor(() => expect(requestPayment).toHaveBeenCalled());
     const [, options] = requestPayment.mock.calls[0];
-    expect(options.amount).toBe(20000);
+    expect(options.amount).toBe(18500);
     expect(options.successUrl).toContain('type=cart');
     expect(options.successUrl).toContain('dbOrderIds=100');
   });
@@ -252,14 +278,14 @@ describe('CartPage — 토스페이먼츠', () => {
   });
 
   it('주문 생성이 실패하면 결제창을 열지 않고 장바구니로 돌아온다', async () => {
-    mockedOrder.createOrder.mockRejectedValue({ response: { data: { message: '품절' } } });
+    mockedOrder.createMultiItemOrder.mockRejectedValue({ response: { data: { message: '품절' } } });
     const requestPayment = vi.fn();
     vi.stubGlobal('TossPayments', vi.fn(() => ({ requestPayment })));
     await chooseToss();
 
     await userEvent.click(screen.getByRole('button', { name: /토스페이먼츠로/ }));
 
-    expect(await screen.findByText('"티셔츠" 주문 생성 실패: 품절')).toBeInTheDocument();
+    expect(await screen.findByText('주문 생성 실패: 품절')).toBeInTheDocument();
     expect(requestPayment).not.toHaveBeenCalled();
   });
 
