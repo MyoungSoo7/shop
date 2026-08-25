@@ -5,9 +5,9 @@ name: harness-guard
 
 on:
   pull_request:
-    branches: [develop, main]
+    branches: [main]
   push:
-    branches: [develop, main]
+    branches: [main]
 
 # 가드는 부작용이 없으므로 PR·push 모두 최신 커밋만 검증하면 된다.
 concurrency:

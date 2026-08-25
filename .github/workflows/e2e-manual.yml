@@ -1,19 +1,18 @@
 name: e2e-manual
 
-# 운영 도메인 E2E 를 **수동으로** 돌린다.
+# 배포된 도메인 E2E 를 **수동으로** 돌린다.
 #
-# ci.yml 의 `production-revision-smoke` 는 `github.ref == 'refs/heads/main'` 조건이라
-# develop 에서는 구조적으로 돌지 않는다(운영 도메인을 때리는 잡이라 의도된 제약이다).
-# 그래서 develop 상태를 운영 대상으로 확인하려면 main 승격 외에 길이 없었다.
+# ci.yml 의 `deployed-revision-smoke` 는 main push 에서만 돈다. 그 사이에 배포처 상태를 확인하고
+# 싶거나, 다른 URL(로컬 compose·임시 미리보기)을 대상으로 같은 스펙을 돌리고 싶을 때 이걸 쓴다.
 #
 # 왜 ci.yml 에 workflow_dispatch 를 얹지 않았나:
 #   수동 실행에는 비교 기준(base ref)이 없어 `changes` 잡의 paths-filter 가 정상 판정을 못 한다.
-#   그 결과 5분짜리 E2E 하나를 보려고 백엔드 빌드·테스트 55~70분 체인이 통째로 돈다.
-#   이 워크플로는 E2E 만 떼어내 돌리므로 기존 게이트의 의미(develop 이 운영 도메인을 자동으로
-#   때리지 않는다)를 그대로 두면서 필요할 때만 사람이 눌러 확인할 수 있다.
+#   그 결과 5분짜리 E2E 하나를 보려고 백엔드 빌드·테스트 체인이 통째로 돈다.
+#   이 워크플로는 E2E 만 떼어내 돌린다.
 #
-# 주의: 대상은 **현재 배포된 운영 revision** 이다. 이 워크플로를 돌린 브랜치의 코드가 아니라,
-# jen.lemuel.co.kr 에 지금 떠 있는 것을 검증한다(ci.yml 의 같은 잡과 동일한 성격).
+# 주의: 대상은 **지금 그 URL 에 떠 있는 revision** 이다. 이 워크플로를 돌린 브랜치의 코드가 아니다.
+# shop 데모는 david 노드의 docker compose 라 자동 승격이 없다 — 방금 머지한 코드를 보고 싶으면
+# 먼저 그 노드에서 배포를 갱신한 다음 이걸 눌러야 한다(ADR 0044).
 
 on:
   workflow_dispatch:
@@ -21,7 +20,7 @@ on:
       base_url:
         description: "E2E 대상 URL"
         required: false
-        default: "https://jen.lemuel.co.kr"
+        default: "https://shop.lemuel.co.kr"
         type: string
       projects:
         description: "실행할 Playwright 프로젝트"
@@ -68,9 +67,8 @@ jobs:
         working-directory: frontend
         run: npm run e2e:install
 
-      # ci.yml 쪽에는 ArgoCD reconciliation 대기(sleep 180)가 있지만 여기에는 없다.
-      # 그 대기는 "머지 직후 배포가 반영될 시간"을 위한 것이고, 수동 실행은 배포 직후가 아니라
-      # 사람이 원하는 시점에 도는 것이라 기다릴 이유가 없다.
+      # ci.yml 쪽에는 배포처 도달 확인(probe) 후 스킵하는 분기가 있지만 여기에는 없다.
+      # 수동 실행은 사람이 대상을 지정해 누른 것이라, 닿지 않으면 그 자체가 알고 싶은 결과다.
       - name: Run Playwright E2E
         working-directory: frontend
         run: |

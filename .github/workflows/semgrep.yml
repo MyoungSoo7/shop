@@ -1,9 +1,12 @@
 # SAST — Semgrep OSS.
 #
-# CodeQL 을 쓰지 않는 이유: 이 저장소는 private 이고 GitHub Advanced Security 가 없어
-# 코드 스캐닝 자체가 비활성이다(`/code-scanning/alerts` → 403). CodeQL 도, SARIF 업로드도
-# 동작하지 않으므로 결과를 로그·종료코드로 직접 다루는 Semgrep 으로 대체한다.
-# 저장소를 public 으로 전환하거나 GHAS 를 켜면 CodeQL 로 갈아탈 수 있다.
+# CodeQL 을 쓰지 않는 이유 — **전제가 바뀌었으니 다시 판단할 것** (2026-08-25):
+#   원래 근거는 "settlement 는 private 이고 GHAS 가 없어 코드 스캐닝이 아예 비활성
+#   (`/code-scanning/alerts` → 403)" 이었다. 이 저장소는 public 이라 그 제약이 없다 —
+#   같은 API 가 403 이 아니라 404("no analysis found")를 준다. 즉 CodeQL 도 SARIF 업로드도
+#   지금 쓸 수 있고, 안 쓰는 건 단지 아직 안 붙였기 때문이다.
+#   Semgrep 을 당장 걷어내지는 않는다. 아래 "새로 생긴 것만 막는다" 게이트가 이미 돌고 있고,
+#   교체는 baseline 재설정을 동반하는 별개 작업이다.
 #
 # 게이트 설계 — "새로 생긴 것만 막는다":
 #   PR   : base 이후 새로 생긴 ERROR 만 차단(--baseline-commit). 기존 부채로 CI 가 통째로
@@ -14,9 +17,9 @@ name: semgrep
 
 on:
   pull_request:
-    branches: [main, develop]
+    branches: [main]
   push:
-    branches: [main, develop]
+    branches: [main]
 
 permissions:
   contents: read

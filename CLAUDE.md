@@ -20,7 +20,7 @@
 - **원장(포인트·기프트카드)**: 잔액은 계산 결과지 저장값이 아니다. 로트를 되살리지 않는다
   (EXPIRED·REVOKED 는 신규 로트 발급으로 되돌린다 — 역분개 원칙).
 - **인가(IDOR)**: 셀러 리소스 식별자를 요청 파라미터로 신뢰 **금지** — JWT 주체(userId)에서 파생 + 소유권 대조(403).
-- **커밋**: `main` 직접 push **금지**(보호 브랜치). develop 에 항목별 개별 커밋.
+- **커밋**: 브랜치는 **`main` 하나**다(2026-08-25). 항목별 개별 커밋 — 리뷰·롤백이 쉬워진다.
 
 > 위 가드레일은 **기계로 강제된다**(문서 규율 아님): 저장소 추적 가드 `scripts/harness/guard.mjs` 가 실시간
 > PreToolUse(exit 2 차단)·git pre-commit(`node scripts/harness/install-hooks.mjs`)·CI(`.github/workflows/harness-guard.yml`) 3중으로
@@ -130,9 +130,14 @@ shop/                             # Gradle 멀티 모듈 루트
   `:<module>:jacocoTestCoverageVerification`(LINE 90%) 통과를 확인한 뒤 완료를 선언한다.
 - **절차 규율(플러그인 독립, `.claude/skills/` 자체 내재)**: 구현·버그픽스 착수 전 → `tdd-discipline`,
   버그·테스트 실패 조사 → `debugging-discipline`, "완료" 선언·커밋 직전 → `verify-before-done` 스킬 로드.
-- **커밋**: develop 에 항목별 개별 커밋(리뷰·롤백 용이). `main` 은 PR 필수·squash 만, **필수 CI 6종**: `Detect changed paths` · `Backend - Build/Test/JaCoCo/SonarCloud` · `Frontend - Production Build & Quality` · `Frontend - Tests` · `guard`(harness-guard) · `SAST (Semgrep OSS)`.
-  **`cancelled` 는 통과가 아니다** — develop 은 최신 커밋이 이기므로 중간 커밋의 실행은 취소되는데
+- **커밋**: `main` 에 항목별 개별 커밋(리뷰·롤백 용이). **필수 CI 6종**: `Detect changed paths` · `Backend - Build/Test/JaCoCo/SonarCloud` · `Frontend - Production Build & Quality` · `Frontend - Tests` · `guard`(harness-guard) · `SAST (Semgrep OSS)`.
+  **다만 이 저장소의 `main` 은 실제로 보호돼 있지 않다**(2026-08-25 실측: `protected: false`,
+  required status checks 0건). 위 6종은 *돌지만 막지는 않는다* — 초록을 확인하는 건 사람 몫이다.
+  브랜치 보호를 켜기 전까지는 그렇게 알고 있을 것.
+  **`cancelled` 는 통과가 아니다** — PR 은 최신 커밋이 이기므로 중간 커밋의 실행은 취소되는데
   빨간 X 가 안 남는다. 판정은 `node scripts/harness/ci-verdict.mjs [sha]` 로 체크 단위 확인.
+  **넓은 변경은 PR 로 올릴 것** — main 직접 push 는 직전 커밋 대비 경로 필터로만 게이트되고,
+  전량 검증은 PR 런에서만 돈다(단일 브랜치 운영의 대가, `ci.yml` 헤더 주석 참조).
   PowerShell 에서 커밋 메시지는 `git commit -F <file>`(here-string `@` 누수 회피).
 - **흔한 함정**:
   - `JWT_SECRET` 은 운영 필수(기본값 없음, ≥32바이트). 테스트는 부모 `build.gradle.kts` 의 test env 로 주입됨.

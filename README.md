@@ -215,7 +215,11 @@ node scripts/harness/guard.mjs --list changed.txt
 | `backend-shared` → `backend-test`(모듈 매트릭스) → `backend-ci` | shared-common 선행 검증 → 모듈별 테스트·리포트 → 빌드·JaCoCo·SonarCloud·SBOM |
 | `frontend-ci` · `frontend-tests` | 프로덕션 빌드·품질(→ `frontend-dist` 아티팩트) / vitest·커버리지 |
 | `backend-ghcr` · `frontend-ghcr` → `images` | GHCR 푸시 → 이미지 스캔 |
-| `production-revision-smoke` | **현재 배포된 리비전**에 Playwright 스모크 — 빌드 성공이 아니라 서비스 상태를 본다 |
+| `deployed-revision-smoke` | **현재 배포된 데모**(`shop.lemuel.co.kr`)에 Playwright 스모크 — 빌드 성공이 아니라 서비스 상태를 본다. 데모에 닿지 않으면 경고를 남기고 건너뛴다 |
+
+브랜치는 **main 하나**다. develop→main 승격 모델은 settlement 에서 딸려 온 것인데 이 저장소에는
+승격 대상(staging)이 없어 2026-08-25 에 걷어냈다. 대가는 분명하다 — main 직접 push 는 직전 커밋
+대비 경로 필터로만 게이트되고, **전량 검증은 PR 런에서만** 돈다. 여러 모듈에 걸치는 변경은 PR 로 올릴 것.
 
 보조: `harness-guard.yml`(게이트 3중 강제의 CI 겹) · `semgrep.yml` · `pr-review.yml` ·
 `e2e-manual.yml` · `mirror-testcontainers.yml` · `backend-image-emergency.yml`.

@@ -1,38 +1,35 @@
 name: ci
 
-# develop 도 게이트한다 (2026-08-02).
-#   그동안 이 워크플로는 main 에서만 돌았다. 그래서 develop 에는 Java 빌드·테스트 게이트가
-#   아예 없었고(로컬에서 돌리는 수밖에 없었다), develop-<sha> 이미지도 만들어지지 않아
-#   운영 전에 통과시킬 staging 배포 대상 자체가 없었다. 5월 hotfix 5건이 전부 운영에서
-#   처음 드러난 구조적 이유다.
-#   develop push 는 backend-ci/frontend-ci 로 게이트되고 develop-<sha> 이미지를 만든다.
-#   운영 도메인을 때리는 production-revision-smoke 는 ref == main 조건이 그대로라 안 돈다.
+# 이 저장소는 **main 단일 브랜치**로 운영한다 (2026-08-25).
+#   settlement 에서 떼어 오면서 develop→main 2단 브랜치 모델이 같이 딸려 왔지만, 이 저장소에는
+#   그 모델이 전제하던 것이 하나도 없다 — 승격 대상인 staging 환경도, 상시 열린 릴리스 PR 도,
+#   develop 을 바라보는 배포도 없었다. 실제로 develop 의 유일한 커밋(cfe3d6c)은 main 이 따로
+#   반영해 두 브랜치 내용이 완전히 같았다(diff 0). 있지도 않은 승격 단계를 유지하는 대가로
+#   커밋 하나가 런 2벌을 만들고 있었을 뿐이라 develop 을 삭제했다.
+#   그래서 게이트는 main push 와 main 을 향한 PR 뿐이다.
 on:
   push:
-    branches: [main, develop]
+    branches: [main]
   pull_request:
-    branches: [main, develop]
+    branches: [main]
 
 # 연속 push 는 러너를 두고 다툰다. "어느 실행을 살릴 것인가" 가 이 블록의 전부다.
 #
-#   main push 만 직렬화한다 — 이미지 푸시와 운영 스모크가 걸려 있어 중간에 끊으면 안 된다.
-#   PR 과 develop push 는 **최신 커밋이 이긴다**.
+#   main push 만 직렬화한다 — 이미지 푸시와 배포 스모크가 걸려 있어 중간에 끊으면 안 된다.
+#   PR 은 **최신 커밋이 이긴다**.
 #
-# develop 을 직렬화에서 뺀 이유 (2026-08-15 실측):
+# PR 을 직렬화에서 뺀 이유 (2026-08-15 실측, 당시 develop 기준이지만 근거는 그대로다):
 #   ① 직렬화의 전제였던 "백엔드 잡 정상 55~70분" 이 낡았다. 모듈 매트릭스로 쪼갠 뒤 전체 런은
 #      13~14분이다(run 31872579719 push 14분 · 31872582987 pull_request 13분). 오래 도니까
 #      취소하지 말자는 근거가 사라졌다.
 #   ② 직렬화는 대기열에서 **최신 커밋을 떨어뜨린다**. concurrency 그룹의 대기 슬롯은 1개뿐이라
 #      새 push 가 오면 앞서 대기하던 실행이 취소되는데, 정작 러너를 쥐고 있는 것은 가장 낡은
-#      실행이다. 08:07~08:53 develop 실측: push 런 6건 중 완주 0건, 최신 커밋(31bcbd27e)은
+#      실행이다. 08:07~08:53 실측: push 런 6건 중 완주 0건, 최신 커밋(31bcbd27e)은
 #      pending 에서 취소되고 낡은 커밋이 러너를 붙들었다 — 판정이 낡은 트리로 간다.
-#   ③ 릴리스 PR(develop→main)이 상시 열려 있어 커밋 하나가 push 런 + PR 런 2벌을 만든다.
-#      최신만 남기면 동시 점유가 (버스트 수 × 2벌) 에서 2벌로 떨어진다.
 #
-# 대가: 중간 develop 커밋의 develop-<sha> 이미지는 만들어지지 않는다. 움직이는 develop 태그는
-# 어차피 최신 커밋으로 수렴하고(오히려 취소된 낡은 실행이 태그를 덮는 일이 사라진다),
-# 스테이징이 필요로 하는 것도 최신 develop 이라 받아들인다. 특정 중간 sha 이미지가 필요하면
-# 그 sha 로 워크플로를 재실행할 것.
+# 단일 브랜치의 대가는 분명히 적어 둔다: main 직접 push 는 **PR 런의 전량 검증을 건너뛰고**
+# 직전 커밋 대비 경로 필터로만 게이트된다(아래 "Resolve paths-filter base"). 여러 모듈에
+# 걸치는 변경은 PR 로 올려 전량 검증을 한 번 태우는 편이 안전하다.
 concurrency:
   group: ci-${{ github.ref }}
   # pull_request 의 github.ref 는 refs/pull/<n>/merge 라 이 조건에서 자연히 true 가 된다.
@@ -78,18 +75,17 @@ jobs:
 
       # 변경 감지의 기준점을 정한다 — 이 한 값이 "무엇을 돌릴지" 전부를 좌우한다.
       #
-      # 문제 (2026-08-16 실측): base 를 주지 않으면 dorny 는 **기본 브랜치(main)와의 merge-base**
-      #   를 기준으로 삼는다. main 이 develop 보다 1300 커밋 뒤처져 있어, develop push 는 무엇을
-      #   바꿨든 283개 파일 변경으로 잡힌다 → shared 필터(build.gradle.kts·Dockerfile·ci.yml)가
-      #   반드시 걸려 → 언제나 "전 서비스 재빌드" 분기.
-      #   실제로 문서 2개·tsx 2개만 바꾼 push 가 백엔드 모듈 19개를 전부 돌렸다
-      #   (run 31892010325: "Searching for merge-base main...develop" → "Detected 274 changed files").
+      # 문제 (2026-08-16 실측): base 를 주지 않으면 dorny 는 **기본 브랜치와의 merge-base** 를
+      #   기준으로 삼는다. 브랜치가 기본 브랜치보다 크게 벌어져 있으면 무엇을 바꿨든 수백 파일
+      #   변경으로 잡히고 → shared 필터(build.gradle.kts·Dockerfile·ci.yml)가 반드시 걸려 →
+      #   언제나 "전 서비스 재빌드" 분기가 된다. 실제로 문서 2개·tsx 2개만 바꾼 push 가 백엔드
+      #   모듈 19개를 전부 돌렸다(run 31892010325: "Detected 274 changed files").
       #   경로 필터가 정교하게 짜여 있는데 입력이 틀려서 무력화돼 있던 것이다.
       #
       # 그래서 역할을 나눈다:
-      #   - push(develop)     → 직전 커밋 대비. 바뀐 모듈만 돌려 피드백을 짧게 한다.
+      #   - push(main)        → 직전 커밋 대비. 바뀐 모듈만 돌려 피드백을 짧게 한다.
       #   - pull_request      → base 를 비운다(= PR base = main). **머지 전 전량 검증은 그대로**.
-      #     develop→main 릴리스 PR 이 상시 열려 있어, push 에서 안 돈 모듈도 머지 전에 반드시 한 번 돈다.
+      #     단일 브랜치 운영에서 전량 검증이 도는 곳은 여기뿐이다 — 넓은 변경은 PR 로 올릴 것.
       #
       # 안전 폴백: 최초 push·force-push 는 before 가 0000… 이거나 이미 사라진 커밋을 가리킨다.
       #   그때는 base 를 비워 **전량 검증으로 떨어뜨린다** — 판단이 갈릴 때는 더 도는 쪽이 옳다.
@@ -1043,15 +1039,24 @@ jobs:
           fi
           echo "이미지 빌드·스캔 통과"
 
-  # main 머지 후 ArgoCD plain Directory 앱의 manifest reconciliation 시간을 둔 다음,
-  # 현재 배포된 운영 revision(jen.lemuel.co.kr)을 E2E smoke 한다.
-  # 이 job은 새 mutable image tag의 promotion을 증명하지 않는다.
+  # 현재 배포돼 있는 데모(https://shop.lemuel.co.kr)를 E2E smoke 한다.
+  #
+  # 2026-08-25 재조준: 이 잡은 settlement 에서 그대로 딸려 오면서 **남의 운영 도메인**
+  #   (jen.lemuel.co.kr = settlement-prod)을 때리고 있었다. 그 결과 판정이 두 방향으로 다 틀렸다 —
+  #   shop 코드가 깨져도 초록이 뜨고, settlement 가 죽으면 shop 이 빨개졌다. 검증 대상이던
+  #   대출 화면은 이 저장소에 존재하지도 않는다.
+  #   대상을 shop 자신의 배포처로 바꾸고, 없는 ArgoCD 를 기다리던 `sleep 180` 을 걷어냈다.
+  #   shop 데모는 david 노드의 docker compose 다(ADR 0044) — reconcile 을 기다릴 컨트롤러가 없다.
+  #
+  # 이 잡이 증명하는 것과 아닌 것:
+  #   O  지금 그 도메인에 떠 있는 revision 의 라우팅·프록시·인증이 살아 있다
+  #   X  방금 만든 이미지가 그 도메인으로 승격됐다 (compose 수동 배포라 승격 단계가 없다)
   #
   # needs 의 4 단계 (ci + ghcr) 를 모두 포함 — ci 가 실패하면 ghcr 는 skipped 되어
   # `result != 'failure'` 는 통과해버림. 그래서 ci.result 도 직접 검사: success/skipped 만 허용.
   # paths-filter 로 변경 없는 쪽은 skipped 되니 success/skipped 양쪽 다 통과시킴.
-  production-revision-smoke:
-    name: Currently deployed production revision smoke
+  deployed-revision-smoke:
+    name: Currently deployed demo revision smoke
     runs-on: ubuntu-latest
     needs:
       [frontend-ci, frontend-tests, frontend-ghcr, backend-ci, backend-ghcr]
@@ -1068,7 +1073,7 @@ jobs:
     permissions:
       contents: read
     env:
-      PLAYWRIGHT_BASE_URL: https://jen.lemuel.co.kr
+      PLAYWRIGHT_BASE_URL: https://shop.lemuel.co.kr
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
@@ -1091,12 +1096,36 @@ jobs:
         working-directory: frontend
         run: npm run e2e:install
 
-      # ArgoCD가 Git의 plain Directory manifest를 reconcile할 시간만 제공한다.
-      # 새 이미지 promotion 여부를 보장하지 않으며, 현재 배포 revision을 대상으로 한다.
-      - name: Wait for ArgoCD manifest reconciliation
-        run: sleep 180
+      # 데모가 살아 있는지 먼저 확인한다 — "닿지 않음" 과 "닿았는데 깨짐" 을 구분하기 위해서다.
+      #
+      # 이 데모는 가정용 회선의 단일 노드(david)에 compose 로 떠 있다. 전원·회선·터널 어느 하나만
+      # 흔들려도 닿지 않는데, 그건 방금 올린 커밋의 잘못이 아니다. 그래서 **닿지 않으면 경고를
+      # 남기고 E2E 를 건너뛴다**(잡은 초록). 대신 **닿았는데 E2E 가 깨지면 그대로 빨강**이다.
+      #
+      # 이 선택의 대가를 분명히 적어 둔다: 데모가 장기간 죽어 있으면 이 게이트는 조용히 아무것도
+      # 검증하지 않는다. 그래서 스킵을 로그가 아니라 ::warning:: 애노테이션으로 올려 런 요약에
+      # 뜨게 했다 — 초록불 옆에 경고가 계속 보이면 사람이 알아챌 수 있다.
+      # 재시도는 3회다. 배포 직후 컨테이너가 뜨는 중인 짧은 창을 "죽음" 으로 오판하지 않기 위한 것이다.
+      - name: Probe deployed demo
+        id: probe
+        env:
+          BASE_URL: ${{ env.PLAYWRIGHT_BASE_URL }}
+        run: |
+          set -uo pipefail
+          reachable=false
+          for attempt in 1 2 3; do
+            code=$(curl -sS -o /dev/null -w '%{http_code}' --max-time 20 "${BASE_URL}/actuator/health" || echo 000)
+            echo "시도 ${attempt}/3 — ${BASE_URL}/actuator/health → ${code}"
+            if [ "$code" = "200" ]; then reachable=true; break; fi
+            [ "$attempt" -lt 3 ] && sleep 20
+          done
+          echo "reachable=$reachable" >> "$GITHUB_OUTPUT"
+          if [ "$reachable" != "true" ]; then
+            echo "::warning title=배포 데모에 닿지 않아 E2E 를 건너뛴다::${BASE_URL} 가 3회 시도 동안 200 을 주지 않았다. 이 런은 배포된 revision 을 아무것도 검증하지 않았다."
+          fi
 
-      - name: Run Playwright E2E against jen.lemuel.co.kr
+      - name: Run Playwright E2E against the deployed demo
+        if: steps.probe.outputs.reachable == 'true'
         working-directory: frontend
         run: npm run e2e
 
