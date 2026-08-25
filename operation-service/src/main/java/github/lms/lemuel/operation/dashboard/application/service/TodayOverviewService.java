@@ -50,12 +50,22 @@ public class TodayOverviewService implements ViewTodayOverviewUseCase {
     @Override
     @Transactional(readOnly = true)
     public TodayOverview today() {
-        return onDate(LocalDate.now(clock.withZone(zone)));
+        return assemble(LocalDate.now(clock.withZone(zone)));
     }
 
     @Override
     @Transactional(readOnly = true)
     public TodayOverview onDate(LocalDate date) {
+        return assemble(date);
+    }
+
+    /**
+     * 두 진입점이 공유하는 조립부. {@code today()} 가 {@code onDate()} 를 직접 부르면 자기호출이라
+     * 프록시를 타지 않아 <b>안쪽 {@code @Transactional} 이 조용히 무효</b>가 된다 — 여기서는 바깥
+     * 애노테이션이 이미 걸려 있어 결과는 같지만, 그 사실을 코드만 보고는 알 수 없다. 조립부를
+     * 애노테이션 없는 private 로 내려 애노테이션이 붙은 자리는 전부 프록시 경계에 두었다.
+     */
+    private TodayOverview assemble(LocalDate date) {
         Map<DashboardMetric, DailyMetric> stored = new EnumMap<>(DashboardMetric.class);
         metricPort.findByDate(date).forEach(row -> stored.put(row.metric(), row));
 
