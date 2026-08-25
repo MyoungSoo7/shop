@@ -8,6 +8,7 @@ import github.lms.lemuel.common.audit.application.port.in.SearchAuditLogsUseCase
 import github.lms.lemuel.common.audit.application.port.in.SearchAuditLogsUseCase.AuditLogRow;
 import github.lms.lemuel.common.audit.domain.AuditAction;
 import github.lms.lemuel.common.web.csv.CsvResponse;
+import github.lms.lemuel.common.web.csv.ExportScope;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import org.springframework.core.io.ByteArrayResource;
@@ -136,17 +137,12 @@ public class OperationAuditLogController {
         AuditLogExport export = searchAuditLogsUseCase.export(
                 toQuery(actorEmail, actorId, action, resourceType, resourceId, from, to, 0, 1));
 
-        ResponseEntity<ByteArrayResource> csv = CsvResponse.of(
+        return CsvResponse.of(
                 "operation-audit-logs",
                 List.of("일시", "행위자ID", "행위자", "액션", "리소스유형", "리소스ID", "IP", "상세"),
                 export.rows(),
-                OperationAuditLogController::toCells);
-
-        return ResponseEntity.status(csv.getStatusCode())
-                .headers(csv.getHeaders())
-                .header("X-Export-Truncated", String.valueOf(export.truncated()))
-                .header("X-Export-Total", String.valueOf(export.totalElements()))
-                .body(csv.getBody());
+                OperationAuditLogController::toCells,
+                ExportScope.of(export.totalElements(), export.truncated()));
     }
 
     private static List<String> toCells(AuditLogRow row) {

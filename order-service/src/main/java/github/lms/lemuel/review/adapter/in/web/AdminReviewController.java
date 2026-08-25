@@ -1,6 +1,7 @@
 package github.lms.lemuel.review.adapter.in.web;
 
 import github.lms.lemuel.common.web.csv.CsvResponse;
+import github.lms.lemuel.common.web.csv.ExportScope;
 import github.lms.lemuel.review.application.port.in.ModerateReviewUseCase;
 import github.lms.lemuel.review.application.port.in.SearchReviewsUseCase;
 import github.lms.lemuel.review.application.port.in.SearchReviewsUseCase.ReviewExport;
@@ -120,17 +121,12 @@ public class AdminReviewController {
         ReviewExport exported = searchReviewsUseCase.export(
                 toQuery(keyword, productId, userId, status, maxRating, from, to, 0, 1));
 
-        ResponseEntity<ByteArrayResource> csv = CsvResponse.of(
+        return CsvResponse.of(
                 "reviews",
                 List.of("ID", "상품", "작성자", "평점", "내용", "상태", "블라인드사유", "작성일시"),
                 exported.rows(),
-                AdminReviewController::toCells);
-
-        return ResponseEntity.status(csv.getStatusCode())
-                .headers(csv.getHeaders())
-                .header("X-Export-Truncated", String.valueOf(exported.truncated()))
-                .header("X-Export-Total", String.valueOf(exported.totalElements()))
-                .body(csv.getBody());
+                AdminReviewController::toCells,
+                ExportScope.of(exported.totalElements(), exported.truncated()));
     }
 
     @PostMapping("/{reviewId}/hide")

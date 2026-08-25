@@ -1,6 +1,7 @@
 package github.lms.lemuel.user.adapter.in.web;
 
 import github.lms.lemuel.common.web.csv.CsvResponse;
+import github.lms.lemuel.common.web.csv.ExportScope;
 import github.lms.lemuel.user.application.port.in.ChangeUserRoleUseCase;
 import github.lms.lemuel.user.application.port.in.ChangeUserRoleUseCase.RoleChangeResult;
 import github.lms.lemuel.user.application.port.in.SearchMembersUseCase;
@@ -132,17 +133,12 @@ public class AdminMemberController {
         MemberExport exported = searchMembersUseCase.export(
                 toQuery(keyword, role, status, active, joinedFrom, joinedTo, 0, 1));
 
-        ResponseEntity<ByteArrayResource> csv = CsvResponse.of(
+        return CsvResponse.of(
                 "members",
                 List.of("ID", "이메일", "이름", "연락처", "역할", "승인상태", "활성", "가입일시"),
                 exported.rows(),
-                AdminMemberController::toCells);
-
-        return ResponseEntity.status(csv.getStatusCode())
-                .headers(csv.getHeaders())
-                .header("X-Export-Truncated", String.valueOf(exported.truncated()))
-                .header("X-Export-Total", String.valueOf(exported.totalElements()))
-                .body(csv.getBody());
+                AdminMemberController::toCells,
+                ExportScope.of(exported.totalElements(), exported.truncated()));
     }
 
     @PatchMapping("/{userId}/role")

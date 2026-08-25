@@ -1,6 +1,7 @@
 package github.lms.lemuel.order.adapter.in.web;
 
 import github.lms.lemuel.common.web.csv.CsvResponse;
+import github.lms.lemuel.common.web.csv.ExportScope;
 import github.lms.lemuel.order.application.port.in.ViewSalesStatsUseCase;
 import github.lms.lemuel.order.application.port.in.ViewSalesStatsUseCase.CategoryBreakdown;
 import github.lms.lemuel.order.application.port.in.ViewSalesStatsUseCase.ProductRanking;
@@ -59,6 +60,18 @@ import java.util.stream.IntStream;
 @RequiredArgsConstructor
 public class AdminSalesStatsController {
 
+    /**
+     * 이 기간 전체의 순매출 — 담긴 행만 더한 값이 아니다.
+     *
+     * <p>이름을 {@code X-Export-Net-Total} 에서 바꾼 이유: {@code X-Export-Total} 은 공통 헤더로
+     * <b>건수</b>를 뜻한다. 한 글자 차이로 금액과 건수가 같은 접두사를 쓰면 읽는 쪽이 언젠가
+     * 섞어 읽는다.
+     */
+    static final String HEADER_NET_AMOUNT = "X-Export-Net-Amount";
+
+    /** 이 파일이 담은 기간({@code from~to}). 파일명에는 만든 날짜만 들어가 구분이 안 된다. */
+    static final String HEADER_RANGE = "X-Export-Range";
+
     private final ViewSalesStatsUseCase viewSalesStatsUseCase;
 
     @GetMapping("/products")
@@ -76,9 +89,13 @@ public class AdminSalesStatsController {
     /**
      * 랭킹 CSV.
      *
-     * <p>{@code X-Export-Truncated} 를 붙이는 이유: 랭킹은 <b>본래</b> 잘라낸 목록이라, 받은 사람이
+     * <p>{@code X-Export-Truncated} 가 붙는 이유: 랭킹은 <b>본래</b> 잘라낸 목록이라, 받은 사람이
      * 그 사실을 모른 채 열 합계를 내면 "전체 매출"이라고 믿게 된다. 전 범위 합계를
-     * {@code X-Export-Net-Total} 로 같이 보내 그 비교가 가능하게 한다.
+     * {@code X-Export-Net-Amount} 로 같이 보내 그 비교가 가능하게 한다.
+     *
+     * <p>{@link ExportScope#limited} 를 쓰는 이유: 여기엔 "전체 상품 수"라는 값이 없다. 담긴 행
+     * 수를 전체 건수인 척 {@code X-Export-Total} 로 내보내면 "20개 중 20개"라는 거짓말이 되므로,
+     * 대신 상한({@code X-Export-Limit})을 밝히고 전체 건수는 <b>말하지 않는다</b>.
      */
     @GetMapping("/products/export")
     @Operation(summary = "상품 판매 랭킹 CSV", description = "화면과 같은 조건. 상위 N 만 담기므로 헤더로 전체 합계를 함께 보낸다")
@@ -97,18 +114,14 @@ public class AdminSalesStatsController {
                 .mapToObj(i -> toProductCells(i + 1, ranking.rows().get(i)))
                 .toList();
 
-        ResponseEntity<ByteArrayResource> csv = CsvResponse.of(
+        return CsvResponse.of(
                 "sales_products",
                 List.of("순위", "상품ID", "상품명", "수량", "순매출", "주문수"),
                 cells,
-                Function.identity());
-
-        return ResponseEntity.status(csv.getStatusCode())
-                .headers(csv.getHeaders())
-                .header("X-Export-Truncated", String.valueOf(ranking.rows().size() >= ranking.limit()))
-                .header("X-Export-Net-Total", Objects.toString(ranking.total().netAmount(), "0"))
-                .header("X-Export-Range", ranking.from() + "~" + ranking.to())
-                .body(csv.getBody());
+                Function.identity(),
+                ExportScope.limited(ranking.limit())
+                        .with(HEADER_NET_AMOUNT, Objects.toString(ranking.total().netAmount(), "0"))
+                        .with(HEADER_RANGE, ranking.from() + "~" + ranking.to()));
     }
 
     @GetMapping("/categories")
@@ -125,8 +138,8 @@ public class AdminSalesStatsController {
     /**
      * 카테고리 CSV.
      *
-     * <p>여기서는 잘라내기가 없으므로 {@code X-Export-Truncated} 를 붙이지 않는다. 대신 행의
-     * 순매출 합이 {@code X-Export-Net-Total} 과 <b>정확히 같아야 한다</b> — 다르다면 미분류 줄이
+     * <p>여기서는 잘라내기가 없으므로 {@code X-Export-Truncated} 가 항상 {@code false} 다. 대신 행의
+     * 순매출 합이 {@code X-Export-Net-Amount} 와 <b>정확히 같아야 한다</b> — 다르다면 미분류 줄이
      * 빠졌거나 한 라인이 여러 분류로 중복 계산된 것이다.
      */
     @GetMapping("/categories/export")
@@ -138,17 +151,14 @@ public class AdminSalesStatsController {
 
         CategoryBreakdown breakdown = viewSalesStatsUseCase.byCategory(new SalesQuery(from, to, statuses, null));
 
-        ResponseEntity<ByteArrayResource> csv = CsvResponse.of(
+        return CsvResponse.of(
                 "sales_categories",
                 List.of("카테고리ID", "카테고리명", "경로", "깊이", "수량", "순매출", "주문수"),
                 breakdown.rows(),
-                AdminSalesStatsController::toCategoryCells);
-
-        return ResponseEntity.status(csv.getStatusCode())
-                .headers(csv.getHeaders())
-                .header("X-Export-Net-Total", Objects.toString(breakdown.total().netAmount(), "0"))
-                .header("X-Export-Range", breakdown.from() + "~" + breakdown.to())
-                .body(csv.getBody());
+                AdminSalesStatsController::toCategoryCells,
+                ExportScope.of(breakdown.rows().size(), false)
+                        .with(HEADER_NET_AMOUNT, Objects.toString(breakdown.total().netAmount(), "0"))
+                        .with(HEADER_RANGE, breakdown.from() + "~" + breakdown.to()));
     }
 
     private static List<String> toProductCells(int rank, ProductSales row) {

@@ -37,15 +37,23 @@ public final class CsvResponse {
     /**
      * 행 목록을 CSV 첨부 응답으로 만든다.
      *
+     * <p>{@code scope} 가 <b>필수</b>인 이유는 {@link ExportScope} 문서에 있다 — 요약하면, 잘렸다는
+     * 사실을 말하지 않은 CSV 는 실패처럼 보이지 않고 <b>전량처럼</b> 보이기 때문이다.
+     *
      * @param baseName 파일명 접두사 — 실제 파일명은 {@code {baseName}_{오늘}.csv}
      * @param headers  헤더 행
      * @param rows     데이터 원본
      * @param mapper   한 행을 셀 문자열 목록으로 바꾸는 함수(길이는 headers 와 같아야 한다)
+     * @param scope    이 파일이 전체인지 일부인지. {@code X-Export-*} 응답 헤더가 여기서 나온다
      */
     public static <T> ResponseEntity<ByteArrayResource> of(String baseName,
                                                            List<String> headers,
                                                            List<T> rows,
-                                                           Function<T, List<String>> mapper) {
+                                                           Function<T, List<String>> mapper,
+                                                           ExportScope scope) {
+        if (scope == null) {
+            throw new IllegalArgumentException("CSV 는 전체/일부 여부(ExportScope) 없이 내보낼 수 없습니다");
+        }
         StringBuilder body = new StringBuilder(UTF8_BOM);
         appendRow(body, headers);
         for (T row : rows) {
@@ -55,12 +63,14 @@ public final class CsvResponse {
         byte[] bytes = body.toString().getBytes(StandardCharsets.UTF_8);
         String fileName = baseName + "_" + LocalDate.now() + ".csv";
 
-        return ResponseEntity.ok()
+        ResponseEntity.BodyBuilder builder = ResponseEntity.ok()
                 .contentType(new MediaType("text", "csv", StandardCharsets.UTF_8))
                 .header(HttpHeaders.CONTENT_DISPOSITION,
                         ContentDisposition.attachment().filename(fileName, StandardCharsets.UTF_8).build().toString())
-                .contentLength(bytes.length)
-                .body(new ByteArrayResource(bytes));
+                .contentLength(bytes.length);
+        scope.toHeaders(rows.size()).forEach(builder::header);
+
+        return builder.body(new ByteArrayResource(bytes));
     }
 
     private static void appendRow(StringBuilder body, List<String> cells) {

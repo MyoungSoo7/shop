@@ -158,6 +158,44 @@ class SecurityAuthorizationMatrixTest {
     }
 
     /**
+     * 작업 큐 콘솔 — 상태별로 밀린 주문이 몇 건이고 얼마나 오래 방치됐는가.
+     *
+     * <p>매출 콘솔과 같은 이유로 열리는 날부터 검증을 달고 들어온다. 나가는 것이 목록이 아니라
+     * 집계라 가벼워 보이지만, "취소 신청 40건이 사흘째 처리 안 됨"은 이 가게가 지금 어디까지
+     * 감당하고 있는지를 그대로 말해 준다.
+     *
+     * <p>{@code /**} 케이스를 같이 두는 이유: 매처를 {@code "/admin/order-queues"} 하나로만 적으면
+     * {@code /export} 하위 경로가 그날부터 조용히 열린다 — 잘린 목록이 아니라 <b>전량</b>이 나가는
+     * 경로가 먼저 새는 셈이다.
+     */
+    @Nested
+    @DisplayName("작업 큐 콘솔 — 관리자·매니저 전용")
+    class OrderQueueConsole {
+
+        @ParameterizedTest(name = "USER → 403: {0}")
+        @ValueSource(strings = {"/admin/order-queues", "/admin/order-queues/export"})
+        void 일반_사용자는_403(String path) throws Exception {
+            mvc.perform(get(path).with(user("u").roles("USER")))
+                    .andExpect(status().isForbidden());
+        }
+
+        @ParameterizedTest(name = "{0} → 통과")
+        @ValueSource(strings = {"ADMIN", "MANAGER"})
+        void 운영자는_통과한다(String role) throws Exception {
+            mvc.perform(get("/admin/order-queues").with(user("op").roles(role)))
+                    .andExpect(status().isOk());
+        }
+
+        /** 인증 자체가 없으면 403 이 아니라 401 이다 — 두 축을 섞지 않는다. */
+        @Test
+        @DisplayName("미인증은 401")
+        void 미인증은_401() throws Exception {
+            mvc.perform(get("/admin/order-queues"))
+                    .andExpect(status().isUnauthorized());
+        }
+    }
+
+    /**
      * 운영자 계정 콘솔({@code /admin/operators}).
      *
      * <p>이 표면은 "권한을 가진 계정 목록 + 각각이 마지막으로 쓰인 시각 + 지금 잠긴 계정"이다.

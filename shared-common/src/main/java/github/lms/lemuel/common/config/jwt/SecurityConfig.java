@@ -237,6 +237,10 @@ public class SecurityConfig {
                         // 나오는 경로이므로 USER 에게는 절대 열리지 않아야 한다 — 매처를 빠뜨리면
                         // anyRequest().authenticated() 로 떨어져 로그인만 하면 누구나 본다.
                         .requestMatchers("/admin/revenue", "/admin/revenue/**").hasAnyRole("ADMIN", "MANAGER")
+                        // 작업 큐 콘솔 — 상태별로 밀린 주문 건수와 대기 시간. 리뷰·환불 콘솔과 같은
+                        // CS 업무라 MANAGER 까지 연다. 목록이 아니라 집계만 나가지만, 밀린 취소·환불
+                        // 신청 건수는 "지금 이 가게가 어디까지 감당하고 있는가"를 그대로 드러낸다.
+                        .requestMatchers("/admin/order-queues", "/admin/order-queues/**").hasAnyRole("ADMIN", "MANAGER")
                         // 결제 환불 이력 조회 (관리자·매니저·본인) — 더 세밀한 권한은 향후 Audit PR 에서
                         .requestMatchers("/api/payments/*/refunds").hasAnyRole("ADMIN", "MANAGER", "USER")
                         // 환불 실행(직접 PG 환불) — "어드민 승인 후 환불" 원칙에 따라 운영자 전용.

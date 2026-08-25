@@ -1,6 +1,7 @@
 package github.lms.lemuel.coupon.adapter.in.web;
 
 import github.lms.lemuel.common.web.csv.CsvResponse;
+import github.lms.lemuel.common.web.csv.ExportScope;
 import github.lms.lemuel.coupon.application.port.in.ManageCouponUseCase;
 import github.lms.lemuel.coupon.application.port.in.SearchCouponsUseCase;
 import github.lms.lemuel.coupon.application.port.in.SearchCouponsUseCase.CouponExport;
@@ -125,18 +126,13 @@ public class AdminCouponController {
         CouponExport exported = searchCouponsUseCase.export(
                 toQuery(code, lifecycle, type, from, to, 0, 1));
 
-        ResponseEntity<ByteArrayResource> csv = CsvResponse.of(
+        return CsvResponse.of(
                 "coupons",
                 List.of("ID", "코드", "유형", "할인값", "최소주문액", "할인상한", "사용/한도",
                         "적용대상", "시작", "만료", "상태", "생성일시"),
                 exported.rows(),
-                AdminCouponController::toCells);
-
-        return ResponseEntity.status(csv.getStatusCode())
-                .headers(csv.getHeaders())
-                .header("X-Export-Truncated", String.valueOf(exported.truncated()))
-                .header("X-Export-Total", String.valueOf(exported.totalElements()))
-                .body(csv.getBody());
+                AdminCouponController::toCells,
+                ExportScope.of(exported.totalElements(), exported.truncated()));
     }
 
     @PostMapping("/{code}/deactivate")

@@ -1,6 +1,7 @@
 package github.lms.lemuel.user.adapter.in.web;
 
 import github.lms.lemuel.common.web.csv.CsvResponse;
+import github.lms.lemuel.common.web.csv.ExportScope;
 import github.lms.lemuel.user.application.port.in.SearchOperatorsUseCase;
 import github.lms.lemuel.user.application.port.in.SearchOperatorsUseCase.OperatorExport;
 import github.lms.lemuel.user.application.port.in.SearchOperatorsUseCase.OperatorPage;
@@ -99,18 +100,13 @@ public class AdminOperatorController {
         OperatorExport exported = searchOperatorsUseCase.export(
                 new OperatorQuery(keyword, role, lockedOnly, idleDays, neverLoggedIn, 0, 1));
 
-        ResponseEntity<ByteArrayResource> csv = CsvResponse.of(
+        return CsvResponse.of(
                 "operators",
                 List.of("ID", "이메일", "이름", "역할", "활성", "마지막로그인", "연속실패", "잠금해제예정",
                         "잠김", "비밀번호변경", "가입일시"),
                 exported.rows(),
-                AdminOperatorController::toCells);
-
-        return ResponseEntity.status(csv.getStatusCode())
-                .headers(csv.getHeaders())
-                .header("X-Export-Truncated", String.valueOf(exported.truncated()))
-                .header("X-Export-Total", String.valueOf(exported.totalElements()))
-                .body(csv.getBody());
+                AdminOperatorController::toCells,
+                ExportScope.of(exported.totalElements(), exported.truncated()));
     }
 
     /**
