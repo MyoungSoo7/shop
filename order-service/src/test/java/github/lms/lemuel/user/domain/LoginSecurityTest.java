@@ -82,11 +82,48 @@ class LoginSecurityTest {
                 security = security.afterFailure(POLICY, T0);
             }
 
-            LoginSecurity cleared = security.afterSuccess();
+            LoginSecurity cleared = security.afterSuccess(T0.plusMinutes(1));
 
             assertThat(cleared.getFailedAttempts()).isZero();
             assertThat(cleared.getLockedUntil()).isNull();
             assertThat(cleared.isLockedAt(T0)).isFalse();
+        }
+
+        @Test
+        @DisplayName("성공이 마지막 로그인 시각을 남긴다 — 카운터가 0 으로 돌아가도 흔적은 남아야 한다")
+        void successStampsLastLogin() {
+            LoginSecurity security = LoginSecurity.initial(T0);
+
+            assertThat(security.getLastLoginAt()).isNull();
+            assertThat(security.afterSuccess(T0.plusHours(3)).getLastLoginAt()).isEqualTo(T0.plusHours(3));
+        }
+
+        @Test
+        @DisplayName("실패·비밀번호 변경·잠금 해제는 마지막 로그인 시각을 건드리지 않는다")
+        void lastLoginSurvivesOtherTransitions() {
+            LoginSecurity loggedIn = LoginSecurity.initial(T0).afterSuccess(T0.plusHours(1));
+
+            assertThat(loggedIn.afterFailure(POLICY, T0.plusHours(2)).getLastLoginAt())
+                    .isEqualTo(T0.plusHours(1));
+            assertThat(loggedIn.afterPasswordChange(T0.plusHours(2)).getLastLoginAt())
+                    .isEqualTo(T0.plusHours(1));
+            assertThat(loggedIn.afterUnlock().getLastLoginAt()).isEqualTo(T0.plusHours(1));
+        }
+
+        @Test
+        @DisplayName("잠금 해제는 실패 카운터도 함께 지운다 — 남기면 다음 실패 한 번에 즉시 재잠금된다")
+        void unlockAlsoClearsCounter() {
+            LoginSecurity security = LoginSecurity.initial(T0);
+            for (int i = 0; i < 5; i++) {
+                security = security.afterFailure(POLICY, T0);
+            }
+            assertThat(security.isLockedAt(T0)).isTrue();
+
+            LoginSecurity unlocked = security.afterUnlock();
+
+            assertThat(unlocked.isLockedAt(T0)).isFalse();
+            assertThat(unlocked.getFailedAttempts()).isZero();
+            assertThat(unlocked.getPasswordChangedAt()).isEqualTo(T0);
         }
 
         @Test

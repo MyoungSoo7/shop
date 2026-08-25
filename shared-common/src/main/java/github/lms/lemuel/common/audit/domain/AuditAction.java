@@ -10,6 +10,12 @@ public enum AuditAction {
     // 관리자 콘솔에서 회원 명부를 CSV 로 내보냄. 조회는 상태를 바꾸지 않지만 PII 가 밖으로
     // 나가는 사건이라, 목록을 보는 것과 가져가는 것은 감사에서 같은 무게가 아니다.
     MEMBER_LIST_EXPORTED,
+    // 운영자 계정 명부(권한 있는 계정 + 각각의 마지막 사용 시각)를 CSV 로 내보냄.
+    // 회원 명부보다 민감하다 — 어느 권한 계정을 노려야 아무도 눈치채지 못하는지가 적힌 문서다.
+    OPERATOR_LIST_EXPORTED,
+    // 운영자가 잠긴 계정의 잠금을 해제. 잠금은 무차별 대입 대응이므로, 사람이 그것을 되돌리는
+    // 조작은 사후에 설명돼야 한다(사유 필수 + 해제 직전 상태를 detail 에 남긴다).
+    ACCOUNT_UNLOCKED,
     LOGIN_SUCCESS,
     LOGIN_FAILED,
     CASHFLOW_REPORT_ACCESSED,

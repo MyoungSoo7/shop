@@ -219,6 +219,11 @@ public class SecurityConfig {
                         // 권한 상승 경로다. MANAGER 에게도 열지 않는다(승인·정지 조작은 기존
                         // /memberships/** 가 MANAGER 까지 허용하지만, 그건 대상이 특정된 단건이다).
                         .requestMatchers("/admin/members/**").hasRole("ADMIN")
+                        // 운영자 계정 콘솔 — 권한 있는 계정 목록과 각 계정이 마지막으로 쓰인 시각이다.
+                        // 이 목록 자체가 권한 상승 표적 목록이라(어느 관리자 계정이 방치돼 있어 탈취해도
+                        // 아무도 눈치채지 못하는가) 회원 콘솔과 같은 이유로 MANAGER 에게도 열지 않는다.
+                        // 잠금 해제도 여기에 있다 — 무차별 대입 대응을 사람이 되돌리는 조작이다.
+                        .requestMatchers("/admin/operators/**").hasRole("ADMIN")
                         // 리뷰 관리 콘솔 — 다루는 것이 개인정보가 아니라 공개된 게시물이고, 신고 대응은
                         // CS 업무의 일부라 MANAGER 까지 연다(회원 콘솔과 다른 판단).
                         .requestMatchers("/admin/reviews/**").hasAnyRole("ADMIN", "MANAGER")

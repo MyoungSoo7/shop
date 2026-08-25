@@ -158,6 +158,53 @@ class SecurityAuthorizationMatrixTest {
     }
 
     /**
+     * 운영자 계정 콘솔({@code /admin/operators}).
+     *
+     * <p>이 표면은 "권한을 가진 계정 목록 + 각각이 마지막으로 쓰인 시각 + 지금 잠긴 계정"이다.
+     * 즉 <b>어느 관리자 계정을 노려야 아무도 눈치채지 못하는가</b>가 정리된 목록이라, 매처를
+     * 빠뜨려 {@code anyRequest().authenticated()} 로 떨어지는 순간 로그인만 한 사용자가 그것을
+     * 읽는다. 잠금 해제는 무차별 대입 대응을 되돌리는 조작이라 더 나쁘다.
+     *
+     * <p>MANAGER 도 403 인지 함께 본다 — 같은 {@code /admin} 아래에서도 리뷰·운송장 콘솔은
+     * MANAGER 에게 열려 있으므로, 나중에 누가 편의로 {@code hasAnyRole} 로 바꾸면 여기서 걸린다.
+     */
+    @Nested
+    @DisplayName("운영자 계정 콘솔 — ADMIN 전용")
+    class OperatorConsole {
+
+        @ParameterizedTest(name = "USER → 403: {0}")
+        @ValueSource(strings = {
+                "/admin/operators",
+                "/admin/operators/export"
+        })
+        void 일반_사용자는_403(String path) throws Exception {
+            mvc.perform(get(path).with(user("u").roles("USER")))
+                    .andExpect(status().isForbidden());
+        }
+
+        @Test
+        @DisplayName("MANAGER 도 못 본다 — 이 목록은 권한 상승 표적 목록이기도 하다")
+        void 매니저도_403() throws Exception {
+            mvc.perform(get("/admin/operators").with(user("m").roles("MANAGER")))
+                    .andExpect(status().isForbidden());
+        }
+
+        @Test
+        @DisplayName("잠금 해제는 ADMIN 이 아니면 막힌다")
+        void 잠금해제는_ADMIN_전용() throws Exception {
+            mvc.perform(post("/admin/operators/1/unlock").with(user("m").roles("MANAGER")).with(csrf()))
+                    .andExpect(status().isForbidden());
+        }
+
+        @Test
+        @DisplayName("ADMIN 은 통과한다 — 매처가 너무 좁게 잠겨 콘솔 자체가 죽는 것도 회귀다")
+        void ADMIN_은_통과한다() throws Exception {
+            mvc.perform(get("/admin/operators").with(user("a").roles("ADMIN")))
+                    .andExpect(status().isOk());
+        }
+    }
+
+    /**
      * 프로브 — 모든 경로를 200 으로 받는다.
      *
      * <p>핸들러가 없으면 인가를 통과한 요청이 404 로 떨어져 "통과"와 "경로 없음"이 섞인다.

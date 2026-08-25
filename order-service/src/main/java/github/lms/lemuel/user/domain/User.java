@@ -173,9 +173,31 @@ public class User {
         this.updatedAt = now;
     }
 
-    /** 로그인 성공 — 실패 누적과 잠금을 지운다. */
+    /** 로그인 성공 — 실패 누적과 잠금을 지우고 마지막 로그인 시각을 남긴다. */
     public void recordLoginSuccess(LocalDateTime now) {
-        this.loginSecurity = this.loginSecurity.afterSuccess();
+        this.loginSecurity = this.loginSecurity.afterSuccess(now);
+        this.updatedAt = now;
+    }
+
+    /** 마지막 로그인 성공 시각(한 번도 로그인하지 않았으면 null). */
+    public LocalDateTime lastLoginAt() {
+        return loginSecurity.getLastLoginAt();
+    }
+
+    /** 연속 로그인 실패 횟수. */
+    public int failedLoginAttempts() {
+        return loginSecurity.getFailedAttempts();
+    }
+
+    /**
+     * 운영자가 잠금을 푼다 — 잠금과 실패 카운터를 함께 지운다.
+     *
+     * <p>잠기지 않은 계정에도 <b>거부하지 않고</b> 적용한다. 잠금은 시각 기반이라 운영자가
+     * 화면에서 잠긴 걸 보고 누르는 사이에 저절로 만료될 수 있고, 그때 실패를 던지면 운영자는
+     * 자기 조작이 실패했다고 읽는다. 어느 쪽이든 끝 상태는 "풀린 계정"으로 같으므로 멱등하게 둔다.
+     */
+    public void unlock(LocalDateTime now) {
+        this.loginSecurity = this.loginSecurity.afterUnlock();
         this.updatedAt = now;
     }
 

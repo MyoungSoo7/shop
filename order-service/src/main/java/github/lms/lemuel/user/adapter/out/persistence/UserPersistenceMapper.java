@@ -34,7 +34,8 @@ public class UserPersistenceMapper {
                 LoginSecurity.restore(
                         entity.getFailedLoginAttempts() == null ? 0 : entity.getFailedLoginAttempts(),
                         entity.getLockedUntil(),
-                        entity.getPasswordChangedAt()),
+                        entity.getPasswordChangedAt(),
+                        entity.getLastLoginAt()),
                 entity.getCreatedAt(),
                 entity.getUpdatedAt()
         );
@@ -62,6 +63,9 @@ public class UserPersistenceMapper {
         LocalDateTime passwordChangedAt = security == null ? null : security.getPasswordChangedAt();
         entity.setPasswordChangedAt(passwordChangedAt != null ? passwordChangedAt
                 : (domain.getCreatedAt() != null ? domain.getCreatedAt() : LocalDateTime.now()));
+        // last_login_at 은 nullable 이라 null 을 그대로 흘린다 — 여기서 기본값을 채우면
+        // "한 번도 로그인 안 함"이 첫 저장에서 지워진다.
+        entity.setLastLoginAt(security == null ? null : security.getLastLoginAt());
         entity.setCreatedAt(domain.getCreatedAt());
         entity.setUpdatedAt(domain.getUpdatedAt());
         return entity;

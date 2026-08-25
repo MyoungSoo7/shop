@@ -57,6 +57,14 @@ public class UserJpaEntity {
     @Column(name = "password_changed_at", nullable = false)
     private LocalDateTime passwordChangedAt;
 
+    /**
+     * 마지막 로그인 성공 시각. NULL 은 "한 번도 로그인하지 않았거나 기록 이전 계정"이다 —
+     * 기본값을 주지 않는 이유가 여기 있다. NOW() 로 채우면 마이그레이션이 도는 순간 전 계정이
+     * "방금 쓴 계정"이 되어, 미사용 관리자 계정 조회가 영구히 빈 결과를 돌려준다.
+     */
+    @Column(name = "last_login_at")
+    private LocalDateTime lastLoginAt;
+
     @Column(name = "created_at", nullable = false, updatable = false)
     private LocalDateTime createdAt;
 
