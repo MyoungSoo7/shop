@@ -40,6 +40,12 @@ export function literalPrefix(pattern) {
  * 기대고 있다: {@code GET /admin/commission-rates} 가 {@code /admin/commission-rates/**} 로 열린다).
  * {@code {var}} 와 단일 `*` 는 한 세그먼트다. 정확한 구현을 옮기는 게 아니라 <b>보수적으로</b>
  * 판정하는 것이 목적이다 — 애매하면 "안 닿는다"고 보고 사람이 확인하게 한다.
+ *
+ * <p><b>이 함수가 스스로 확인할 수 없는 것</b>: 위 `/**` 규칙이 실제 스프링에서도 참인가.
+ * gateway-route-gate 의 [자기검증] 테스트는 이 정규식이 <i>주석대로</i> 동작하는지를 볼 뿐,
+ * 주석이 스프링과 맞는지는 못 본다 — 노드에서는 게이트웨이를 띄울 수 없기 때문이다. 그쪽은
+ * {@code gateway-service} 의 {@code GatewayRouteCoverageTest} 가 실제 {@code RouteLocator} 에
+ * 요청을 흘려 확인한다. 규칙이 바뀌면 그 테스트가 먼저 깨지고, 그때는 여기도 같이 틀린 것이다.
  */
 export function matchesPattern(pattern, path) {
   // 꼬리 `/**` 를 먼저 자리표로 빼 둔다. 정규식으로 먼저 바꿔 버리면 그 안의 `*` 가 뒤이은
