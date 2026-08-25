@@ -92,8 +92,15 @@ CREATE INDEX IF NOT EXISTS idx_notification_dispatch_channel_parent
 -- ⚠ 삭제 기준은 created_at 이다 — PENDING 으로 남은 행(프로세스 사망)도 결국 정리된다.
 --   보존기간은 **멱등 창보다 넉넉히** 잡아야 한다. 지운 event_id 는 다시 처음 보는 것이 되어
 --   그 시점 이후 재전달되면 중복 발송된다.
+-- ⚠ search_path 를 함수에 고정한다. DDL 은 Flyway 가 opslab 을 잡아 준 채로 돌지만 **함수 본문은
+--   호출 시점에** 이름을 푼다 — 고정하지 않으면 opslab 이 search_path 에 없는 커넥션에서
+--   "relation notification_dispatches does not exist" 로 죽는다(운영 배치가 그런 커넥션이다).
+--   기존 prune_audit_logs(V20260715130000) 와 같은 형식이며, search_path 하이재킹도 함께 막는다.
 CREATE OR REPLACE FUNCTION prune_notification_dispatches(p_retention INTERVAL DEFAULT INTERVAL '30 days')
-RETURNS BIGINT AS $$
+RETURNS BIGINT
+LANGUAGE plpgsql
+SET search_path = opslab, pg_catalog
+AS $$
 DECLARE
     v_deleted BIGINT;
 BEGIN
@@ -105,4 +112,4 @@ BEGIN
     GET DIAGNOSTICS v_deleted = ROW_COUNT;
     RETURN v_deleted;
 END;
-$$ LANGUAGE plpgsql;
+$$;

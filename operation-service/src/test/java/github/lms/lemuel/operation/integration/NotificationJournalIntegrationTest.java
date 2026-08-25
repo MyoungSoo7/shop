@@ -248,9 +248,13 @@ class NotificationJournalIntegrationTest {
     @Test
     @DisplayName("prune 은 음수 보존기간을 거부한다 — 오타 한 번이 전건 삭제가 되지 않게")
     void pruneRejectsNegativeRetention() {
+        // 던졌다는 것만 보면 안 된다. 함수가 아예 깨져 있어도(예: 본문이 opslab 을 못 찾아
+        // "relation does not exist") 똑같이 던지므로 통과해 버린다 — 실제로 그렇게 이 게이트가
+        // 결함을 놓쳤다. 그래서 **우리가 의도한 그 거부인지**를 메시지로 못박는다.
         assertThat(org.assertj.core.api.Assertions.catchThrowable(() -> jdbc.queryForObject(
                 "SELECT opslab.prune_notification_dispatches(INTERVAL '-1 days')", Long.class)))
-                .isNotNull();
+                .isNotNull()
+                .hasMessageContaining("p_retention");
     }
 
     private static Boolean valueOf(Future<Boolean> future) {
