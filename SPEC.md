@@ -304,13 +304,15 @@ Course(교육) : DRAFT → PUBLISHED ⇄ HIDDEN → CLOSED  (삭제 없음 — �
 
 ## 5. 이벤트 카탈로그
 
-계약 스키마·정본 샘플: `shared-common/src/testFixtures/resources/contracts/events/` — **20개 토픽**(ADR 0024).
+계약 스키마·정본 샘플: `shared-common/src/testFixtures/resources/contracts/events/` — **21개 토픽**(ADR 0024).
 전송 속성(파티션·보존·순서키) 정본은 별도다 — `kafka/topic-catalog.json` 등재 **21건**(§2.2, ADR 0035).
-카탈로그가 하나 더 많은 이유는 `lemuel.education.course_published` 에 계약 스키마가 없기 때문이다 —
-소비자가 이 저장소 안에 생기는 시점에 ADR 0024 절차로 편입한다.
+둘은 1:1 이다. 2026-08-26 이전에는 `lemuel.education.course_published` 만 계약 스키마가 없어
+카탈로그가 하나 더 많았고, 그 사실이 여기 각주로만 적혀 있었다 — 각주는 결함을 설명할 뿐 막지 않는다.
 
-> 수치 검증: `ls shared-common/src/testFixtures/resources/contracts/events/*.schema.json | wc -l` → 20
-> (`git ls-files` 로 세면 **미추적 신규 스키마가 빠져** 커밋 직후에 처음 어긋난다)
+> 수치 검증은 `contract-schema-parity-gate.test.mjs` 가 기계로 한다. 카탈로그와 스키마가
+> 어긋나면, 샘플이 빠지면, 이 문장의 숫자가 실제와 달라지면 CI 가 FAIL 한다.
+> 게이트는 파일시스템에서 센다 — `git ls-files` 로 세면 **미추적 신규 스키마가 빠져**
+> 커밋 직후에 처음 어긋난다(추적 여부는 별도 케이스가 본다).
 
 | 토픽                                                                                    | 프로듀서                     | 주요 컨슈머                                        |
 | ----------------------------------------------------------------------------------------- | ---------------------------- | -------------------------------------------------- |
@@ -323,7 +325,7 @@ Course(교육) : DRAFT → PUBLISHED ⇄ HIDDEN → CLOSED  (삭제 없음 — �
 | `lemuel.point.charged` / `.granted` / `.used` / `.restored` / `.expired` / `.revoked`   | order                        | 발행 전용 — 포인트 부채 GL 소비자는 이 저장소 밖. 순서키 `accountId` |
 | `lemuel.giftcard.registered` / `.used` / `.restored` / `.expired`                       | order                        | 발행 전용 — 상품권 부채 GL 소비자는 이 저장소 밖. 순서키 `giftCardId` |
 | `lemuel.organization.created` / `.member_joined` / `.member_role_changed` / `.member_removed` | order(organization 슬라이스) | 발행 전용 — 조직 마스터 통지, 소비자는 이 저장소 밖 |
-| `lemuel.education.course_published`                                                     | operation(education 슬라이스) | 발행 전용 — 과정 공개 통지                         |
+| `lemuel.education.course_published`                                                     | operation(education 슬라이스) | 발행 전용 — 과정 공개 통지. 순서키 `courseId`      |
 
 부가(계약 스키마 없음): `lemuel.ops.*`(실패 신호 `*.failed` + `stock.depleted`·`stock.reclaim_delayed`·`shipping.delayed`).
 

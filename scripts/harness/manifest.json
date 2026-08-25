@@ -24,6 +24,7 @@
     "scripts/harness/test/ci-artifact-layout-gate.test.mjs",
     "scripts/harness/test/ci-changed-base-gate.test.mjs",
     "scripts/harness/test/ci-verdict-gate.test.mjs",
+    "scripts/harness/test/contract-schema-parity-gate.test.mjs",
     "scripts/harness/test/coverage-excludes-gate.test.mjs",
     "scripts/harness/test/coverage-scope-gate.test.mjs",
     "scripts/harness/test/guard.test.mjs",

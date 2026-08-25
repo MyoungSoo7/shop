@@ -45,6 +45,7 @@ class EventContractFixtureTest {
      * 토픽이 통째로 사라져도 테스트는 조용히 0건을 돌고 통과한다.
      */
     private static final List<String> SHIPPED_TOPICS = List.of(
+            "lemuel.education.course_published",
             "lemuel.giftcard.expired",
             "lemuel.giftcard.registered",
             "lemuel.giftcard.restored",
@@ -68,6 +69,7 @@ class EventContractFixtureTest {
 
     @ParameterizedTest
     @ValueSource(strings = {
+            "lemuel.education.course_published",
             "lemuel.giftcard.expired",
             "lemuel.giftcard.registered",
             "lemuel.giftcard.restored",

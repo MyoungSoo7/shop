@@ -164,7 +164,7 @@ sequenceDiagram
 | `lemuel.education.course_published` | operation(education 슬라이스) | 발행 전용 | — |
 
 > 계약 스키마·정본 샘플: `../shared-common/src/testFixtures/resources/contracts/events` (ADR 0024) —
-> **총 20 토픽**이 계약 관리된다(검증: `ls shared-common/src/testFixtures/resources/contracts/events/*.schema.json | wc -l`).
+> **총 21 토픽**이 계약 관리된다(검증: `contract-schema-parity-gate.test.mjs`).
 > 토픽 전송 속성(파티션·보존·순서키)의 정본은 `kafka/topic-catalog.json` 이고 **21건**이 등재돼 있다 —
-> `lemuel.education.course_published` 만 계약 스키마가 아직 없어 하나 더 많다.
+> 둘은 1:1 이며 그 정합을 게이트가 강제한다.
 > 모든 컨슈머는 `processed_events` + 도메인 UNIQUE 로 멱등하며, **발행은 예외 없이 Outbox 를 경유한다.**
