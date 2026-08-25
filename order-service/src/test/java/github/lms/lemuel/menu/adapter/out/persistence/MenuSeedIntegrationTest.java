@@ -79,9 +79,9 @@ class MenuSeedIntegrationTest {
     }
 
     @Test
-    @DisplayName("시드 총 31행 — 커머스 + 운영 범위")
-    void seedsExactlyThirtyOne() {
-        assertThat(adapter.findAll()).hasSize(31);
+    @DisplayName("시드 총 35행 — 커머스 + 운영 범위")
+    void seedsExactlyThirtyFive() {
+        assertThat(adapter.findAll()).hasSize(35);
     }
 
     @Test
@@ -129,7 +129,7 @@ class MenuSeedIntegrationTest {
     }
 
     @Test
-    @DisplayName("시스템 사이드바 18개 — 앞 3개와 게시판 관리가 RBAC permission 과 짝지어진다")
+    @DisplayName("시스템 사이드바 22개 — 앞 3개와 게시판 관리가 RBAC permission 과 짝지어진다")
     void systemChildren() {
         List<Menu> children = childrenOf("시스템 관리");
 
@@ -141,11 +141,15 @@ class MenuSeedIntegrationTest {
                 "메뉴 관리", "공통코드 관리", "RBAC 관리", "이커머스 카테고리",
                 "진열 편성", "옵션 카탈로그", "운영관리", "게시판 관리", "교육 관리",
                 "포인트 운영", "기프트카드 운영", "감사 로그", "회원 관리", "조직 · 멤버십",
-                "리뷰 관리", "쿠폰 운영", "환불 운영", "셀러 등급");
+                "리뷰 관리", "쿠폰 운영", "환불 운영", "셀러 등급",
+                // dentis 관리자 콘솔에서 옮겨 온 4종(V20260826150000). 앞의 셋은 "보기만 하는" 표면이고
+                // 작업 큐만 MANAGER 에게도 열린다 — 밀린 주문을 실제로 처리하는 쪽이라서다.
+                "권한 계정", "지표 추이", "판매 통계", "작업 큐");
         assertThat(children).extracting(Menu::getRequiredPermission).containsExactly(
                 "SYSTEM_MENU_MANAGE", "SYSTEM_CODE_MANAGE", "SYSTEM_RBAC_MANAGE",
                 null, null, null, null, "SYSTEM_BOARD_MANAGE", null, null, null,
-                null, null, null, null, null, null, null);
+                null, null, null, null, null, null, null,
+                null, null, null, null);
         // 환불은 ADMIN·MANAGER — 서버가 /admin/refunds/** 를 그 등급으로 막는다(조회 전용 표면).
         // 시스템 그룹 안에서 유일하게 등급이 낮은 항목이라 명시적으로 못 박는다.
         assertThat(children.stream().filter(m -> m.getName().equals("환불 운영"))
@@ -160,6 +164,11 @@ class MenuSeedIntegrationTest {
                 .findFirst().orElseThrow().getPath()).isEqualTo("/admin/system/refunds");
         assertThat(children.stream().filter(m -> m.getName().equals("셀러 등급"))
                 .findFirst().orElseThrow().getPath()).isEqualTo("/admin/system/seller-tiers");
+        // 작업 큐는 환불 운영과 같은 이유로 등급이 낮다 — 서버가 /admin/order-queues 를 ADMIN·MANAGER 로
+        // 막는다. 메뉴만 ADMIN 으로 좁히면 실제로 밀린 주문을 처리하는 MANAGER 가 화면을 못 찾는다.
+        assertThat(children.stream().filter(m -> m.getName().equals("작업 큐"))
+                .findFirst().orElseThrow().allowedRoles())
+                .containsExactlyInAnyOrder("ADMIN", "MANAGER");
     }
 
     @Test
