@@ -1,0 +1,19 @@
+# david 노드(데모 배포) 전용 compose 오버라이드 — shop.lemuel.co.kr
+#
+# ⚠ 이 파일은 저장소 루트에 두면 안 된다. compose 는 작업 디렉터리의 docker-compose.override.yml
+#   을 **자동으로** 읽으므로, 루트에 두는 순간 모든 개발자의 로컬 `docker compose up` 이
+#   프론트를 0.0.0.0:3000 으로 열게 된다. 그래서 deploy/<노드>/ 아래에 두고 david 에서만
+#   명시적으로 지정해 쓴다.
+#
+# 왜 필요한가: 리포 기본값은 모든 포트를 127.0.0.1 에 묶는다(docker-compose.yml).
+# 그런데 shop.lemuel.co.kr 트래픽은 Cloudflare Tunnel(르무엘 호스트)에서 david:3000 으로
+# 들어오므로, 프론트 하나만 LAN 에 노출해야 한다. 나머지 16개 서비스는 loopback 그대로 둔다.
+#
+# 사용법 (david 에서):
+#   docker compose -f docker-compose.yml -f deploy/david/docker-compose.override.yml up -d
+#
+# 배경과 "왜 아직 쿠버네티스가 아닌가"는 docs/adr/0044-deployment-stays-on-compose.md 참조.
+services:
+  frontend:
+    ports: !override
+      - "3000:80"

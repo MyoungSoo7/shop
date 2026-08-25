@@ -152,6 +152,16 @@ Elasticsearch · Redpanda · Redis · 앱 3개 · frontend · 관측 7종(export
 alertmanager + tempo + grafana). 관측 7종은 `docker compose up -d postgres … frontend` 로 골라 띄우면
 빼도 된다. 발행 포트는 전부 `127.0.0.1` 바인딩이라 기본값으로는 LAN 에 노출되지 않는다.
 
+데모(`shop.lemuel.co.kr`)는 david 노드에서 이 compose 로 돌고, 프론트만 LAN 에 노출하기 위해
+`deploy/david/docker-compose.override.yml` 을 **명시적으로** 얹는다(루트에 두면 자동 로드되어
+모든 로컬 기동이 `0.0.0.0:3000` 을 열게 되므로 일부러 `deploy/` 아래에 둔다).
+
+```bash
+docker compose -f docker-compose.yml -f deploy/david/docker-compose.override.yml up -d
+```
+
+쿠버네티스로 옮기지 않고 compose 에 남긴 이유는 [ADR 0044](docs/adr/0044-deployment-stays-on-compose.md).
+
 ### 3) 백엔드만 로컬로
 
 ```bash
