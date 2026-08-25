@@ -314,10 +314,10 @@ Course(교육) : DRAFT → PUBLISHED ⇄ HIDDEN → CLOSED  (삭제 없음 — �
 
 | 토픽                                                                                    | 프로듀서                     | 주요 컨슈머                                        |
 | ----------------------------------------------------------------------------------------- | ---------------------------- | -------------------------------------------------- |
-| `lemuel.order.created`                                                                  | order                        | operation(신호 버킷 분모)                          |
-| `lemuel.payment.captured`                                                               | order                        | operation(신호 버킷 분모 · 알림 팬아웃)            |
-| `lemuel.payment.refunded`                                                               | order                        | operation(알림 팬아웃)                             |
-| `lemuel.user.registered`                                                                | order                        | 발행 전용 — 소비자는 이 저장소 밖                  |
+| `lemuel.order.created`                                                                  | order                        | operation(신호 버킷 분모 · 오늘 집계)              |
+| `lemuel.payment.captured`                                                               | order                        | operation(신호 버킷 분모 · 알림 팬아웃 · 오늘 집계) |
+| `lemuel.payment.refunded`                                                               | order                        | operation(알림 팬아웃 · 오늘 집계)                 |
+| `lemuel.user.registered`                                                                | order                        | operation(오늘 집계 — 2026-08-25 편입)             |
 | `lemuel.product.changed`                                                                | order                        | 발행 전용 — 소비자는 이 저장소 밖                  |
 | `lemuel.seller.tier_changed`                                                            | order                        | 발행 전용. `reason=BACKFILL` 은 변경이 아니라 초기 적재용 재발행(ADR 0031) |
 | `lemuel.point.charged` / `.granted` / `.used` / `.restored` / `.expired` / `.revoked`   | order                        | 발행 전용 — 포인트 부채 GL 소비자는 이 저장소 밖. 순서키 `accountId` |
@@ -334,6 +334,11 @@ Course(교육) : DRAFT → PUBLISHED ⇄ HIDDEN → CLOSED  (삭제 없음 — �
 > "발행 전용"이 여기서 뜻하는 것은 **소비자를 안 만든 것이 아니라 경계 밖에 있다**는 것이다.
 > 이 저장소는 커머스 코어와 운영만 담고, 정산·여신·계정계 같은 하류 소비자는 밖에 있다.
 > 소비자가 이 저장소 안에 생기면 그때 컨슈머 계약 테스트를 붙이는 것으로 끝난다.
+>
+> 실제로 그 경로를 한 번 밟았다 — `lemuel.user.registered` 는 2026-08-25 "오늘 한눈에" 집계
+> 컨슈머(`BusinessEventDashboardConsumer`)가 생기면서 발행 전용에서 빠졌다. 스키마는 이미
+> 있었으므로 편입 비용은 **정본 샘플을 실제 컨슈머에 통과시키는 테스트 한 건**이었다
+> (`BusinessEventDashboardConsumerTest`). 게이트의 "죽은 항목" 검사가 목록을 지우라고 먼저 말했다.
 
 역방향 예약: `lemuel.ops.order.failed` 는 operation 이 구독하지만 emit 지점 미배선
 (OpsSignalCategory 주석 참조).

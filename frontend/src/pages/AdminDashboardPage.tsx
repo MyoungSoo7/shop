@@ -5,6 +5,7 @@ import { productApi } from '@/api/product';
 import { orderApi } from '@/api/order';
 import { couponApi } from '@/api/coupon';
 import { authApi } from '@/api/auth';
+import { opsDashboardApi, TodayOverview, MetricCard } from '@/api/opsDashboard';
 import { OrderResponse, ProductResponse, CouponResponse, CouponType, CouponCreateRequest } from '@/types';
 import Spinner from '@/components/Spinner';
 import { apiErrorMessage } from '@/lib/apiError';
@@ -16,6 +17,36 @@ const fmt = (v: number) =>
 
 const fmtDate = (s: string) =>
   new Date(s).toLocaleDateString('ko-KR', { year: 'numeric', month: 'short', day: 'numeric' });
+
+/** 서버가 보낸 금액은 문자열이다(정밀도 보존). 표시 직전에만 수로 바꾼다. */
+const fmtAmount = (v: string | null) => (v === null ? '—' : fmt(Number(v)));
+
+const fmtTime = (s: string) =>
+  new Date(s).toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit' });
+
+// ── 오늘 한눈에 카드 ──────────────────────────────────────────────────────
+/**
+ * 서버가 집계한 하루치 지표 한 장.
+ *
+ * 라벨을 화면에서 만들지 않는 이유 — 지표를 더할 때 매핑 테이블을 같이 고치는 걸 잊으면
+ * 언젠가 `PAYMENT_REFUNDED` 같은 키가 그대로 찍힌 카드가 뜬다. 라벨은 서버가 정본이다.
+ */
+const TodayCard: React.FC<{ card: MetricCard }> = ({ card }) => (
+  <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-5">
+    <span className="text-sm font-medium text-gray-500">{card.label}</span>
+    <p className="text-2xl font-bold text-gray-900 mt-2">{card.count.toLocaleString()}건</p>
+    {card.hasAmount && (
+      <p className="text-sm font-semibold text-gray-700 mt-1">{fmtAmount(card.amount)}</p>
+    )}
+    {/*
+      금액을 못 읽은 건이 있으면 반드시 말한다. 모르는 값을 조용히 0으로 합산하면 합계가
+      "맞는 것처럼 보이는 틀린 값"이 되고, 그건 아무도 검증하지 않는다.
+    */}
+    {card.hasAmount && !card.amountComplete && (
+      <p className="text-xs text-amber-600 mt-1">금액 미상 {card.amountUnknownCount}건 제외</p>
+    )}
+  </div>
+);
 
 // ── 통계 카드 ────────────────────────────────────────────────────────────
 const StatCard: React.FC<{
@@ -115,6 +146,10 @@ const AdminDashboardPage: React.FC = () => {
   // 주문 취소 처리
   const [cancellingId, setCancellingId] = useState<number | null>(null);
 
+  // 오늘 한눈에 — 서버 집계. 실패해도 화면 전체를 막지 않는다(아래 useEffect 주석 참조).
+  const [today, setToday] = useState<TodayOverview | null>(null);
+  const [todayError, setTodayError] = useState<string | null>(null);
+
   useEffect(() => {
     const load = async () => {
       try {
@@ -148,6 +183,22 @@ const AdminDashboardPage: React.FC = () => {
     // isAdmin 은 localStorage 의 역할에서 파생된 불리언이라 세션 중 바뀌지 않는다 —
     // 의존성에 넣어도 재조회는 역할이 실제로 달라질 때만 일어난다.
     load();
+  }, [isAdmin]);
+
+  /**
+   * 오늘 집계는 <b>따로</b> 부른다. 위 목록 로드와 한 Promise.all 에 묶으면 운영 서비스가
+   * 잠깐 죽었을 때 주문·상품 목록까지 통째로 못 보게 된다 — 장애 상황을 보라고 만든 화면이
+   * 장애 때 제일 먼저 죽는 구조가 된다. 여기 실패는 이 섹션 안에만 남긴다.
+   *
+   * MANAGER 는 부르지 않는다. `/api/ops/**` 는 ROLE_ADMIN 체인이라 403 이 확정인데,
+   * 굳이 던져서 콘솔에 붉은 줄을 남길 이유가 없다.
+   */
+  useEffect(() => {
+    if (!isAdmin) return;
+    opsDashboardApi
+      .today()
+      .then(setToday)
+      .catch(() => setTodayError('오늘 집계를 불러오지 못했습니다.'));
   }, [isAdmin]);
 
   // ── 통계 계산 ──
@@ -279,6 +330,73 @@ const AdminDashboardPage: React.FC = () => {
         {/* ── 개요 탭 ─────────────────────────────────────────────────────── */}
         {activeTab === 'overview' && (
           <div className="space-y-6">
+            {/*
+              오늘 한눈에 — 서버가 이벤트로 집계한 하루치.
+              아래 "전체 기간" 카드들과 데이터 출처도 기간도 다르므로 섹션을 갈라 둔다.
+            */}
+            {isAdmin && (
+              <section>
+                <div className="flex items-baseline justify-between mb-3">
+                  <h2 className="font-bold text-gray-900">
+                    오늘 한눈에
+                    {today && (
+                      <span className="ml-2 text-xs font-normal text-gray-400">
+                        {today.date} · {today.zone}
+                      </span>
+                    )}
+                  </h2>
+                  {/*
+                    기준 시각을 숨기지 않는다. 이벤트로 채워지는 화면은 항상 조금 늦는데,
+                    그 지연이 안 보이면 방금 들어온 주문이 없을 때 사람이 시스템을 의심한다.
+                    오늘 이벤트가 아직 하나도 없으면 asOf 가 null 이다 — 이때 다른 시각을
+                    대신 보여 주는 것이 제일 나쁜 거짓말이라 그냥 비워 둔다.
+                  */}
+                  {today?.asOf && (
+                    <span className="text-xs text-gray-400">{fmtTime(today.asOf)} 기준</span>
+                  )}
+                </div>
+
+                {todayError && <p className="text-sm text-red-600">{todayError}</p>}
+
+                {!todayError && !today && (
+                  <p className="text-sm text-gray-400">집계를 불러오는 중…</p>
+                )}
+
+                {today && (
+                  <>
+                    <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+                      {today.metrics.map((card) => (
+                        <TodayCard key={card.key} card={card} />
+                      ))}
+                    </div>
+                    <div className="grid grid-cols-2 gap-4 mt-4">
+                      <StatCard
+                        label="미해결 인시던트"
+                        value={today.openIncidents.toLocaleString()}
+                        sub="OPEN · 확인됨"
+                        color={today.openIncidents > 0 ? 'bg-red-50' : 'bg-gray-50'}
+                        icon={<svg className="w-5 h-5 text-red-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 9v2m0 4h.01M5 19h14a2 2 0 001.84-2.75L13.74 4a2 2 0 00-3.5 0l-7.1 12.25A2 2 0 004.99 19z"/></svg>}
+                      />
+                      <StatCard
+                        label="오늘 실패한 알림"
+                        value={today.failedDispatches.toLocaleString()}
+                        sub="실패 · 일부 실패"
+                        color={today.failedDispatches > 0 ? 'bg-amber-50' : 'bg-gray-50'}
+                        icon={<svg className="w-5 h-5 text-amber-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 17h5l-1.4-1.4A2 2 0 0118 14.2V11a6 6 0 10-12 0v3.2c0 .5-.2 1-.6 1.4L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9"/></svg>}
+                      />
+                    </div>
+                  </>
+                )}
+              </section>
+            )}
+
+            {/*
+              아래는 전 기간 누계다. 브라우저가 목록 전체를 받아 세는 값이라 데이터가 늘면
+              같이 느려진다(위 오늘 집계와 달리 서버가 미리 세어 둔 값이 아니다).
+              라벨에 기간을 박는 것은 필수다 — 기간이 다른 숫자가 라벨 없이 나란히 있으면
+              반드시 오독된다.
+            */}
+            <h2 className="font-bold text-gray-900">전체 기간</h2>
             {/* 통계 카드 */}
             <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
               <StatCard
