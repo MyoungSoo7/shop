@@ -195,8 +195,9 @@ describe('OrderRequestActions', () => {
       vi.mocked(orderApi.getOrder).mockResolvedValue(restored);
       const onUpdated = renderWith('REFUND_REQUESTED');
 
-      await waitFor(() => expect(returnRequestApi.history).toHaveBeenCalledWith(42));
-      fireEvent.click(screen.getByRole('button', { name: '신청 철회' }));
+      // 호출이 아니라 버튼이 뜨는 것을 기다린다 — history 가 불렸다는 사실과 그 응답이
+      // 렌더에 반영됐다는 사실은 다른 시점이다(CI 에서 랜덤하게 갈린다).
+      fireEvent.click(await screen.findByRole('button', { name: '신청 철회' }));
 
       await waitFor(() => expect(returnRequestApi.withdraw).toHaveBeenCalledWith(42, 9));
       expect(orderWorkflowApi.withdrawRequest).not.toHaveBeenCalled();
@@ -209,8 +210,7 @@ describe('OrderRequestActions', () => {
       vi.mocked(returnRequestApi.history).mockResolvedValue([]);
       renderWith('CANCELLATION_REQUESTED');
 
-      await waitFor(() => expect(returnRequestApi.history).toHaveBeenCalledWith(42));
-      fireEvent.click(screen.getByRole('button', { name: '신청 철회' }));
+      fireEvent.click(await screen.findByRole('button', { name: '신청 철회' }));
 
       await waitFor(() => expect(orderWorkflowApi.withdrawRequest).toHaveBeenCalledWith(42));
       expect(returnRequestApi.withdraw).not.toHaveBeenCalled();

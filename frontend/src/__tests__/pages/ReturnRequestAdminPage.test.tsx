@@ -151,9 +151,8 @@ describe('ReturnRequestAdminPage — 목록', () => {
 
   it('탭을 고르면 그 상태만 다시 받는다', async () => {
     draw();
-    await waitFor(() => expect(mocked.queue).toHaveBeenCalled());
-
-    fireEvent.click(screen.getByRole('button', { name: '회수 완료' }));
+    // 탭이 그려지길 기다린다 — 첫 조회가 불렸다는 사실만으로는 렌더가 끝났다는 보장이 없다.
+    fireEvent.click(await screen.findByRole('button', { name: '회수 완료' }));
 
     await waitFor(() => expect(mocked.queue).toHaveBeenLastCalledWith(['COLLECTED'], 100));
   });
