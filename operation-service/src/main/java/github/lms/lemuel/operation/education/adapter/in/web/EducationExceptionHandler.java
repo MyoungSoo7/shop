@@ -3,7 +3,14 @@ package github.lms.lemuel.operation.education.adapter.in.web;
 import github.lms.lemuel.common.exception.ErrorCode;
 import github.lms.lemuel.common.exception.ErrorResponse;
 import github.lms.lemuel.operation.education.application.service.CourseAdminService.CourseNotFoundException;
+import github.lms.lemuel.operation.education.application.service.EnrollmentAdminService.EnrollmentNotFoundException;
+import github.lms.lemuel.operation.education.application.service.LecturerAdminService.AssignmentNotFoundException;
+import github.lms.lemuel.operation.education.application.service.LecturerAdminService.LecturerNotFoundException;
+import github.lms.lemuel.operation.education.domain.exception.CourseCapacityExceededException;
 import github.lms.lemuel.operation.education.domain.exception.InvalidCourseStateException;
+import github.lms.lemuel.operation.education.domain.exception.InvalidEnrollmentStateException;
+import github.lms.lemuel.operation.education.domain.exception.InvalidLecturerStateException;
+import github.lms.lemuel.operation.education.domain.exception.LecturerAlreadyAssignedException;
 import github.lms.lemuel.operation.education.domain.exception.LessonNotInCourseException;
 import github.lms.lemuel.operation.education.domain.exception.LessonOrderViolationException;
 import org.slf4j.Logger;
@@ -48,6 +55,41 @@ public class EducationExceptionHandler {
     @ExceptionHandler(LessonNotInCourseException.class)
     public ResponseEntity<ErrorResponse> lessonNotInCourse(LessonNotInCourseException exception) {
         return translate(ErrorCode.LESSON_NOT_IN_COURSE, exception);
+    }
+
+    @ExceptionHandler(EnrollmentNotFoundException.class)
+    public ResponseEntity<ErrorResponse> enrollmentNotFound(EnrollmentNotFoundException exception) {
+        return translate(ErrorCode.ENROLLMENT_NOT_FOUND, exception);
+    }
+
+    @ExceptionHandler(InvalidEnrollmentStateException.class)
+    public ResponseEntity<ErrorResponse> invalidEnrollmentState(InvalidEnrollmentStateException exception) {
+        return translate(ErrorCode.ENROLLMENT_INVALID_STATE, exception);
+    }
+
+    @ExceptionHandler(CourseCapacityExceededException.class)
+    public ResponseEntity<ErrorResponse> capacityExceeded(CourseCapacityExceededException exception) {
+        return translate(ErrorCode.COURSE_CAPACITY_EXCEEDED, exception);
+    }
+
+    @ExceptionHandler(LecturerNotFoundException.class)
+    public ResponseEntity<ErrorResponse> lecturerNotFound(LecturerNotFoundException exception) {
+        return translate(ErrorCode.LECTURER_NOT_FOUND, exception);
+    }
+
+    @ExceptionHandler(InvalidLecturerStateException.class)
+    public ResponseEntity<ErrorResponse> invalidLecturerState(InvalidLecturerStateException exception) {
+        return translate(ErrorCode.LECTURER_INVALID_STATE, exception);
+    }
+
+    @ExceptionHandler(LecturerAlreadyAssignedException.class)
+    public ResponseEntity<ErrorResponse> lecturerAlreadyAssigned(LecturerAlreadyAssignedException exception) {
+        return translate(ErrorCode.LECTURER_ALREADY_ASSIGNED, exception);
+    }
+
+    @ExceptionHandler(AssignmentNotFoundException.class)
+    public ResponseEntity<ErrorResponse> assignmentNotFound(AssignmentNotFoundException exception) {
+        return translate(ErrorCode.LECTURER_ASSIGNMENT_NOT_FOUND, exception);
     }
 
     private ResponseEntity<ErrorResponse> translate(ErrorCode code, Exception exception) {

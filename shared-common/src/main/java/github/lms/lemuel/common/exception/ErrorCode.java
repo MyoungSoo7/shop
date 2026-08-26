@@ -185,7 +185,29 @@ public enum ErrorCode {
     LESSON_ORDER_INVALID(HttpStatus.BAD_REQUEST, "차시 순서 요청이 과정의 차시 목록과 일치하지 않습니다."),
     // 경로가 주장한 과정에 그 차시가 없다 — 403 이 아니라 404 다. 403 으로 답하면 "다른 과정에는
     // 그 차시가 있다"는 사실까지 알려주게 된다.
-    LESSON_NOT_IN_COURSE(HttpStatus.NOT_FOUND, "해당 과정에 속한 차시가 아닙니다.");
+    LESSON_NOT_IN_COURSE(HttpStatus.NOT_FOUND, "해당 과정에 속한 차시가 아닙니다."),
+
+    // ─── education (수강 신청) ──────────────────────────────────────────────────
+    ENROLLMENT_NOT_FOUND(HttpStatus.NOT_FOUND, "수강 신청을 찾을 수 없습니다."),
+    // 취소된 신청을 다시 확정하려는 것 같은 전이 거부 — COURSE_INVALID_STATE 와 같은 결로 400 이다.
+    ENROLLMENT_INVALID_STATE(HttpStatus.BAD_REQUEST, "현재 상태에서는 수강 신청을 변경할 수 없습니다."),
+    // 요청 자체는 옳은데 지금 자리가 없다 — 400 이면 "요청을 고치라"는 뜻이 되지만 고칠 것이 없다.
+    // 자리가 나면 같은 요청이 그대로 성공하므로 POINT_POLICY_PERIOD_OVERLAP 과 같이 409 다.
+    COURSE_CAPACITY_EXCEEDED(HttpStatus.CONFLICT, "과정 정원을 초과합니다."),
+
+    // ─── education (강사 명부) ─────────────────────────────────────────────────
+    LECTURER_NOT_FOUND(HttpStatus.NOT_FOUND, "강사를 찾을 수 없습니다."),
+    // 지웠거나 쉬는 강사에 대한 조작 — 요청을 고치면(다른 강사를 고르면) 성공하므로 400 이다.
+    LECTURER_INVALID_STATE(HttpStatus.BAD_REQUEST, "현재 상태에서는 강사를 변경하거나 배정할 수 없습니다."),
+    // 이미 있는 배정을 다시 만들려 했다 — 요청은 옳고 상태가 이미 그렇다는 뜻이라 409 다.
+    LECTURER_ALREADY_ASSIGNED(HttpStatus.CONFLICT, "이미 그 과정에 배정된 강사입니다."),
+    // 해제하려는 배정이 없다. LECTURER_NOT_FOUND 와 뭉치면 화면이 "강사가 사라졌나"를 의심하게 된다.
+    LECTURER_ASSIGNMENT_NOT_FOUND(HttpStatus.NOT_FOUND, "그 과정에 배정된 강사가 아닙니다."),
+
+    // ─── site (사이트 팝업) ───────────────────────────────────────────────────
+    POPUP_NOT_FOUND(HttpStatus.NOT_FOUND, "팝업을 찾을 수 없습니다."),
+    // 지운 팝업을 고치려 했거나 노출 구간이 뒤집혔다 — 요청을 고치면 성공하므로 400 이다.
+    POPUP_INVALID_STATE(HttpStatus.BAD_REQUEST, "현재 상태에서는 팝업을 변경할 수 없습니다.");
 
     private final HttpStatus status;
     private final String defaultMessage;

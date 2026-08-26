@@ -80,6 +80,11 @@ export const FALLBACK_MENUS: FallbackMenuNode[] = [
       { id: -120, name: '판매 통계', path: '/admin/system/sales-stats', icon: '📊', description: '상품 판매 랭킹 · 카테고리별 분포', area: 'SYSTEM', type: 'ITEM', roles: ['ADMIN'] },
       // 작업 큐도 환불 운영과 같은 이유로 등급이 낮다 — 밀린 주문을 실제로 처리하는 쪽이 MANAGER 다.
       { id: -121, name: '작업 큐', path: '/admin/system/order-queues', icon: '📮', description: '밀린 주문 · 기한 초과 · 최장 대기', area: 'SYSTEM', type: 'ITEM', roles: ['ADMIN', 'MANAGER'] },
+      // 수강 신청은 '교육 관리'(과정·차시) 옆이 아니라 그룹 맨 뒤다 — 시드 SQL 과 같은 이유로,
+      // 중간에 끼우면 뒤 항목의 sort_order 가 겹친다. 두 사본의 순서가 어긋나면 게이트가 잡는다.
+      { id: -122, name: '수강 신청', path: '/admin/system/education-enrollments', icon: '📝', description: '과정별 신청자 · 정원 · 대기 · 취소', area: 'SYSTEM', type: 'ITEM', roles: ['ADMIN'] },
+      { id: -123, name: '강사 관리', path: '/admin/system/education-lecturers', icon: '🎓', description: '강사 명부 · 전공/강의 분야 · 과정 배정', area: 'SYSTEM', type: 'ITEM', roles: ['ADMIN'] },
+      { id: -124, name: '팝업 관리', path: '/admin/system/site-popups', icon: '🪟', description: '사이트 팝업 노출 구간 · 순서', area: 'SYSTEM', type: 'ITEM', roles: ['ADMIN'] },
     ],
   },
   {

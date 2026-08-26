@@ -27,6 +27,7 @@ public class CourseJpaEntity {
     @Enumerated(EnumType.STRING) private CourseStatus status;
     private Instant publishedAt;
     private Instant closedAt;
+    private Integer capacity;
     private String createdBy;
     private String updatedBy;
     private Instant createdAt;
@@ -51,12 +52,13 @@ public class CourseJpaEntity {
         this.status = course.status();
         this.publishedAt = course.publishedAt();
         this.closedAt = course.closedAt();
+        this.capacity = course.capacity();
         this.updatedBy = course.updatedBy();
         this.updatedAt = Instant.now();
     }
 
     Course toDomain() {
-        return Course.rehydrate(id, title, description, status, publishedAt, closedAt, updatedBy, version);
+        return Course.rehydrate(id, title, description, status, publishedAt, closedAt, capacity, updatedBy, version);
     }
 
     public UUID getId() { return id; }

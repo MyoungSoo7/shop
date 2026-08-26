@@ -28,6 +28,9 @@ const TenderCheckoutPage = lazy(() => import('./pages/TenderCheckoutPage'));
 const TossPaymentSuccess = lazy(() => import('./pages/TossPaymentSuccess'));
 const RefundAdminPage = lazy(() => import('./pages/RefundAdminPage'));
 const EducationCourseAdminPage = lazy(() => import('./pages/system/EducationCourseAdminPage'));
+const EducationEnrollmentPage = lazy(() => import('./pages/system/EducationEnrollmentPage'));
+const EducationLecturerPage = lazy(() => import('./pages/system/EducationLecturerPage'));
+const SitePopupPage = lazy(() => import('./pages/system/SitePopupPage'));
 const PointConsolePage = lazy(() => import('./pages/system/PointConsolePage'));
 const GiftCardConsolePage = lazy(() => import('./pages/system/GiftCardConsolePage'));
 const AuditLogConsolePage = lazy(() => import('./pages/system/AuditLogConsolePage'));
@@ -173,6 +176,12 @@ function App() {
                 education 슬라이스 API 다. 시스템 관리 메뉴 아래 화면이므로 /admin/system/education 으로 둔다. */}
             <Route path="/admin/system/education"
               element={<AdminOnlyRoute><SideNavLayout><EducationCourseAdminPage /></SideNavLayout></AdminOnlyRoute>} />
+            <Route path="/admin/system/education-enrollments"
+              element={<AdminOnlyRoute><SideNavLayout><EducationEnrollmentPage /></SideNavLayout></AdminOnlyRoute>} />
+            <Route path="/admin/system/education-lecturers"
+              element={<AdminOnlyRoute><SideNavLayout><EducationLecturerPage /></SideNavLayout></AdminOnlyRoute>} />
+            <Route path="/admin/system/site-popups"
+              element={<AdminOnlyRoute><SideNavLayout><SitePopupPage /></SideNavLayout></AdminOnlyRoute>} />
             <Route path="/admin/system/ecommerce-categories"
               element={<AdminOnlyRoute><SideNavLayout><EcommerceCategoryAdmin /></SideNavLayout></AdminOnlyRoute>} />
             <Route path="/admin/system/display-sections"
