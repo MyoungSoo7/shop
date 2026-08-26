@@ -2,13 +2,15 @@ package github.lms.lemuel.operation.board.adapter.out.persistence;
 
 import github.lms.lemuel.operation.board.domain.BoardCommentStatus;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.JpaSpecificationExecutor;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
 import java.util.Collection;
 import java.util.List;
 
-public interface SpringDataBoardCommentRepository extends JpaRepository<BoardCommentJpaEntity, Long> {
+public interface SpringDataBoardCommentRepository
+        extends JpaRepository<BoardCommentJpaEntity, Long>, JpaSpecificationExecutor<BoardCommentJpaEntity> {
 
     List<BoardCommentJpaEntity> findAllByPostIdOrderByIdAsc(Long postId);
 

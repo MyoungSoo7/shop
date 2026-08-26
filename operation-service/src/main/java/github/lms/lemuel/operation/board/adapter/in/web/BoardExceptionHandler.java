@@ -6,7 +6,9 @@ import github.lms.lemuel.operation.board.domain.exception.BoardCommentNotFoundEx
 import github.lms.lemuel.operation.board.domain.exception.BoardInvariantViolationException;
 import github.lms.lemuel.operation.board.domain.exception.BoardNotFoundException;
 import github.lms.lemuel.operation.board.domain.exception.BoardPostNotFoundException;
+import github.lms.lemuel.operation.board.domain.exception.CommentReportNotFoundException;
 import github.lms.lemuel.operation.board.domain.exception.DuplicateBoardKeyException;
+import github.lms.lemuel.operation.board.domain.exception.DuplicateCommentReportException;
 import org.springframework.core.Ordered;
 import org.springframework.core.annotation.Order;
 import org.springframework.http.HttpStatus;
@@ -39,7 +41,8 @@ import java.util.stream.Collectors;
 public class BoardExceptionHandler {
 
     @ExceptionHandler({BoardNotFoundException.class, BoardPostNotFoundException.class,
-            BoardCommentNotFoundException.class, BoardAttachmentNotFoundException.class})
+            BoardCommentNotFoundException.class, BoardAttachmentNotFoundException.class,
+            CommentReportNotFoundException.class})
     public ResponseEntity<Map<String, String>> handleNotFound(RuntimeException exception) {
         return ResponseEntity.status(HttpStatus.NOT_FOUND).body(Map.of("message", exception.getMessage()));
     }
@@ -67,8 +70,8 @@ public class BoardExceptionHandler {
         return ResponseEntity.status(HttpStatus.FORBIDDEN).body(Map.of("message", exception.getMessage()));
     }
 
-    @ExceptionHandler(DuplicateBoardKeyException.class)
-    public ResponseEntity<Map<String, String>> handleDuplicate(DuplicateBoardKeyException exception) {
+    @ExceptionHandler({DuplicateBoardKeyException.class, DuplicateCommentReportException.class})
+    public ResponseEntity<Map<String, String>> handleDuplicate(RuntimeException exception) {
         return ResponseEntity.status(HttpStatus.CONFLICT).body(Map.of("message", exception.getMessage()));
     }
 

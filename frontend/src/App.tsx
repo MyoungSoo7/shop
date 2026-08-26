@@ -31,6 +31,7 @@ const EducationCourseAdminPage = lazy(() => import('./pages/system/EducationCour
 const EducationEnrollmentPage = lazy(() => import('./pages/system/EducationEnrollmentPage'));
 const EducationLecturerPage = lazy(() => import('./pages/system/EducationLecturerPage'));
 const SitePopupPage = lazy(() => import('./pages/system/SitePopupPage'));
+const CommentModerationPage = lazy(() => import('./pages/system/CommentModerationPage'));
 const PointConsolePage = lazy(() => import('./pages/system/PointConsolePage'));
 const GiftCardConsolePage = lazy(() => import('./pages/system/GiftCardConsolePage'));
 const AuditLogConsolePage = lazy(() => import('./pages/system/AuditLogConsolePage'));
@@ -189,6 +190,8 @@ function App() {
               element={<AdminOnlyRoute><SideNavLayout><EducationLecturerPage /></SideNavLayout></AdminOnlyRoute>} />
             <Route path="/admin/system/site-popups"
               element={<AdminOnlyRoute><SideNavLayout><SitePopupPage /></SideNavLayout></AdminOnlyRoute>} />
+            <Route path="/admin/system/comment-moderation"
+              element={<AdminOnlyRoute><SideNavLayout><CommentModerationPage /></SideNavLayout></AdminOnlyRoute>} />
             <Route path="/admin/system/ecommerce-categories"
               element={<AdminOnlyRoute><SideNavLayout><EcommerceCategoryAdmin /></SideNavLayout></AdminOnlyRoute>} />
             <Route path="/admin/system/display-sections"

@@ -16,7 +16,9 @@ import org.springframework.stereotype.Component;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
+import java.util.stream.Collectors;
 
 @Component
 @RequiredArgsConstructor
@@ -43,6 +45,15 @@ public class BoardPostPersistenceAdapter implements LoadBoardPostPort, SaveBoard
                 .map(BoardPostJpaEntity::toDomain)
                 .toList();
         return BoardPage.of(content, page, size, result.getTotalElements());
+    }
+
+    @Override
+    public Map<Long, String> findTitlesByIds(List<Long> postIds) {
+        if (postIds == null || postIds.isEmpty()) {
+            return Map.of();
+        }
+        return repository.findTitlesByIdIn(postIds).stream()
+                .collect(Collectors.toMap(row -> (Long) row[0], row -> (String) row[1]));
     }
 
     /**

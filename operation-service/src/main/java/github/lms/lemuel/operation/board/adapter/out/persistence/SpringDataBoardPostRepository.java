@@ -2,6 +2,11 @@ package github.lms.lemuel.operation.board.adapter.out.persistence;
 
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.JpaSpecificationExecutor;
+import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.repository.query.Param;
+
+import java.util.Collection;
+import java.util.List;
 
 /**
  * 목록 조회는 {@link JpaSpecificationExecutor} 로 동적 조건을 만든다.
@@ -12,4 +17,13 @@ import org.springframework.data.jpa.repository.JpaSpecificationExecutor;
  */
 public interface SpringDataBoardPostRepository
         extends JpaRepository<BoardPostJpaEntity, Long>, JpaSpecificationExecutor<BoardPostJpaEntity> {
+
+    /**
+     * 식별자 묶음의 제목만 뽑는다 — 댓글 콘솔이 "어느 글에 달린 말인가"를 채우는 데 쓴다.
+     *
+     * <p>글 본문까지 실어 오면 한 화면에 20개 글의 HTML 을 통째로 읽게 된다. 제목 두 컬럼만
+     * 투영해 그 낭비를 없앤다.
+     */
+    @Query("SELECT p.id, p.title FROM BoardPostJpaEntity p WHERE p.id IN :postIds")
+    List<Object[]> findTitlesByIdIn(@Param("postIds") Collection<Long> postIds);
 }

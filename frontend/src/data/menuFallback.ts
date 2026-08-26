@@ -92,6 +92,7 @@ export const FALLBACK_MENUS: FallbackMenuNode[] = [
       { id: -122, name: '수강 신청', path: '/admin/system/education-enrollments', icon: '📝', description: '과정별 신청자 · 정원 · 대기 · 취소', area: 'SYSTEM', type: 'ITEM', roles: ['ADMIN'] },
       { id: -123, name: '강사 관리', path: '/admin/system/education-lecturers', icon: '🎓', description: '강사 명부 · 전공/강의 분야 · 과정 배정', area: 'SYSTEM', type: 'ITEM', roles: ['ADMIN'] },
       { id: -124, name: '팝업 관리', path: '/admin/system/site-popups', icon: '🪟', description: '사이트 팝업 노출 구간 · 순서', area: 'SYSTEM', type: 'ITEM', roles: ['ADMIN'] },
+      { id: -125, name: '댓글 관리', path: '/admin/system/comment-moderation', icon: '💬', description: '전 게시판 댓글 · 신고 판정 · 가림', area: 'SYSTEM', type: 'ITEM', roles: ['ADMIN'] },
     ],
   },
   {

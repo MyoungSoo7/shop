@@ -2,6 +2,7 @@ package github.lms.lemuel.operation.board.adapter.in.web;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import github.lms.lemuel.operation.board.application.port.in.BoardCommentUseCase;
+import github.lms.lemuel.operation.board.application.port.in.CommentModerationUseCase;
 import github.lms.lemuel.operation.board.application.port.in.QueryBoardUseCase;
 import github.lms.lemuel.operation.board.domain.BoardAccessPolicy;
 import github.lms.lemuel.operation.board.domain.BoardAttachmentPolicy;
@@ -12,6 +13,10 @@ import github.lms.lemuel.operation.board.domain.BoardContentFormat;
 import github.lms.lemuel.operation.board.domain.BoardContentPolicy;
 import github.lms.lemuel.operation.board.domain.BoardDefinition;
 import github.lms.lemuel.operation.board.domain.BoardSkin;
+import github.lms.lemuel.operation.board.domain.CommentReport;
+import github.lms.lemuel.operation.board.domain.CommentReportReason;
+import github.lms.lemuel.operation.board.domain.CommentReportStatus;
+import github.lms.lemuel.operation.board.domain.exception.DuplicateCommentReportException;
 import github.lms.lemuel.operation.board.domain.exception.BoardAccessDeniedException;
 import github.lms.lemuel.common.config.jwt.AuthPrincipal;
 import org.junit.jupiter.api.AfterEach;
@@ -34,7 +39,9 @@ import java.util.Map;
 
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.doThrow;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
@@ -65,6 +72,8 @@ class BoardCommentControllerTest {
     BoardCommentUseCase boardCommentUseCase;
     @MockitoBean
     QueryBoardUseCase queryBoardUseCase;
+    @MockitoBean
+    CommentModerationUseCase commentModerationUseCase;
 
     @AfterEach
     void clear() {
@@ -139,6 +148,51 @@ class BoardCommentControllerTest {
         mockMvc.perform(post("/api/boards/notice/posts/5/comments")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(Map.of("content", "  "))))
+                .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    @DisplayName("신고는 201, 신고자는 본문이 아니라 JWT 에서만 온다")
+    void report() throws Exception {
+        login(11L, "reporter@lemuel.local", "USER");
+        when(commentModerationUseCase.report(anyString(), any(), any(), any(), any(), any()))
+                .thenReturn(CommentReport.rehydrate(3L, 7L, new BoardAuthor(11L, "re***"),
+                        CommentReportReason.ABUSE, "욕설입니다", CommentReportStatus.RECEIVED, null, null, NOW));
+
+        mockMvc.perform(post("/api/boards/notice/comments/7/reports")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        // 본문에 남의 식별자를 실어 보내도 무시된다 — 아래 verify 가 그 지점이다.
+                        .content(objectMapper.writeValueAsString(
+                                Map.of("reason", "ABUSE", "detail", "욕설입니다", "reporterId", 99))))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.status").value("RECEIVED"))
+                .andExpect(jsonPath("$.reporterName").value("re***"));
+
+        verify(commentModerationUseCase).report(eq("notice"), eq(7L), any(),
+                eq(new BoardAuthor(11L, "re***")), eq(CommentReportReason.ABUSE), eq("욕설입니다"));
+    }
+
+    @Test
+    @DisplayName("같은 사람의 중복 신고는 409 — 큐의 건수가 여론처럼 보이지 않게")
+    void duplicateReport() throws Exception {
+        login(11L, "reporter@lemuel.local", "USER");
+        when(commentModerationUseCase.report(anyString(), any(), any(), any(), any(), any()))
+                .thenThrow(new DuplicateCommentReportException(7L));
+
+        mockMvc.perform(post("/api/boards/notice/comments/7/reports")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(Map.of("reason", "SPAM"))))
+                .andExpect(status().isConflict());
+    }
+
+    @Test
+    @DisplayName("사유 없는 신고는 400")
+    void reportRequiresReason() throws Exception {
+        login(11L, "reporter@lemuel.local", "USER");
+
+        mockMvc.perform(post("/api/boards/notice/comments/7/reports")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{}"))
                 .andExpect(status().isBadRequest());
     }
 

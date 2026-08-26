@@ -79,9 +79,9 @@ class MenuSeedIntegrationTest {
     }
 
     @Test
-    @DisplayName("시드 총 39행 — 커머스 + 운영 범위")
-    void seedsExactlyThirtyNine() {
-        assertThat(adapter.findAll()).hasSize(39);
+    @DisplayName("시드 총 40행 — 커머스 + 운영 범위")
+    void seedsExactlyForty() {
+        assertThat(adapter.findAll()).hasSize(40);
     }
 
     @Test
@@ -134,7 +134,7 @@ class MenuSeedIntegrationTest {
     }
 
     @Test
-    @DisplayName("시스템 사이드바 25개 — 앞 3개와 게시판 관리가 RBAC permission 과 짝지어진다")
+    @DisplayName("시스템 사이드바 26개 — 앞 3개와 게시판 관리가 RBAC permission 과 짝지어진다")
     void systemChildren() {
         List<Menu> children = childrenOf("시스템 관리");
 
@@ -154,12 +154,14 @@ class MenuSeedIntegrationTest {
                 // 이 그룹의 sort_order 는 빈틈없이 차 있어 중간에 끼우면 그 자리의 항목과 겹친다.
                 // 강사 관리(V20260827130000)도 같은 이유로 그 뒤에 이어 붙는다.
                 // 팝업 관리(V20260827150000)는 교육이 아니라 사이트 콘텐츠지만 자리는 역시 맨 뒤다.
-                "수강 신청", "강사 관리", "팝업 관리");
+                // 댓글 관리(V20260827170000)는 '게시판 관리'(게시판 정의)와 다른 표면이다 — 이미 달린
+                // 댓글을 게시판·글을 건너뛰고 훑는 유일한 자리. 자리는 역시 맨 뒤.
+                "수강 신청", "강사 관리", "팝업 관리", "댓글 관리");
         assertThat(children).extracting(Menu::getRequiredPermission).containsExactly(
                 "SYSTEM_MENU_MANAGE", "SYSTEM_CODE_MANAGE", "SYSTEM_RBAC_MANAGE",
                 null, null, null, null, "SYSTEM_BOARD_MANAGE", null, null, null,
                 null, null, null, null, null, null, null,
-                null, null, null, null, null, null, null);
+                null, null, null, null, null, null, null, null);
         // 환불은 ADMIN·MANAGER — 서버가 /admin/refunds/** 를 그 등급으로 막는다(조회 전용 표면).
         // 시스템 그룹 안에서 유일하게 등급이 낮은 항목이라 명시적으로 못 박는다.
         assertThat(children.stream().filter(m -> m.getName().equals("환불 운영"))

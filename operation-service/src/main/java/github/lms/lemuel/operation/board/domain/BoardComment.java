@@ -17,6 +17,7 @@ public class BoardComment {
 
     private static final int CONTENT_MAX_LENGTH = 2_000;
     private static final String DELETED_PLACEHOLDER = "삭제된 댓글입니다.";
+    private static final String HIDDEN_PLACEHOLDER = "신고 처리로 가려진 댓글입니다.";
 
     private Long id;
     private Long postId;
@@ -87,13 +88,54 @@ public class BoardComment {
     }
 
     /**
-     * 화면에 내보낼 내용. 삭제된 댓글은 원문 대신 자리표시를 돌려준다.
+     * 신고 처리로 내린다 — 되돌릴 수 있는 조치라 운영 역할만 한다.
+     *
+     * <p>작성자 본인은 못 한다. 본인이 원하는 것은 삭제이지 가림이 아니고, 본인에게 가림을 열면
+     * "내가 내렸다가 잠잠해지면 올린다"는 경로가 생겨 신고 처리 이력이 뒤섞인다.
+     */
+    public void hide(BoardActor actor, BoardDefinition definition, OffsetDateTime now) {
+        requireManager(actor, definition, "이 댓글을 가릴 권한이 없습니다.");
+        if (status == BoardCommentStatus.DELETED) {
+            throw new BoardInvariantViolationException("삭제된 댓글은 가릴 수 없습니다.");
+        }
+        if (status == BoardCommentStatus.HIDDEN) {
+            throw new BoardInvariantViolationException("이미 가려진 댓글입니다.");
+        }
+        this.status = BoardCommentStatus.HIDDEN;
+        this.updatedAt = now;
+    }
+
+    /** 가림을 되돌린다. 삭제된 댓글은 여기로 살아나지 않는다 — 삭제는 되돌리는 조치가 아니다. */
+    public void unhide(BoardActor actor, BoardDefinition definition, OffsetDateTime now) {
+        requireManager(actor, definition, "이 댓글을 되돌릴 권한이 없습니다.");
+        if (status != BoardCommentStatus.HIDDEN) {
+            throw new BoardInvariantViolationException("가려진 댓글이 아닙니다.");
+        }
+        this.status = BoardCommentStatus.PUBLISHED;
+        this.updatedAt = now;
+    }
+
+    /**
+     * 화면에 내보낼 내용. 삭제·가림 상태는 원문 대신 자리표시를 돌려준다.
      *
      * <p>원문을 지우지 않고 남기는 이유는 신고·감사 대응이다 — "무엇이 지워졌는가"에 답할 수
      * 없으면 삭제 기능 자체가 분쟁의 원인이 된다. 대신 원문은 이 경로로 절대 나가지 않는다.
+     *
+     * <p>관리 콘솔은 이 경로를 쓰지 않는다. 무엇을 내렸는지 못 보면 되돌릴 판단을 할 수 없어서다
+     * — 그쪽은 {@link #getContent()} 로 원문을 본다.
      */
     public String visibleContent() {
-        return status == BoardCommentStatus.DELETED ? DELETED_PLACEHOLDER : content;
+        return switch (status) {
+            case DELETED -> DELETED_PLACEHOLDER;
+            case HIDDEN -> HIDDEN_PLACEHOLDER;
+            case PUBLISHED -> content;
+        };
+    }
+
+    private void requireManager(BoardActor actor, BoardDefinition definition, String message) {
+        if (definition == null || !definition.canManage(actor.role())) {
+            throw new BoardAccessDeniedException(message);
+        }
     }
 
     private static Long resolveParentId(BoardPost post, BoardComment parent) {
@@ -103,8 +145,10 @@ public class BoardComment {
         if (!post.getId().equals(parent.getPostId())) {
             throw new BoardInvariantViolationException("다른 글의 댓글에는 답글을 달 수 없습니다.");
         }
-        if (parent.getStatus() == BoardCommentStatus.DELETED) {
-            throw new BoardInvariantViolationException("삭제된 댓글에는 답글을 달 수 없습니다.");
+        // 가려진 댓글도 막는다 — 앞말이 안 보이는데 답글만 붙으면 대화가 읽히지 않고,
+        // 신고 대상 댓글에 답글이 쌓이면 되돌릴 때 판단할 것이 늘어난다.
+        if (!parent.getStatus().isReadable()) {
+            throw new BoardInvariantViolationException("삭제되거나 가려진 댓글에는 답글을 달 수 없습니다.");
         }
         if (parent.getParentId() != null) {
             throw new BoardInvariantViolationException("답글에는 다시 답글을 달 수 없습니다(1단까지).");
