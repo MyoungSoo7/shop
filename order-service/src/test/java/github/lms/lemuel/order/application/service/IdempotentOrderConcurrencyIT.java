@@ -150,7 +150,9 @@ class IdempotentOrderConcurrencyIT {
                 variantId -> java.util.List.of(),
                 lines -> github.lms.lemuel.shipping.domain.ShippingFeeAssessment.none(),
                 // 배송 생성도 범위 밖 — 이 IT 는 배송지 없이 주문하므로 호출되지 않는다
-                (orderId, address) -> { });
+                (orderId, address) -> { },
+                // 동의도 범위 밖(consent=null 경로). 불리면 전제가 깨진 것이라 그때 터뜨린다.
+                command -> { throw new AssertionError("동의를 받지 않는 경로에서 동의 기록이 불렸다"); });
         return new IdempotentMultiItemOrderService(delegate, lock, idempotencyAdapter, orderAdapter,
                 new TransactionTemplate(txManager));
     }

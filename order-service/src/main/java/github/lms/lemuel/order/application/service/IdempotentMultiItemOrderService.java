@@ -61,9 +61,11 @@ public class IdempotentMultiItemOrderService implements IdempotentMultiItemOrder
     @Override
     public Order create(Long userId, List<CreateMultiItemOrderUseCase.Line> lines,
                         String couponCode, ShippingAddressSnapshot shippingAddress,
+                        CreateMultiItemOrderUseCase.ConsentSubmission consent,
                         String idempotencyKey) {
         if (idempotencyKey == null || idempotencyKey.isBlank()) {
-            return delegate.create(userId, lines, couponCode, shippingAddress); // 키 없으면 기존 동작(하위 호환)
+            // 키 없으면 기존 동작(하위 호환). 동의는 키와 무관하게 그대로 넘어간다.
+            return delegate.create(userId, lines, couponCode, shippingAddress, consent);
         }
 
         return lockPort.executeWithLock(LOCK_NAMESPACE + idempotencyKey, LOCK_WAIT, LOCK_LEASE, () -> {
@@ -75,7 +77,7 @@ public class IdempotentMultiItemOrderService implements IdempotentMultiItemOrder
                         return loadOrderPort.findById(existing.get())
                                 .orElseThrow(() -> new OrderNotFoundException(existing.get()));
                     }
-                    Order created = delegate.create(userId, lines, couponCode, shippingAddress);
+                    Order created = delegate.create(userId, lines, couponCode, shippingAddress, consent);
                     idempotencyPort.save(idempotencyKey, created.getId()); // dup 키면 제약 위반 → 트랜잭션 롤백
                     return created;
                 });

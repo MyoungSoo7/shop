@@ -6,6 +6,7 @@ import CartPage from '@/pages/CartPage';
 import { orderApi } from '@/api/order';
 import { paymentApi } from '@/api/payment';
 import { couponApi } from '@/api/coupon';
+import { privacyConsentApi, type PrivacyConsentTerms } from '@/api/privacyConsent';
 import type { CartItem } from '@/contexts/useCart';
 
 const removeItem = vi.fn();
@@ -39,9 +40,17 @@ vi.mock('@/api/payment', () => ({
 }));
 vi.mock('@/api/coupon', () => ({ couponApi: { preview: vi.fn(), use: vi.fn() } }));
 
+// 서버 호출만 가짜다. ready 판정과 acceptances 변환은 진짜를 쓴다 — 그것까지 가짜면 "동의 없이
+// 주문 버튼이 열리는가"를 검사하지 못한다.
+vi.mock('@/api/privacyConsent', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/api/privacyConsent')>()),
+  privacyConsentApi: { terms: vi.fn(), ofOrder: vi.fn() },
+}));
+
 const mockedOrder = vi.mocked(orderApi);
 const mockedPayment = vi.mocked(paymentApi);
 const mockedCoupon = vi.mocked(couponApi);
+const mockedConsentTerms = vi.mocked(privacyConsentApi.terms);
 
 const item = (over: Record<string, unknown> = {}, quantity = 1): CartItem =>
   ({
@@ -84,6 +93,50 @@ const FILLED_ADDRESS = {
   deliveryMemo: '',
 };
 
+/** 결제 화면이 받아 오는 동의 문안. 필수 하나 + 선택 하나 — 둘의 취급이 다르다. */
+const REQUIRED_TERMS: PrivacyConsentTerms = {
+  code: 'THIRD_PARTY_DELIVERY',
+  version: 2,
+  consentType: 'THIRD_PARTY_PROVISION',
+  title: '배송을 위한 개인정보 제3자 제공 동의',
+  recipient: '배송업체',
+  purpose: '주문 상품의 배송',
+  providedItems: '받는 분 이름, 휴대전화번호, 주소',
+  retention: '배송 완료 후 90일',
+  body: '전문입니다',
+  required: true,
+  effectiveFrom: '2026-07-28T00:00:00',
+};
+
+const OPTIONAL_TERMS: PrivacyConsentTerms = {
+  ...REQUIRED_TERMS,
+  code: 'MARKETING_MESSAGE',
+  consentType: 'MARKETING',
+  title: '광고성 정보 수신 동의',
+  recipient: null,
+  required: false,
+};
+
+/** 필수만 체크했을 때 서버로 나가는 목록. 선택은 "묻고 거절함"으로 함께 실린다. */
+const AGREED_ACCEPTANCES = [
+  { termsCode: 'THIRD_PARTY_DELIVERY', termsVersion: 2, agreed: true },
+  { termsCode: 'MARKETING_MESSAGE', termsVersion: 2, agreed: false },
+];
+
+/**
+ * 필수 동의만 체크한다. 선택 항목은 일부러 손대지 않는다 — 그래야 "선택을 안 눌러도 주문이
+ * 되는가"와 "안 누른 선택이 거절로 실려 나가는가"가 함께 검사된다.
+ */
+const agreeRequiredConsent = async () => {
+  await userEvent.click(await screen.findByLabelText(/배송을 위한 개인정보 제3자 제공 동의/));
+};
+
+/** 주문을 낼 수 있는 상태(배송지 + 필수 동의)까지 만든다. */
+const fillCheckoutForm = async () => {
+  await fillAddress();
+  await agreeRequiredConsent();
+};
+
 /**
  * 서버가 돌려주는 다건 주문. 금액을 서버가 확정한다는 게 이 경로의 요점이라, 테스트에서도
  * 화면이 보낸 값이 아니라 <b>여기 적힌 값</b>이 화면에 그대로 나와야 한다.
@@ -111,6 +164,7 @@ beforeEach(() => {
   mockedPayment.createPayment.mockResolvedValue({ id: 500, amount: 20000, status: 'READY' } as never);
   mockedPayment.authorizePayment.mockResolvedValue({ id: 500, status: 'AUTHORIZED' } as never);
   mockedPayment.capturePayment.mockResolvedValue({ id: 500, status: 'CAPTURED' } as never);
+  mockedConsentTerms.mockResolvedValue([REQUIRED_TERMS, OPTIONAL_TERMS]);
 });
 
 afterEach(() => {
@@ -179,7 +233,7 @@ describe('CartPage — 일반 결제', () => {
       ],
     }) as never);
     renderPage();
-    await fillAddress();
+    await fillCheckoutForm();
 
     await userEvent.click(screen.getByRole('button', { name: '2개 상품 전체 주문하기' }));
 
@@ -193,13 +247,13 @@ describe('CartPage — 일반 결제', () => {
   it('금액이 아니라 라인(무엇을 몇 개)만 보낸다', async () => {
     cartItems = [item({ id: 1 }, 3)];
     renderPage();
-    await fillAddress();
+    await fillCheckoutForm();
 
     await userEvent.click(screen.getByRole('button', { name: '1개 상품 전체 주문하기' }));
 
     await waitFor(() =>
       expect(mockedOrder.createMultiItemOrder).toHaveBeenCalledWith(
-        1, [{ productId: 1, quantity: 3 }], FILLED_ADDRESS, null, expect.any(String),
+        1, [{ productId: 1, quantity: 3 }], FILLED_ADDRESS, AGREED_ACCEPTANCES, null, expect.any(String),
       ),
     );
   });
@@ -207,7 +261,7 @@ describe('CartPage — 일반 결제', () => {
   it('주문이 실패하면 사유를 남기고 카트를 비우지 않는다', async () => {
     mockedOrder.createMultiItemOrder.mockRejectedValue({ response: { data: { message: '재고 부족' } } });
     renderPage();
-    await fillAddress();
+    await fillCheckoutForm();
 
     await userEvent.click(screen.getByRole('button', { name: '1개 상품 전체 주문하기' }));
 
@@ -229,7 +283,7 @@ describe('CartPage — 일반 결제', () => {
       amount: 18000, discountAmount: 2000,
     }) as never);
     renderPage();
-    await fillAddress();
+    await fillCheckoutForm();
     await userEvent.type(screen.getByPlaceholderText(/쿠폰 코드 입력/), 'welcome10');
     await userEvent.click(screen.getByRole('button', { name: '적용' }));
     await screen.findByText('쿠폰 적용됨:');
@@ -238,7 +292,7 @@ describe('CartPage — 일반 결제', () => {
 
     await waitFor(() =>
       expect(mockedOrder.createMultiItemOrder).toHaveBeenCalledWith(
-        1, [{ productId: 1, quantity: 1 }], FILLED_ADDRESS, 'WELCOME10', expect.any(String),
+        1, [{ productId: 1, quantity: 1 }], FILLED_ADDRESS, AGREED_ACCEPTANCES, 'WELCOME10', expect.any(String),
       ),
     );
     // 서버가 같은 트랜잭션에서 기록한다. 여기서 또 부르면 쿠폰이 두 번 소진된다.
@@ -250,7 +304,7 @@ describe('CartPage — 일반 결제', () => {
       amount: 21000, subtotal: 20000, discountAmount: 2000, shippingFee: 3000,
     }) as never);
     renderPage();
-    await fillAddress();
+    await fillCheckoutForm();
 
     await userEvent.click(screen.getByRole('button', { name: '1개 상품 전체 주문하기' }));
 
@@ -264,7 +318,7 @@ describe('CartPage — 일반 결제', () => {
 describe('CartPage — 토스페이먼츠', () => {
   const chooseToss = async () => {
     renderPage();
-    await fillAddress();
+    await fillCheckoutForm();
     await userEvent.selectOptions(screen.getByRole('combobox'), 'TOSS_PAYMENTS');
   };
 
@@ -339,12 +393,23 @@ describe('CartPage — 배송지', () => {
     ).toBeInTheDocument();
   });
 
-  it('필수 4항목을 채우면 주문 버튼이 열린다', async () => {
+  it('필수 4항목과 필수 동의를 채우면 주문 버튼이 열린다', async () => {
+    renderPage();
+
+    await fillCheckoutForm();
+
+    expect(screen.getByRole('button', { name: '1개 상품 전체 주문하기' })).toBeEnabled();
+  });
+
+  it('배송지만 채우면 아직 잠긴 채 남은 조건을 알린다', async () => {
     renderPage();
 
     await fillAddress();
 
-    expect(screen.getByRole('button', { name: '1개 상품 전체 주문하기' })).toBeEnabled();
+    expect(screen.getByRole('button', { name: '1개 상품 전체 주문하기' })).toBeDisabled();
+    expect(
+      screen.getByText('필수 개인정보 동의 항목에 동의해야 주문할 수 있습니다.'),
+    ).toBeInTheDocument();
   });
 
   it('필수 항목이 하나라도 비면 여전히 잠긴다 (우편번호 누락)', async () => {
@@ -356,5 +421,46 @@ describe('CartPage — 배송지', () => {
 
     expect(screen.getByRole('button', { name: '1개 상품 전체 주문하기' })).toBeDisabled();
     expect(mockedOrder.createMultiItemOrder).not.toHaveBeenCalled();
+  });
+});
+
+/**
+ * 장바구니 결제도 받는 사람의 이름·연락처·주소를 택배사로 넘긴다. 주문 화면과 같은 자물쇠가
+ * 걸려 있어야 하는 이유다 — 한쪽만 걸면 다른 쪽이 그대로 우회로가 된다.
+ */
+describe('CartPage — 개인정보 동의', () => {
+  it('문안을 못 받아 오면 버튼이 닫힌 채 이유를 보여 준다 — 빈 목록이 "필수 0건"이 되면 안 된다', async () => {
+    mockedConsentTerms.mockRejectedValue(new Error('down'));
+    renderPage();
+
+    await fillAddress();
+
+    expect(await screen.findByText(/동의 문안을 불러오지 못했습니다/)).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '1개 상품 전체 주문하기' })).toBeDisabled();
+  });
+
+  it('선택 항목은 안 눌러도 주문되고, 거절로 함께 실려 나간다', async () => {
+    renderPage();
+    await fillCheckoutForm();
+
+    await userEvent.click(screen.getByRole('button', { name: '1개 상품 전체 주문하기' }));
+
+    await waitFor(() => expect(mockedOrder.createMultiItemOrder).toHaveBeenCalled());
+    const [, , , consents] = mockedOrder.createMultiItemOrder.mock.calls[0];
+    expect(consents).toEqual(AGREED_ACCEPTANCES);
+  });
+
+  it('409 로 거절되면 문안을 다시 받고 체크를 지운다 — 읽지 않은 문장에 동의가 남지 않도록', async () => {
+    mockedOrder.createMultiItemOrder.mockRejectedValue({
+      response: { status: 409, data: { code: 'PRIVACY_CONSENT_TERMS_STALE' } },
+    });
+    renderPage();
+    await fillCheckoutForm();
+
+    await userEvent.click(screen.getByRole('button', { name: '1개 상품 전체 주문하기' }));
+
+    expect(await screen.findByText(/동의 문안이 변경되었습니다/)).toBeInTheDocument();
+    expect(mockedConsentTerms).toHaveBeenCalledTimes(2);
+    expect(screen.getByLabelText(/배송을 위한 개인정보 제3자 제공 동의/)).not.toBeChecked();
   });
 });

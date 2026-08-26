@@ -105,6 +105,10 @@ export const FALLBACK_MENUS: FallbackMenuNode[] = [
       { id: -123, name: '강사 관리', path: '/admin/system/education-lecturers', icon: '🎓', description: '강사 명부 · 전공/강의 분야 · 과정 배정', area: 'SYSTEM', type: 'ITEM', roles: ['ADMIN'] },
       { id: -124, name: '팝업 관리', path: '/admin/system/site-popups', icon: '🪟', description: '사이트 팝업 노출 구간 · 순서', area: 'SYSTEM', type: 'ITEM', roles: ['ADMIN'] },
       { id: -125, name: '댓글 관리', path: '/admin/system/comment-moderation', icon: '💬', description: '전 게시판 댓글 · 신고 판정 · 가림', area: 'SYSTEM', type: 'ITEM', roles: ['ADMIN'] },
+      // roles 는 서버 SecurityConfig 의 /admin/privacy-consents 매처(ADMIN·MANAGER)를 그대로 적는다.
+      // 읽기 전용 조회라 등급이 낮다. 다만 '시스템 관리' 그룹 자체가 ADMIN 전용이라 지금은 MANAGER
+      // 에게 이 줄이 그려지지 않는다 — 작업 큐·환불 운영과 같은 상태다. 그룹이 열리는 날 같이 열린다.
+      { id: -126, name: '동의 이력', path: '/admin/system/privacy-consents', icon: '📝', description: '주문 시점 개인정보 동의 · 문안 버전별 조회', area: 'SYSTEM', type: 'ITEM', roles: ['ADMIN', 'MANAGER'] },
     ],
   },
   {

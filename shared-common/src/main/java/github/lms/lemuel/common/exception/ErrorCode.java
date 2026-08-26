@@ -46,6 +46,11 @@ public enum ErrorCode {
     // 없는 토큰과 폐기된 토큰을 같은 문구로 돌려준다 — 구분해 주면 유효한 토큰을 찾는 데 쓰인다.
     GIFT_CLAIM_NOT_FOUND(HttpStatus.NOT_FOUND, "선물 링크를 찾을 수 없습니다."),
     GIFT_MESSAGE_CHANNEL_UNAVAILABLE(HttpStatus.SERVICE_UNAVAILABLE, "선물 안내를 보낼 채널이 구성되지 않았습니다."),
+    // ─── 주문 시점 개인정보 동의(수집·이용 / 제3자 제공) ───
+    PRIVACY_CONSENT_REQUIRED(HttpStatus.BAD_REQUEST, "필수 동의 항목에 동의해야 주문할 수 있습니다."),
+    // 409 인 이유 — 요청이 틀린 게 아니라 화면이 낡았다. 400 으로 내리면 클라이언트가 입력값을
+    // 고치려 들지만, 실제로 해야 할 일은 바뀐 문안을 다시 받아 다시 보여 주는 것이다.
+    PRIVACY_CONSENT_TERMS_STALE(HttpStatus.CONFLICT, "동의 문안이 변경되었습니다. 새로 고친 뒤 다시 시도해주세요."),
 
     // ─── user ────────────────────────────────────────────────────────────────
     USER_NOT_FOUND(HttpStatus.NOT_FOUND, "사용자를 찾을 수 없습니다."),

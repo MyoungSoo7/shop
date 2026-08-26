@@ -148,7 +148,10 @@ class CreateMultiItemOrderIT {
                 // 배송비는 이 IT 의 검증 범위 밖 — 부과 없음으로 고정
                 lines -> github.lms.lemuel.shipping.domain.ShippingFeeAssessment.none(),
                 // 배송 생성 기록용 스텁 — 배송지를 넘긴 케이스에서 호출 여부를 본다
-                (orderId, address) -> createdShipments.add(orderId + ":" + address.recipientName()));
+                (orderId, address) -> createdShipments.add(orderId + ":" + address.recipientName()),
+                // 이 IT 는 동의 없이(consent=null) 주문하므로 불리지 않는다. 그래도 불린다면
+                // 그건 "동의를 안 받는 경로"가 조용히 바뀐 것이므로 여기서 터지는 편이 낫다.
+                command -> { throw new AssertionError("동의를 받지 않는 경로에서 동의 기록이 불렸다"); });
     }
 
     @Test

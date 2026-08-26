@@ -16,7 +16,10 @@ import StarRating from '@/components/review/StarRating';
 import ReviewList from '@/components/review/ReviewList';
 import CouponInput from '@/components/coupon/CouponInput';
 import ShippingAddressForm from '@/components/shipping/ShippingAddressForm';
+import PrivacyConsentBlock from '@/components/consent/PrivacyConsentBlock';
 import { emptyShippingAddress, isShippingAddressComplete } from '@/lib/shippingAddress';
+import { usePrivacyConsent } from '@/lib/usePrivacyConsent';
+import { isStaleTermsError } from '@/api/privacyConsent';
 import { apiErrorMessage, errorDetail } from '@/lib/apiError';
 
 const PRODUCTS_PER_PAGE = 5;
@@ -67,6 +70,7 @@ const OrderFormTab: React.FC = () => {
   // 배송지 — 주문서에 굳는 값이라 주문 생성 요청에 함께 실어 보낸다(서버가 없으면 400).
   const [shippingAddress, setShippingAddress] = useState<ShippingAddressRequest>(emptyShippingAddress);
   const addressReady = isShippingAddressComplete(shippingAddress);
+  const consent = usePrivacyConsent();
 
   // 옵션 파셋 필터
   const [facets, setFacets] = useState<Facet[]>([]);
@@ -131,6 +135,7 @@ const OrderFormTab: React.FC = () => {
   const handleCreateOrder = async () => {
     if (!selectedProduct) { setError('상품을 선택해주세요.'); return; }
     if (!addressReady) { setError('배송지를 입력해주세요.'); return; }
+    if (!consent.ready) { setError('필수 개인정보 동의 항목에 동의해주세요.'); return; }
     setLoading(true);
     setError(null);
     try {
@@ -141,6 +146,7 @@ const OrderFormTab: React.FC = () => {
         userId,
         [{ productId: selectedProduct.id, quantity: 1 }],
         shippingAddress,
+        consent.acceptances,
         appliedCouponCode ?? null,
         newIdempotencyKey(),
       );
@@ -153,6 +159,13 @@ const OrderFormTab: React.FC = () => {
         setLoading(false);
       }
     } catch (err) {
+      // 409 는 "문안이 바뀌었다" — 입력을 고칠 일이 아니라 바뀐 문장을 다시 받아 다시 동의할 일이다.
+      if (isStaleTermsError(err)) {
+        await consent.reload();
+        setError('동의 문안이 변경되었습니다. 바뀐 내용을 확인하고 다시 동의해주세요.');
+        setLoading(false);
+        return;
+      }
       setError(apiErrorMessage(err, '주문 생성에 실패했습니다.'));
       setLoading(false);
     }
@@ -443,6 +456,15 @@ const OrderFormTab: React.FC = () => {
             {/* 배송지 */}
             <ShippingAddressForm value={shippingAddress} onChange={setShippingAddress} />
 
+            {/* 개인정보 동의 — 배송지를 택배사에 넘기는 근거가 여기서 생긴다 */}
+            <PrivacyConsentBlock
+              terms={consent.terms}
+              agreed={consent.agreed}
+              onToggle={consent.toggle}
+              loading={consent.loading}
+              error={consent.error}
+            />
+
             {/* 결제 수단 */}
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1.5">결제 수단</label>
@@ -473,14 +495,16 @@ const OrderFormTab: React.FC = () => {
             ) : (
               <button
                 onClick={handleCreateOrder}
-                disabled={!selectedProduct || !addressReady}
+                disabled={!selectedProduct || !addressReady || !consent.ready}
                 className="w-full bg-blue-600 text-white py-3 rounded-lg font-semibold hover:bg-blue-700 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
               >
                 {!selectedProduct
                   ? '상품을 먼저 선택해주세요'
                   : !addressReady
                     ? '배송지를 입력해주세요'
-                    : '주문하기'}
+                    : !consent.ready
+                      ? '필수 동의 항목에 동의해주세요'
+                      : '주문하기'}
               </button>
             )}
           </div>

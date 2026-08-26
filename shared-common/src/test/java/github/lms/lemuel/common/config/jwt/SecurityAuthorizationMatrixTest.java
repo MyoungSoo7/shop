@@ -196,6 +196,63 @@ class SecurityAuthorizationMatrixTest {
     }
 
     /**
+     * 동의 이력 콘솔 — 누가 언제 무엇에 동의했는가.
+     *
+     * <p>나가는 것이 목록이 아니라 <b>사람과 시각과 접속지</b>다. 운영자 응답에는 고객 응답에 없는
+     * {@code ipAddress} 가 들어 있고, 사용자 축({@code ?userId=}) 은 한 사람의 동의를 통째로
+     * 훑는다. 매처를 빠뜨려 {@code anyRequest().authenticated()} 로 떨어지면 로그인만 한 사용자가
+     * 남의 사용자 번호를 하나씩 넣어 그것을 읽는다.
+     *
+     * <p>MANAGER 도 통과하는 것이 의도다 — 이 콘솔에는 고치는 경로가 아예 없고(읽기 전용),
+     * 정보주체의 열람 요구에 답하는 것이 CS 업무이기 때문이다. 화면 라우트와 메뉴의
+     * {@code required_role} 도 같은 등급으로 맞춰 뒀다. 여기가 ADMIN 으로 좁혀지는 날
+     * MANAGER 에게는 메뉴에 보이는데 눌러도 403 인 죽은 링크가 된다.
+     *
+     * <p>{@code /**} 케이스를 같이 두는 이유는 앞의 콘솔들과 같다 — 하위 경로를 하나 더 여는
+     * 순간 그 경로만 조용히 열린다.
+     */
+    @Nested
+    @DisplayName("동의 이력 콘솔 — 관리자·매니저 전용(읽기 전용)")
+    class PrivacyConsentConsole {
+
+        @ParameterizedTest(name = "USER → 403: {0}")
+        @ValueSource(strings = {"/admin/privacy-consents", "/admin/privacy-consents/anything"})
+        void 일반_사용자는_403(String path) throws Exception {
+            mvc.perform(get(path).with(user("u").roles("USER")))
+                    .andExpect(status().isForbidden());
+        }
+
+        @ParameterizedTest(name = "{0} → 통과")
+        @ValueSource(strings = {"ADMIN", "MANAGER"})
+        void 운영자는_통과한다(String role) throws Exception {
+            mvc.perform(get("/admin/privacy-consents").param("userId", "42")
+                            .with(user("op").roles(role)))
+                    .andExpect(status().isOk());
+        }
+
+        /** 인증 자체가 없으면 403 이 아니라 401 이다 — 두 축을 섞지 않는다. */
+        @Test
+        @DisplayName("미인증은 401")
+        void 미인증은_401() throws Exception {
+            mvc.perform(get("/admin/privacy-consents"))
+                    .andExpect(status().isUnauthorized());
+        }
+
+        /**
+         * 고객이 자기 주문의 동의를 보는 경로는 전용 매처 없이
+         * {@code anyRequest().authenticated()} 로 떨어진다. 그래도 되는 이유는 컨트롤러가
+         * 저장된 행의 주인과 대조하기 때문이다 — 인증만으로는 남의 주문이 열리지 않는다.
+         * 여기서는 그 앞단, 즉 <b>미인증이 막히는지</b>만 못 박는다.
+         */
+        @Test
+        @DisplayName("고객 이력 경로는 로그인 없이는 401")
+        void 고객_이력_경로는_인증이_필요하다() throws Exception {
+            mvc.perform(get("/orders/7/privacy-consents"))
+                    .andExpect(status().isUnauthorized());
+        }
+    }
+
+    /**
      * 운영자 계정 콘솔({@code /admin/operators}).
      *
      * <p>이 표면은 "권한을 가진 계정 목록 + 각각이 마지막으로 쓰인 시각 + 지금 잠긴 계정"이다.

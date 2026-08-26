@@ -7,7 +7,10 @@ import { CouponPreviewResponse, MultiItemOrderResponse, ShippingAddressRequest }
 import Spinner from '@/components/Spinner';
 import CouponInput from '@/components/coupon/CouponInput';
 import ShippingAddressForm from '@/components/shipping/ShippingAddressForm';
+import PrivacyConsentBlock from '@/components/consent/PrivacyConsentBlock';
 import { emptyShippingAddress, isShippingAddressComplete } from '@/lib/shippingAddress';
+import { usePrivacyConsent } from '@/lib/usePrivacyConsent';
+import { isStaleTermsError } from '@/api/privacyConsent';
 import { errorDetail } from '@/lib/apiError';
 
 const USER_ID = 1;
@@ -115,6 +118,8 @@ const CartPage: React.FC = () => {
   const [appliedCouponCode, setAppliedCouponCode] = useState<string | undefined>(undefined);
   const [shippingAddress, setShippingAddress] = useState<ShippingAddressRequest>(emptyShippingAddress);
   const addressReady = isShippingAddressComplete(shippingAddress);
+  const consent = usePrivacyConsent();
+  const canOrder = addressReady && consent.ready;
 
   // 화면에 보여줄 예상 금액. 확정 금액은 주문을 만든 서버 응답에서 온다.
   const discountedTotal = couponResult ? couponResult.finalAmount : totalAmount;
@@ -138,7 +143,8 @@ const CartPage: React.FC = () => {
       // 장바구니 전체가 주문 1건. 쿠폰 사용 기록·재고 차감도 서버가 같은 트랜잭션에서 하므로
       // 여기서 couponApi.use 를 부르면 안 된다(두 번 소진된다).
       const created = await orderApi.createMultiItemOrder(
-        USER_ID, orderLines, shippingAddress, appliedCouponCode ?? null, newIdempotencyKey());
+        USER_ID, orderLines, shippingAddress, consent.acceptances,
+        appliedCouponCode ?? null, newIdempotencyKey());
 
       setProcessingMsg('결제 승인 중...');
       const payment = await paymentApi.createPayment({ orderId: created.id, paymentMethod });
@@ -149,6 +155,14 @@ const CartPage: React.FC = () => {
       clearCart();
       setCheckoutStep('done');
     } catch (err) {
+      // 409 는 "문안이 바뀌었다"는 뜻이라 되돌아가 다시 동의를 받아야 한다. 완료 화면으로
+      // 보내면 사용자가 할 수 있는 일이 아무것도 없는 자리에 갇힌다.
+      if (isStaleTermsError(err)) {
+        await consent.reload();
+        setError('동의 문안이 변경되었습니다. 바뀐 내용을 확인하고 다시 동의해주세요.');
+        setCheckoutStep('cart');
+        return;
+      }
       setError(errorDetail(err, '알 수 없는 오류'));
       setCheckoutStep('done');
     }
@@ -164,8 +178,15 @@ const CartPage: React.FC = () => {
     let created: MultiItemOrderResponse;
     try {
       created = await orderApi.createMultiItemOrder(
-        USER_ID, orderLines, shippingAddress, appliedCouponCode ?? null, newIdempotencyKey());
+        USER_ID, orderLines, shippingAddress, consent.acceptances,
+        appliedCouponCode ?? null, newIdempotencyKey());
     } catch (err) {
+      if (isStaleTermsError(err)) {
+        await consent.reload();
+        setError('동의 문안이 변경되었습니다. 바뀐 내용을 확인하고 다시 동의해주세요.');
+        setCheckoutStep('cart');
+        return;
+      }
       setError(`주문 생성 실패: ${errorDetail(err, '알 수 없는 오류')}`);
       setCheckoutStep('cart');
       return;
@@ -383,6 +404,16 @@ const CartPage: React.FC = () => {
             </div>
 
             <div className="bg-white rounded-2xl shadow-sm border border-gray-200 p-6">
+              <PrivacyConsentBlock
+                terms={consent.terms}
+                agreed={consent.agreed}
+                onToggle={consent.toggle}
+                loading={consent.loading}
+                error={consent.error}
+              />
+            </div>
+
+            <div className="bg-white rounded-2xl shadow-sm border border-gray-200 p-6">
               <h2 className="font-bold text-gray-900 mb-4">주문 요약</h2>
 
               {/* 소계 */}
@@ -475,10 +506,16 @@ const CartPage: React.FC = () => {
                 </p>
               )}
 
+              {addressReady && !consent.ready && (
+                <p className="mb-3 text-xs text-gray-500">
+                  필수 개인정보 동의 항목에 동의해야 주문할 수 있습니다.
+                </p>
+              )}
+
               {/* 주문 버튼 */}
               <button
                 onClick={handleCheckout}
-                disabled={!addressReady}
+                disabled={!canOrder}
                 className={`w-full py-3 rounded-xl font-semibold transition-colors disabled:opacity-40 disabled:cursor-not-allowed ${
                   paymentMethod === 'TOSS_PAYMENTS'
                     ? 'bg-sky-500 text-white hover:bg-sky-600'

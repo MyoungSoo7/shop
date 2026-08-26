@@ -18,6 +18,7 @@
 import { readFileSync, readdirSync, existsSync } from 'node:fs';
 import { join, basename, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { matchingParen } from './java-source.mjs';
 
 /** 이 파일 기준 저장소 루트 — scripts/harness/lib/ 에서 세 단계 위. */
 const REPO_ROOT = join(dirname(fileURLToPath(import.meta.url)), '..', '..', '..');
@@ -68,6 +69,52 @@ export function walk(dir, out = []) {
 export const norm = (path) => path.replace(/\$?\{[^}]*\}/g, '*').replace(/\/+$/, '') || '/';
 
 /**
+ * 매핑 애노테이션의 괄호 안에서 <b>경로만</b> 뽑는다. 경로가 없으면 빈 문자열.
+ *
+ * <p>스프링이 경로로 인정하는 것은 셋뿐이다: 위치 인자, {@code value =}, {@code path =}.
+ * {@code params}·{@code produces}·{@code consumes}·{@code headers} 의 문자열은 경로가 아니다.
+ *
+ * <p>"괄호 안 아무 문자열"을 경로로 읽으면 양쪽으로 틀린다. {@code @GetMapping(params = "userId")}
+ * 를 경로로 읽으면 클래스 base 에 이어 붙어 `/admin/privacy-consentsuserId` 라는 없는 경로가
+ * 생기고(security-matcher-gate 가 실제로 그렇게 오답을 냈다), 반대로 아예 못 읽으면 그 메서드는
+ * "경로 없는 매핑 = 클래스 base" 로도 세어지지 않아 <b>엔드포인트가 통째로 사라진다</b> —
+ * 라우팅·화면 게이트가 검사하지 않는 경로가 조용히 생긴다는 뜻이다.
+ *
+ * <p>배열이면 첫 원소를 쓴다. 나머지 별칭까지 세어도 라우팅·인가 판정은 같다.
+ */
+export function mappingPath(args) {
+  const named = String(args).match(/(?:^|,)\s*(?:value|path)\s*=\s*(?:\{\s*)?"([^"]*)"/);
+  if (named) return named[1];
+  const positional = String(args).trimStart();
+  if (positional.startsWith('"') || positional.startsWith('{')) {
+    return positional.match(/"([^"]*)"/)?.[1] ?? '';
+  }
+  return '';
+}
+
+/**
+ * 소스에서 매핑 애노테이션을 순서대로 훑는다.
+ *
+ * @returns {{verb:string, index:number, path:string}[]} `path` 는 애노테이션이 적은 경로
+ *          (클래스 base 를 붙이기 <b>전</b>). 경로 속성이 없으면 빈 문자열이다
+ */
+export function mappingAnnotations(src) {
+  const out = [];
+  for (const m of String(src).matchAll(/@(Get|Post|Put|Patch|Delete)Mapping\b/g)) {
+    const after = src.slice(m.index + m[0].length);
+    let path = '';
+    if (after.trimStart().startsWith('(')) {
+      const open = m.index + m[0].length + (after.length - after.trimStart().length);
+      const close = matchingParen(src, open);
+      if (close > 0) path = mappingPath(src.slice(open + 1, close));
+    }
+    out.push({ verb: m[1].toUpperCase(), index: m.index, path });
+  }
+  return out;
+}
+
+
+/**
  * @param {string} repoRoot 저장소 루트 절대경로
  * @param {string[]} services 훑을 서비스 디렉터리 이름들
  * @returns {{key:string, service:string, className:string, endpoints:string[]}[]}
@@ -82,14 +129,14 @@ export function controllers(repoRoot, services = JAVA_SERVICES) {
       const src = readFileSync(file, 'utf8');
       if (!src.includes('@RestController')) continue;
 
-      const classBase = src.match(/@RequestMapping\(\s*"([^"]+)"/)?.[1] ?? '';
-      const methodPaths = [...src.matchAll(/@(?:Get|Post|Put|Patch|Delete)Mapping\(\s*(?:value\s*=\s*)?"([^"]*)"/g)]
-        .map((m) => m[1]);
-      const bareMapping = /@(?:Get|Post|Put|Patch|Delete)Mapping\s*(?:\(\s*\))?\s*[\r\n]/.test(src);
+      const classBase = src.match(/@RequestMapping\(\s*(?:value\s*=\s*)?"([^"]+)"/)?.[1] ?? '';
+      const mappings = mappingAnnotations(src);
 
       const paths = new Set();
-      if (classBase && (bareMapping || methodPaths.length === 0)) paths.add(norm(classBase));
-      for (const mp of methodPaths) {
+      // 매핑이 하나도 없는데 클래스 base 가 있으면 그 base 자체를 표면으로 본다.
+      if (classBase && mappings.length === 0) paths.add(norm(classBase));
+      for (const { path: mp } of mappings) {
+        // 경로 속성이 없는 매핑(`@GetMapping`, `@GetMapping(params = ...)`)은 클래스 base 그 자체다.
         if (!mp) { if (classBase) paths.add(norm(classBase)); continue; }
         paths.add(norm(classBase && !mp.startsWith(classBase) ? classBase + mp : mp));
       }

@@ -31,6 +31,7 @@
     "scripts/harness/test/harness-audit-gate.test.mjs",
     "scripts/harness/test/java-services-roster-gate.test.mjs",
     "scripts/harness/test/oo-gate.test.mjs",
+    "scripts/harness/test/order-consent-gate.test.mjs",
     "scripts/harness/test/report-freshness.test.mjs",
     "scripts/harness/test/scheduler-lock-gate.test.mjs",
     "scripts/harness/test/session-metrics.test.mjs",

@@ -195,6 +195,12 @@ public class SecurityConfig {
                         // 회수 대기 재고 조회 — 배송 후 환불로 원복이 보류된 주문 목록.
                         // 실행 없는 읽기 전용이라 조회 콘솔들과 동일하게 MANAGER 도 허용.
                         .requestMatchers("/admin/stock-reclaim/**").hasAnyRole("ADMIN", "MANAGER")
+                        // 주문 시점 동의 이력 조회 — 읽기 전용(고치는 경로가 아예 없다).
+                        // 목록 자체인 `/admin/privacy-consents` 도 함께 적는다. 포괄 /admin/** 매처가
+                        // 이 설정에 없으므로, 빠뜨리면 authenticated() 로 떨어져 로그인한 아무나
+                        // 남의 동의 이력을 훑을 수 있다 — `/orders/admin` 과 같은 이유의 같은 관례다.
+                        .requestMatchers("/admin/privacy-consents", "/admin/privacy-consents/**")
+                        .hasAnyRole("ADMIN", "MANAGER")
                         // 운영자 전용 — Outbox DLQ 재처리/스킵.
                         // DLQ 실제 경로는 OutboxAdminController 의 /admin/outbox/dlq 계열이라 이 매처가 덮는다.
                         .requestMatchers("/admin/outbox/**").hasRole("ADMIN")

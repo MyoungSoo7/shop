@@ -79,9 +79,9 @@ class MenuSeedIntegrationTest {
     }
 
     @Test
-    @DisplayName("시드 총 40행 — 커머스 + 운영 범위")
-    void seedsExactlyForty() {
-        assertThat(adapter.findAll()).hasSize(40);
+    @DisplayName("시드 총 41행 — 커머스 + 운영 범위")
+    void seedsExactlyFortyOne() {
+        assertThat(adapter.findAll()).hasSize(41);
     }
 
     @Test
@@ -134,7 +134,7 @@ class MenuSeedIntegrationTest {
     }
 
     @Test
-    @DisplayName("시스템 사이드바 26개 — 앞 3개와 게시판 관리가 RBAC permission 과 짝지어진다")
+    @DisplayName("시스템 사이드바 27개 — 앞 3개와 게시판 관리가 RBAC permission 과 짝지어진다")
     void systemChildren() {
         List<Menu> children = childrenOf("시스템 관리");
 
@@ -156,12 +156,14 @@ class MenuSeedIntegrationTest {
                 // 팝업 관리(V20260827150000)는 교육이 아니라 사이트 콘텐츠지만 자리는 역시 맨 뒤다.
                 // 댓글 관리(V20260827170000)는 '게시판 관리'(게시판 정의)와 다른 표면이다 — 이미 달린
                 // 댓글을 게시판·글을 건너뛰고 훑는 유일한 자리. 자리는 역시 맨 뒤.
-                "수강 신청", "강사 관리", "팝업 관리", "댓글 관리");
+                // 동의 이력(V20260827210000)도 맨 뒤다 — 감사 로그 옆이 어울리지만 그 자리의
+                // sort_order 가 차 있다. 읽기 전용이라 고치는 버튼이 없고, 그래서 '운영'이 아니라 '이력'이다.
+                "수강 신청", "강사 관리", "팝업 관리", "댓글 관리", "동의 이력");
         assertThat(children).extracting(Menu::getRequiredPermission).containsExactly(
                 "SYSTEM_MENU_MANAGE", "SYSTEM_CODE_MANAGE", "SYSTEM_RBAC_MANAGE",
                 null, null, null, null, "SYSTEM_BOARD_MANAGE", null, null, null,
                 null, null, null, null, null, null, null,
-                null, null, null, null, null, null, null, null);
+                null, null, null, null, null, null, null, null, null);
         // 환불은 ADMIN·MANAGER — 서버가 /admin/refunds/** 를 그 등급으로 막는다(조회 전용 표면).
         // 시스템 그룹 안에서 유일하게 등급이 낮은 항목이라 명시적으로 못 박는다.
         assertThat(children.stream().filter(m -> m.getName().equals("환불 운영"))
@@ -181,6 +183,12 @@ class MenuSeedIntegrationTest {
         assertThat(children.stream().filter(m -> m.getName().equals("작업 큐"))
                 .findFirst().orElseThrow().allowedRoles())
                 .containsExactlyInAnyOrder("ADMIN", "MANAGER");
+        // 동의 이력도 같은 이유로 MANAGER 까지 열린다 — 서버가 /admin/privacy-consents 를 ADMIN·MANAGER
+        // 로 막는다. 화면 URL 은 API 경로와 달라야 한다(같으면 새로고침이 JSON 을 렌더한다).
+        Menu privacyConsents = children.stream().filter(m -> m.getName().equals("동의 이력"))
+                .findFirst().orElseThrow();
+        assertThat(privacyConsents.allowedRoles()).containsExactlyInAnyOrder("ADMIN", "MANAGER");
+        assertThat(privacyConsents.getPath()).isEqualTo("/admin/system/privacy-consents");
     }
 
     @Test

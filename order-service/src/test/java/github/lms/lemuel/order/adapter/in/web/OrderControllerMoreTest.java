@@ -102,7 +102,9 @@ class OrderControllerMoreTest {
     @DisplayName("POST /orders/multi: Idempotency-Key 와 함께 다건 주문 생성")
     void createMultiItemOrder() throws Exception {
         login(1L, "USER");
-        when(createMultiItemOrderUseCase.create(eq(1L), any(), eq("SAVE10"), any(), eq("idem-1")))
+        // 인자 6개짜리 정본으로 스텁한다. default 오버로드(5개)로 스텁하면 컨트롤러가 부르는 정본은
+        // 스텁되지 않은 채 null 을 돌려주고, 응답은 201 이 아니라 500 이 된다.
+        when(createMultiItemOrderUseCase.create(eq(1L), any(), eq("SAVE10"), any(), any(), eq("idem-1")))
                 .thenReturn(order());
 
         mockMvc.perform(post("/orders/multi")
@@ -117,7 +119,7 @@ class OrderControllerMoreTest {
         verify(createMultiItemOrderUseCase).create(eq(1L), any(), eq("SAVE10"),
                 eq(new ShippingAddressSnapshot("홍길동", "010-1234-5678", "06236",
                         "서울시 강남구 테헤란로 1", "3층", "부재시 경비실")),
-                eq("idem-1"));
+                any(), eq("idem-1"));
     }
 
     @Test
@@ -132,14 +134,14 @@ class OrderControllerMoreTest {
                                 """))
                 .andExpect(status().isBadRequest());
         verify(createMultiItemOrderUseCase, org.mockito.Mockito.never())
-                .create(anyLong(), any(), any(), any(), any());
+                .create(anyLong(), any(), any(), any(), any(), any());
     }
 
     @Test
     @DisplayName("POST /orders/multi: 라인과 금액 구성(소계·할인·배송비)을 함께 돌려준다")
     void createMultiItemOrder_returnsBreakdown() throws Exception {
         login(1L, "USER");
-        when(createMultiItemOrderUseCase.create(eq(1L), any(), any(), any(), any()))
+        when(createMultiItemOrderUseCase.create(eq(1L), any(), any(), any(), any(), any()))
                 .thenReturn(multiItemOrder());
 
         mockMvc.perform(post("/orders/multi")
@@ -174,7 +176,7 @@ class OrderControllerMoreTest {
                                  "couponCode":"SAVE10",""" + ADDRESS_JSON + "}"))
                 .andExpect(status().isForbidden());
         verify(createMultiItemOrderUseCase, org.mockito.Mockito.never())
-                .create(anyLong(), any(), any(), any(), any());
+                .create(anyLong(), any(), any(), any(), any(), any());
     }
 
     @Test

@@ -1,4 +1,5 @@
 import api from './axios';
+import { ConsentAcceptance } from './privacyConsent';
 import {
   MultiItemOrderResponse,
   OrderCreateRequest,
@@ -31,18 +32,24 @@ export const orderApi = {
    * 배송지는 선택이 아니다 — 서버가 없는 요청을 400 으로 거절한다. 타입에서도 필수로 두어
    * 배송지 없는 결제 화면이 다시 생기지 않게 한다(도입 전에는 운영자가 손으로 채워 넣었다).
    *
+   * 개인정보 동의도 같은 이유로 필수 인자다. 이 주문은 이름·연락처·주소를 택배사로 넘기므로
+   * 동의 이력이 함께 남아야 하고, 기록은 주문과 <b>같은 트랜잭션</b>에서 일어난다 — 필수 항목이
+   * 빠졌으면 주문·재고·쿠폰까지 전부 되돌아간다. 인자를 선택으로 두면 동의를 안 붙인 결제
+   * 화면이 조용히 다시 생긴다(배송지에서 이미 한 번 겪은 형태다).
+   *
    * @param idempotencyKey 같은 키의 재요청은 새 주문을 만들지 않고 기존 주문을 돌려준다.
    */
   createMultiItemOrder: async (
     userId: number,
     lines: OrderLineRequest[],
     shippingAddress: ShippingAddressRequest,
+    consents: ConsentAcceptance[],
     couponCode?: string | null,
     idempotencyKey?: string,
   ): Promise<MultiItemOrderResponse> => {
     const response = await api.post<MultiItemOrderResponse>(
       '/orders/multi',
-      { userId, lines, couponCode: couponCode ?? null, shippingAddress },
+      { userId, lines, couponCode: couponCode ?? null, shippingAddress, consents },
       idempotencyKey ? { headers: { 'Idempotency-Key': idempotencyKey } } : undefined,
     );
     return response.data;

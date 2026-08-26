@@ -12,6 +12,7 @@ import CashReceiptPanel from '@/components/CashReceiptPanel';
 import OrderRequestActions from '@/components/order/OrderRequestActions';
 import OrderShippingAddressPanel from '@/components/order/OrderShippingAddressPanel';
 import OrderGiftPanel from '@/components/order/OrderGiftPanel';
+import OrderPrivacyConsentPanel from '@/components/order/OrderPrivacyConsentPanel';
 import { ORDER_STATUS_LABEL, OrderStatusValue } from '@/api/orderWorkflow';
 
 const USER_ID = 1;
@@ -296,6 +297,11 @@ const MyPage: React.FC = () => {
                         결제는 끝났는데 며칠간 아무 일도 안 일어나는 구간이 생기므로, 그 침묵을
                         해석할 자리가 필요하다. 선물이 아닌 주문에서는 펼쳐도 아무것도 뜨지 않는다. */}
                     <OrderGiftPanel orderId={order.id} />
+
+                    {/* 개인정보 동의 내역 — 열람 요구권에 답하는 자리. 주문 상태와 무관하게
+                        늘 띄운다: 배송이 끝났다고 동의 기록을 확인할 이유가 사라지지 않는다.
+                        동의 기능 이전의 주문에는 이력이 없고, 그 사실을 그대로 적는다. */}
+                    <OrderPrivacyConsentPanel orderId={order.id} />
 
                   </div>
                 );

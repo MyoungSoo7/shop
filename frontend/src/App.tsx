@@ -44,6 +44,7 @@ const OperatorAdminPage = lazy(() => import('./pages/system/OperatorAdminPage'))
 const MetricTrendPage = lazy(() => import('./pages/system/MetricTrendPage'));
 const SalesStatsPage = lazy(() => import('./pages/system/SalesStatsPage'));
 const OrderQueuePage = lazy(() => import('./pages/system/OrderQueuePage'));
+const PrivacyConsentAdminPage = lazy(() => import('./pages/system/PrivacyConsentAdminPage'));
 
 // 관리자 페이지 (lazy load)
 const ProductPage = lazy(() => import('./pages/ProductPage'));
@@ -210,6 +211,11 @@ function App() {
               element={<AdminOnlyRoute><SideNavLayout><PointConsolePage /></SideNavLayout></AdminOnlyRoute>} />
             <Route path="/admin/system/gift-cards"
               element={<AdminOnlyRoute><SideNavLayout><GiftCardConsolePage /></SideNavLayout></AdminOnlyRoute>} />
+            {/* 동의 이력 — 감사 로그 바로 옆이다(둘 다 "남긴 기록을 읽는" 축이고, 둘 다 읽기 전용).
+                서버 /admin/privacy-consents 가 ADMIN·MANAGER 라 라우트도 그에 맞춘다. 화면 URL 을
+                그 API 와 같게 두면 새로고침 때 이력 JSON 이 그대로 브라우저에 뜬다. */}
+            <Route path="/admin/system/privacy-consents"
+              element={<AdminManagerRoute><SideNavLayout><PrivacyConsentAdminPage /></SideNavLayout></AdminManagerRoute>} />
             <Route path="/admin/system/audit-logs"
               element={<AdminOnlyRoute><SideNavLayout><AuditLogConsolePage /></SideNavLayout></AdminOnlyRoute>} />
             <Route path="/admin/system/members"

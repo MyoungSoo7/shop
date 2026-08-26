@@ -4,6 +4,7 @@ import github.lms.lemuel.coupon.application.port.in.CouponUseCase;
 import github.lms.lemuel.coupon.domain.Coupon;
 import github.lms.lemuel.coupon.domain.DiscountTargetLine;
 import github.lms.lemuel.order.application.port.in.CreateMultiItemOrderUseCase;
+import github.lms.lemuel.order.application.port.in.RecordOrderConsentUseCase;
 import github.lms.lemuel.order.application.port.out.CreateShipmentPort;
 import github.lms.lemuel.order.application.port.out.LoadUserForOrderPort;
 import github.lms.lemuel.order.application.port.out.PublishOrderEventPort;
@@ -73,6 +74,7 @@ public class CreateMultiItemOrderService implements CreateMultiItemOrderUseCase 
     private final DescribeVariantOptionsUseCase describeVariantOptionsUseCase;
     private final AssessShippingFeeUseCase assessShippingFeeUseCase;
     private final CreateShipmentPort createShipmentPort;
+    private final RecordOrderConsentUseCase recordOrderConsentUseCase;
 
     public CreateMultiItemOrderService(LoadUserForOrderPort loadUserPort,
                                        LoadProductPort loadProductPort,
@@ -85,7 +87,8 @@ public class CreateMultiItemOrderService implements CreateMultiItemOrderUseCase 
                                        CouponUseCase couponUseCase,
                                        DescribeVariantOptionsUseCase describeVariantOptionsUseCase,
                                        AssessShippingFeeUseCase assessShippingFeeUseCase,
-                                       CreateShipmentPort createShipmentPort) {
+                                       CreateShipmentPort createShipmentPort,
+                                       RecordOrderConsentUseCase recordOrderConsentUseCase) {
         this.loadUserPort = loadUserPort;
         this.loadProductPort = loadProductPort;
         this.loadVariantPort = loadVariantPort;
@@ -98,13 +101,15 @@ public class CreateMultiItemOrderService implements CreateMultiItemOrderUseCase 
         this.describeVariantOptionsUseCase = describeVariantOptionsUseCase;
         this.assessShippingFeeUseCase = assessShippingFeeUseCase;
         this.createShipmentPort = createShipmentPort;
+        this.recordOrderConsentUseCase = recordOrderConsentUseCase;
     }
 
     @Override
     public Order create(Long userId, List<Line> lines, String couponCode,
-                        ShippingAddressSnapshot shippingAddress) {
-        log.info("다건 주문 생성: userId={}, lines={}, coupon={}, 배송지={}",
-                userId, lines.size(), couponCode, shippingAddress != null ? "있음" : "없음");
+                        ShippingAddressSnapshot shippingAddress, ConsentSubmission consent) {
+        log.info("다건 주문 생성: userId={}, lines={}, coupon={}, 배송지={}, 동의={}",
+                userId, lines.size(), couponCode, shippingAddress != null ? "있음" : "없음",
+                consent != null ? "수집" : "미수집경로");
 
         String userEmail = loadUserPort.findEmailById(userId)
                 .orElseThrow(() -> new UserNotExistsException(userId));
@@ -190,6 +195,15 @@ public class CreateMultiItemOrderService implements CreateMultiItemOrderUseCase 
         // 배송지는 저장 전에 붙인다 — 주문서에 굳는 값이라 INSERT 와 같은 행에 들어가야 한다.
         order.attachShippingAddress(shippingAddress);
         Order saved = saveOrderPort.save(order);
+
+        // 동의 이력도 같은 트랜잭션이다. 필수 동의가 빠졌으면 여기서 던져 주문·재고·쿠폰까지
+        // 전부 되돌린다 — 동의 없는 주문을 남기느니 주문을 안 받는 편이 맞다.
+        // consent 가 null 인 것은 "이 경로는 아직 동의를 받지 않는다"는 뜻이고, 어느 경로가
+        // 그런지는 order-consent-gate 가 이름으로 붙들고 있다(조용히 늘어나지 않게).
+        if (consent != null) {
+            recordOrderConsentUseCase.record(new RecordOrderConsentUseCase.RecordCommand(
+                    saved.getId(), userId, consent.acceptances(), consent.ipAddress()));
+        }
 
         // 배송(PENDING)도 같은 트랜잭션에서 만든다. 주문만 남고 배송이 없으면 운영자가 그 주문을
         // 따로 찾아 주소를 손으로 채워야 하고, 그 사이 주문은 "어디로 보낼지 모르는 상태"로 존재한다.

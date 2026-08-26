@@ -36,7 +36,7 @@ import { readFileSync, readdirSync, existsSync } from 'node:fs';
 import { basename, dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { stripJavaComments, matchingParen, antToRegExp } from '../lib/java-source.mjs';
-import { JAVA_SERVICES, walk } from '../lib/java-controllers.mjs';
+import { JAVA_SERVICES, walk, mappingPath } from '../lib/java-controllers.mjs';
 
 const repoRoot = join(dirname(fileURLToPath(import.meta.url)), '..', '..', '..');
 
@@ -142,7 +142,7 @@ export function parseEndpoints(source, { service = '', className = '' } = {}) {
     if (after.trimStart().startsWith('(')) {
       const open = m.index + m[0].length + (after.length - after.trimStart().length);
       const close = matchingParen(src, open);
-      if (close > 0) sub = src.slice(open + 1, close).match(/(?:value\s*=\s*)?"([^"]*)"/)?.[1] ?? '';
+      if (close > 0) sub = mappingPath(src.slice(open + 1, close));
     }
     const path = !sub ? classBase
       : (classBase && !sub.startsWith(classBase) ? classBase + sub : sub);
@@ -492,6 +492,36 @@ describe('검출기 자기검증 — 실제로 밟은 버그들', () => {
     assert.equal(eps.length, 1);
     assert.equal(eps[0].path, '/admin/boards');
     assert.equal(eps[0].method, 'GET');
+  });
+
+  test('params= 로 갈라지는 매핑을 경로로 오독하지 않는다', () => {
+    // 실측 오답: `@GetMapping(params = "userId")` 의 params 값을 경로로 읽어
+    // `/admin/privacy-consentsuserId` 를 만들었다. 그런 경로는 아무 매처와도 안 맞으므로
+    // SecurityConfig 에 `/admin/privacy-consents/**` 가 멀쩡히 있는데도 미보호로 떴다.
+    const src = `
+      @RestController
+      @RequestMapping("/admin/privacy-consents")
+      public class AdminPrivacyConsentController {
+        @GetMapping(params = "userId") public String ofUser() { return ""; }
+        @GetMapping(params = {"termsCode", "termsVersion"}) public String ofTerms() { return ""; }
+      }`;
+    const eps = parseEndpoints(src, {});
+    assert.deepEqual(eps.map((e) => e.path), ['/admin/privacy-consents', '/admin/privacy-consents']);
+  });
+
+  test('경로는 위치 인자·value=·path= 만 인정한다', () => {
+    assert.equal(mappingPath('"/roles"'), '/roles');
+    assert.equal(mappingPath('value = "/roles"'), '/roles');
+    assert.equal(mappingPath('path = "/roles"'), '/roles');
+    assert.equal(mappingPath('{"/roles", "/roles/"}'), '/roles');
+    // 경로가 아닌 속성들 — 여기서 문자열을 주워 오면 없는 경로가 생긴다
+    assert.equal(mappingPath('params = "userId"'), '');
+    assert.equal(mappingPath('produces = "application/json"'), '');
+    assert.equal(mappingPath('consumes = MediaType.APPLICATION_JSON_VALUE'), '');
+    assert.equal(mappingPath('headers = "X-Trace"'), '');
+    // 경로와 함께 오면 경로만
+    assert.equal(mappingPath('value = "/roles", produces = "application/json"'), '/roles');
+    assert.equal(mappingPath('"/roles", params = "userId"'), '/roles');
   });
 
   test('AdminApiKeyFilter 배선이 없는 서비스를 있다고 보지 않는다', () => {

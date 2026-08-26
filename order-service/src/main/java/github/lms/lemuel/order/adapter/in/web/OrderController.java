@@ -9,7 +9,9 @@ import github.lms.lemuel.order.application.port.in.CreateMultiItemOrderUseCase;
 import github.lms.lemuel.order.application.port.in.CreateOrderUseCase;
 import github.lms.lemuel.order.application.port.in.GetOrderUseCase;
 import github.lms.lemuel.order.application.port.in.IdempotentMultiItemOrderUseCase;
+import github.lms.lemuel.common.audit.application.AuditContext;
 import github.lms.lemuel.order.application.port.in.PreviewCouponUseCase;
+import github.lms.lemuel.order.application.port.in.RecordOrderConsentUseCase;
 import github.lms.lemuel.order.application.port.in.SearchOrdersUseCase;
 import github.lms.lemuel.order.domain.Order;
 import github.lms.lemuel.web.security.ResourceOwnership;
@@ -91,7 +93,8 @@ public class OrderController {
             throw new IllegalArgumentException("배송지(shippingAddress)는 필수입니다");
         }
         Order order = createMultiItemOrderUseCase.create(request.userId(), lines, request.couponCode(),
-                request.shippingAddress().toSnapshot(), idempotencyKey);
+                request.shippingAddress().toSnapshot(), toConsentSubmission(request.consents()),
+                idempotencyKey);
         return ResponseEntity.status(HttpStatus.CREATED).body(MultiItemOrderResponse.from(order));
     }
 
@@ -115,11 +118,47 @@ public class OrderController {
                 previewCouponUseCase.preview(request.userId(), request.couponCode(), lines));
     }
 
+    /**
+     * 요청의 동의 목록을 서비스가 받는 형태로 옮긴다.
+     *
+     * <p>동의 시각과 접속지는 <b>요청 본문에서 받지 않는다</b>. 증명하려는 사실을 증명 대상이 스스로
+     * 적게 하면 증명이 아니기 때문이다. 접속지는 이미 {@code AuditContextFilter} 가 요청마다 뽑아
+     * 둔 값을 그대로 쓴다 — 여기서 헤더를 다시 파싱하면 같은 규칙이 두 자리에 생기고, 한쪽만
+     * 고쳐지는 날이 온다. 시각은 서비스가 {@code Clock} 으로 찍는다.
+     *
+     * <p>{@code null} 을 그대로 넘기지 않는 것이 중요하다. 이 경로는 동의를 <b>받는</b> 경로이므로,
+     * 아무것도 안 왔으면 필수 항목 누락으로 거절돼야 한다. null 로 넘기면 "동의를 받지 않는 경로"가
+     * 되어 조용히 통과한다.
+     */
+    private static CreateMultiItemOrderUseCase.ConsentSubmission toConsentSubmission(
+            List<ConsentRequest> consents) {
+        List<RecordOrderConsentUseCase.Acceptance> acceptances =
+                consents == null ? List.of()
+                        : consents.stream()
+                        .map(c -> new RecordOrderConsentUseCase.Acceptance(
+                                c.termsCode(), c.termsVersion(), c.agreed()))
+                        .toList();
+        return new CreateMultiItemOrderUseCase.ConsentSubmission(
+                acceptances, AuditContext.get().ipAddress());
+    }
+
     public record MultiItemOrderRequest(
             @jakarta.validation.constraints.NotNull Long userId,
             @jakarta.validation.constraints.NotEmpty List<LineRequest> lines,
             String couponCode,
-            @Valid ShippingAddressRequest shippingAddress) {}
+            @Valid ShippingAddressRequest shippingAddress,
+            @Valid List<ConsentRequest> consents) {}
+
+    /**
+     * 결제 화면에서 올라온 동의 체크 하나.
+     *
+     * <p>버전을 함께 보내는 것이 핵심이다. 코드만 보내면 서버는 "지금 문안에 동의했다"고 기록하는데,
+     * 사용자가 읽은 것은 화면을 열던 때의 문안이다. 그 사이에 문안이 바뀌었으면 기록이 거짓이 된다.
+     */
+    public record ConsentRequest(
+            @jakarta.validation.constraints.NotBlank String termsCode,
+            @jakarta.validation.constraints.NotNull Integer termsVersion,
+            boolean agreed) {}
 
     public record LineRequest(
             @jakarta.validation.constraints.NotNull Long productId,
