@@ -53,6 +53,9 @@ const ROUTES_WITHOUT_MENU = new Map([
   ['/forgot-password', '공개 — 비밀번호 찾기'],
   ['/reset-password', '공개 — 비밀번호 재설정'],
   ['/order/toss/fail', 'PG 콜백'],
+  // 선물 받기. 진입점은 이 사이트의 메뉴가 아니라 받는 사람 휴대폰으로 간 링크다 — 받는 사람은
+  // 회원이 아니므로 네비게이션에 닿을 일이 없고, 메뉴에 걸면 토큰 없는 진입만 늘어난다.
+  ['/gift/:token', '공개 — 링크로만 진입하는 선물 수령'],
   ['/order/toss/success', 'PG 콜백'],
   ['/cart', '헤더 장바구니 아이콘으로 진입'],
   ['/mypage', '헤더 MY 버튼으로 진입'],

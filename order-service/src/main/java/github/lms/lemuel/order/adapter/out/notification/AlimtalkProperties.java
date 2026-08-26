@@ -31,6 +31,18 @@ public class AlimtalkProperties {
     /** 사건 → 승인된 템플릿 코드. 없는 사건은 발송 대상이 아니다. */
     private Map<OrderNotifiableEvent, String> templates = Map.of();
 
+    /**
+     * 선물 링크 안내 템플릿 코드.
+     *
+     * <p>위의 {@link #templates} 와 달리 <b>없으면 조용히 건너뛰지 않는다</b>. 주문 상태 통지는 못
+     * 가도 고객이 주문 화면에서 확인할 수 있지만, 선물 링크는 이 문자 말고는 받는 사람에게 닿을
+     * 길이 없다. 못 보냈다는 사실이 보내는 사람에게 반드시 돌아가야 한다.
+     */
+    private String giftLinkTemplate;
+
+    /** 선물 본인확인 인증번호 템플릿 코드. 없으면 발송이 실패한다({@link #giftLinkTemplate} 참조). */
+    private String giftCodeTemplate;
+
     public boolean isEnabled() {
         return enabled;
     }
@@ -45,5 +57,21 @@ public class AlimtalkProperties {
 
     public void setTemplates(Map<OrderNotifiableEvent, String> templates) {
         this.templates = templates == null ? Map.of() : templates;
+    }
+
+    public String getGiftLinkTemplate() {
+        return giftLinkTemplate;
+    }
+
+    public void setGiftLinkTemplate(String giftLinkTemplate) {
+        this.giftLinkTemplate = giftLinkTemplate;
+    }
+
+    public String getGiftCodeTemplate() {
+        return giftCodeTemplate;
+    }
+
+    public void setGiftCodeTemplate(String giftCodeTemplate) {
+        this.giftCodeTemplate = giftCodeTemplate;
     }
 }

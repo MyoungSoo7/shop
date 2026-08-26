@@ -11,6 +11,7 @@ import ReviewList from '@/components/review/ReviewList';
 import CashReceiptPanel from '@/components/CashReceiptPanel';
 import OrderRequestActions from '@/components/order/OrderRequestActions';
 import OrderShippingAddressPanel from '@/components/order/OrderShippingAddressPanel';
+import OrderGiftPanel from '@/components/order/OrderGiftPanel';
 import { ORDER_STATUS_LABEL, OrderStatusValue } from '@/api/orderWorkflow';
 
 const USER_ID = 1;
@@ -290,6 +291,11 @@ const MyPage: React.FC = () => {
                     {!['DELIVERED', 'CANCELED', 'REFUNDED', 'REFUND_COMPLETED'].includes(order.status) && (
                       <OrderShippingAddressPanel orderId={order.id} />
                     )}
+
+                    {/* 선물로 보낸 주문이면 배송지가 아직 없다 — 받는 사람이 링크에서 직접 낸다.
+                        결제는 끝났는데 며칠간 아무 일도 안 일어나는 구간이 생기므로, 그 침묵을
+                        해석할 자리가 필요하다. 선물이 아닌 주문에서는 펼쳐도 아무것도 뜨지 않는다. */}
+                    <OrderGiftPanel orderId={order.id} />
 
                   </div>
                 );

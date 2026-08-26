@@ -126,6 +126,13 @@ public class SecurityConfig {
                         // /actuator/metrics(탐색형 단건 조회 API)는 그대로 인증 필요.
                         .requestMatchers("/actuator/health", "/actuator/health/**", "/actuator/info", "/actuator/prometheus").permitAll()
                         .requestMatchers("/games/**").permitAll()
+                        // 선물 수령 — 받는 사람은 회원이 아니다. 가입을 요구하면 "주소를 주기 싫어서"가
+                        // "가입하기 싫어서"로 바뀔 뿐이라 선물이 그대로 죽는다.
+                        // 인가는 링크 토큰(256비트, 해시로만 저장)이 대신하고, 배송지를 낼 수 있으려면
+                        // 받는 사람 번호로 간 인증번호가 한 단계 더 필요하다. 나가는 값도 최소한이다
+                        // (금액 없음, 번호 마스킹). 경로를 /orders 아래에 두지 않은 이유가 이것이다 —
+                        // 인증이 필요한 영역 안쪽을 permitAll 로 뚫으면 열린 범위가 눈에 안 보인다.
+                        .requestMatchers("/gift-claims/**").permitAll()
                         // 네비게이션 메뉴 — 응답이 호출자 권한으로 이미 걸러져 나가므로 401 을 만들지 않는다.
                         // (로그인 화면에서도 셸이 호출한다. 메뉴 숨김은 UX 이고, 실제 인가는 각 API 가 한다.)
                         .requestMatchers(HttpMethod.GET, "/api/menus/me").permitAll()

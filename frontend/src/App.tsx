@@ -17,6 +17,7 @@ import TossPaymentFail from './pages/TossPaymentFail';
 // 인증 필요 페이지 (lazy load)
 const ForgotPassword = lazy(() => import('./pages/ForgotPassword'));
 const ResetPassword = lazy(() => import('./pages/ResetPassword'));
+const GiftClaimPage = lazy(() => import('./pages/GiftClaimPage'));
 const OrderPage = lazy(() => import('./pages/OrderPage'));
 const RecommendPage = lazy(() => import('./pages/RecommendPage'));
 const CartPage = lazy(() => import('./pages/CartPage'));
@@ -118,6 +119,11 @@ function App() {
             <Route path="/forgot-password"    element={<ForgotPassword />} />
             <Route path="/reset-password"     element={<ResetPassword />} />
             <Route path="/order/toss/fail"    element={<TossPaymentFail />} />
+            {/* 선물 받기 — 받는 사람은 이 가게의 회원이 아니다. 여기에 로그인을 걸면 "주소를 주기
+                싫어서" 못 받던 문제가 "가입하기 싫어서"로 이름만 바뀐 채 그대로 남는다. 서버도 이
+                경로(/gift-claims/**)만 permitAll 이다. 토큰이 곧 인가라서 다음 화면(배송지 입력)은
+                6자리 본인확인을 한 번 더 통과해야 열린다. */}
+            <Route path="/gift/:token"        element={<GiftClaimPage />} />
             {/* 게시판 — 라우트는 이 둘이 전부다. 어느 게시판인지는 :boardKey 가 정하고, 무엇이 보이는지는
                 서버가 정의(공개 여부·역할)로 판정한다. 게시판을 새로 만들어도 라우트는 늘지 않는다.
                 메뉴 진입점은 관리자가 /admin/system/boards 에서 붙인다(런타임 생성이라 시드에 없다). */}

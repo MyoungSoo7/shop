@@ -42,6 +42,10 @@ public enum ErrorCode {
     INVALID_BULK_ORDER_STATE(HttpStatus.CONFLICT, "현재 상태에서 처리할 수 없는 대량주문 요청입니다."),
     // 행 단위가 아니라 파일 자체를 읽을 수 없는 경우다 — 행별로 사유를 돌려줄 방법이 없어 전체를 거절한다.
     INVALID_BULK_ORDER_FILE(HttpStatus.BAD_REQUEST, "업로드 파일을 읽을 수 없습니다."),
+    // ─── 선물 주문(받는 사람이 배송지를 낸다) ───
+    // 없는 토큰과 폐기된 토큰을 같은 문구로 돌려준다 — 구분해 주면 유효한 토큰을 찾는 데 쓰인다.
+    GIFT_CLAIM_NOT_FOUND(HttpStatus.NOT_FOUND, "선물 링크를 찾을 수 없습니다."),
+    GIFT_MESSAGE_CHANNEL_UNAVAILABLE(HttpStatus.SERVICE_UNAVAILABLE, "선물 안내를 보낼 채널이 구성되지 않았습니다."),
 
     // ─── user ────────────────────────────────────────────────────────────────
     USER_NOT_FOUND(HttpStatus.NOT_FOUND, "사용자를 찾을 수 없습니다."),

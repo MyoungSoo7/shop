@@ -292,6 +292,48 @@ class SecurityAuthorizationMatrixTest {
     }
 
     /**
+     * 선물 수령 — <b>일부러 열어 둔</b> 경로.
+     *
+     * <p>이 클래스의 다른 묶음이 전부 "닫혔는지"를 보는 데 반해 여기는 "열려 있는지"를 본다.
+     * 받는 사람은 회원이 아니고, 로그인을 요구하면 선물을 못 받는다. 그래서 401 이 떨어지는
+     * 순간 기능 자체가 죽는데 — 매처가 지워지면 {@code anyRequest().authenticated()} 로 조용히
+     * 떨어지므로 컴파일도 다른 테스트도 아무 말을 하지 않는다.
+     *
+     * <p>동시에 <b>열린 범위</b>도 못 박는다. {@code /gift-claims/**} 하나만 열려야 하고,
+     * 인접한 {@code /orders/**} 는 그대로 닫혀 있어야 한다 — 선물 경로를 {@code /orders} 아래에
+     * 두지 않은 이유가 이것이라, 그 전제가 깨지면 여기서 빨간불이 나야 한다.
+     */
+    @Nested
+    @DisplayName("선물 수령 — 비로그인 공개(열린 범위 고정)")
+    class GiftClaimPublic {
+
+        @ParameterizedTest(name = "미인증 통과: {0}")
+        @ValueSource(strings = {
+                "/gift-claims/abc123",
+                "/gift-claims/abc123/code",
+                "/gift-claims/abc123/verify",
+                "/gift-claims/abc123/address"
+        })
+        void 미인증도_통과한다(String path) throws Exception {
+            mvc.perform(get(path)).andExpect(status().isOk());
+        }
+
+        @Test
+        @DisplayName("POST 도 열려 있다 — 인증번호 요청·배송지 제출이 전부 POST 다")
+        void POST_도_열려_있다() throws Exception {
+            mvc.perform(post("/gift-claims/abc123/address").with(csrf()))
+                    .andExpect(status().isOk());
+        }
+
+        @Test
+        @DisplayName("선물 보내는 쪽(/orders/gifts)은 함께 열리지 않는다 — 401")
+        void 보내는_쪽은_여전히_닫혀_있다() throws Exception {
+            mvc.perform(post("/orders/gifts").with(csrf()))
+                    .andExpect(status().isUnauthorized());
+        }
+    }
+
+    /**
      * 프로브 — 모든 경로를 200 으로 받는다.
      *
      * <p>핸들러가 없으면 인가를 통과한 요청이 404 로 떨어져 "통과"와 "경로 없음"이 섞인다.
