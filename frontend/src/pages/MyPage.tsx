@@ -10,6 +10,7 @@ import ReviewForm from '@/components/review/ReviewForm';
 import ReviewList from '@/components/review/ReviewList';
 import CashReceiptPanel from '@/components/CashReceiptPanel';
 import OrderRequestActions from '@/components/order/OrderRequestActions';
+import OrderShippingAddressPanel from '@/components/order/OrderShippingAddressPanel';
 import { ORDER_STATUS_LABEL, OrderStatusValue } from '@/api/orderWorkflow';
 
 const USER_ID = 1;
@@ -32,6 +33,8 @@ const STATUS_CLASS: Record<string, string> = {
   CANCELLATION_REQUESTED: 'bg-orange-100 text-orange-800',
   CANCELLATION_APPROVED: 'bg-orange-100 text-orange-800',
   REFUND_REQUESTED: 'bg-orange-100 text-orange-800',
+  // 교환도 신청 대기라 같은 주황이다. 배송 계열(파랑)로 칠하면 되돌아갈 상태와 구분이 안 된다.
+  EXCHANGE_REQUESTED: 'bg-orange-100 text-orange-800',
   REFUND_COMPLETED: 'bg-purple-100 text-purple-800',
   CANCELED: 'bg-red-100 text-red-800',
   REFUNDED: 'bg-purple-100 text-purple-800',
@@ -280,6 +283,13 @@ const MyPage: React.FC = () => {
                         이 자리가 곧 반품 신청의 진입점이다. 노출 조건은 컴포넌트가 서버
                         전이표를 옮겨 둔 판정으로 정한다. */}
                     <OrderRequestActions order={order} onUpdated={handleOrderUpdated} />
+
+                    {/* 배송지 확인·변경 — 서버 엔드포인트는 처음부터 고객도 부를 수 있었는데
+                        부르는 화면이 운영자 콘솔뿐이라, 주소를 잘못 적은 고객은 전화를 걸어야 했다.
+                        출고 전(PENDING)에만 바꿀 수 있으므로 배송이 끝난 주문에는 띄우지 않는다. */}
+                    {!['DELIVERED', 'CANCELED', 'REFUNDED', 'REFUND_COMPLETED'].includes(order.status) && (
+                      <OrderShippingAddressPanel orderId={order.id} />
+                    )}
 
                   </div>
                 );

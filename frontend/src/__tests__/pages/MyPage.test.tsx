@@ -8,8 +8,10 @@ import { productApi } from '@/api/product';
 import { reviewApi } from '@/api/review';
 import { authApi } from '@/api/auth';
 import { orderWorkflowApi } from '@/api/orderWorkflow';
+import { returnRequestApi } from '@/api/returnRequest';
+import { shippingApi } from '@/api/shipping';
 
-vi.mock('@/api/order', () => ({ orderApi: { getUserOrders: vi.fn() } }));
+vi.mock('@/api/order', () => ({ orderApi: { getUserOrders: vi.fn(), getOrder: vi.fn() } }));
 vi.mock('@/api/product', () => ({ productApi: { getAllProducts: vi.fn() } }));
 vi.mock('@/api/review', () => ({
   reviewApi: {
@@ -30,9 +32,26 @@ vi.mock('@/api/orderWorkflow', async (importOriginal) => ({
     withdrawRequest: vi.fn(),
   },
 }));
+// 신청은 이제 레코드로 간다. 여기서 보는 것은 여전히 "이 화면에 붙어 있는가" 뿐이고,
+// 폼의 동작은 OrderRequestActions.test.tsx 가 따로 본다.
+vi.mock('@/api/returnRequest', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/api/returnRequest')>()),
+  returnRequestApi: {
+    submit: vi.fn(),
+    history: vi.fn(),
+    registerWaybill: vi.fn(),
+    changeRefundAccount: vi.fn(),
+    withdraw: vi.fn(),
+  },
+}));
+vi.mock('@/api/shipping', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/api/shipping')>()),
+  shippingApi: { get: vi.fn(), changeAddress: vi.fn() },
+}));
 
 const mockedOrder = vi.mocked(orderApi);
 const mockedWorkflow = vi.mocked(orderWorkflowApi);
+const mockedReturnRequest = vi.mocked(returnRequestApi);
 const mockedProduct = vi.mocked(productApi);
 const mockedReview = vi.mocked(reviewApi);
 const mockedAuth = vi.mocked(authApi);
@@ -71,6 +90,7 @@ beforeEach(() => {
   mockedOrder.getUserOrders.mockResolvedValue([order()] as never);
   mockedProduct.getAllProducts.mockResolvedValue([product()] as never);
   mockedReview.getUserReviews.mockResolvedValue([] as never);
+  mockedReturnRequest.history.mockResolvedValue([] as never);
   confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(true);
   alertSpy = vi.spyOn(window, 'alert').mockImplementation(() => undefined);
 });
@@ -215,39 +235,50 @@ describe('MyPage — 리뷰', () => {
  * {@code OrderRequestActions.test.tsx} 가 따로 본다.
  */
 describe('MyPage — 취소·환불 신청 진입점', () => {
-  it('결제 완료 주문 카드에서 취소·환불을 신청할 수 있다', async () => {
+  it('결제 완료 주문 카드에서 취소·반품·교환을 신청할 수 있다', async () => {
     await renderAndWait();
 
     expect(screen.getByRole('button', { name: '취소 신청' })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: '환불 신청' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '반품 신청' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '교환 신청' })).toBeInTheDocument();
   });
 
   it('신청이 끝나면 카드의 상태 배지가 한글 라벨로 바뀐다', async () => {
-    mockedWorkflow.requestRefund.mockResolvedValue(
-      order({ status: 'REFUND_REQUESTED' }) as never
-    );
+    mockedReturnRequest.submit.mockResolvedValue({ id: 9, type: 'RETURN' } as never);
+    mockedOrder.getOrder.mockResolvedValue(order({ status: 'REFUND_REQUESTED' }) as never);
     await renderAndWait();
 
-    await userEvent.click(screen.getByRole('button', { name: '환불 신청' }));
-    await userEvent.type(screen.getByLabelText('환불 사유'), '상품 파손');
-    await userEvent.click(screen.getByRole('button', { name: '환불 신청' }));
+    await userEvent.click(screen.getByRole('button', { name: '반품 신청' }));
+    await userEvent.click(screen.getByRole('button', { name: '반품 신청' }));
 
-    await waitFor(() => expect(mockedWorkflow.requestRefund).toHaveBeenCalledWith(100, '상품 파손'));
+    await waitFor(() =>
+      expect(mockedReturnRequest.submit).toHaveBeenCalledWith(100, expect.objectContaining({ type: 'RETURN' }))
+    );
     // 라벨 표가 4개뿐이던 시절엔 여기에 'REFUND_REQUESTED' 라는 enum 이 그대로 찍혔다.
     expect(await screen.findByText('환불 신청됨')).toBeInTheDocument();
     expect(screen.queryByText('REFUND_REQUESTED')).not.toBeInTheDocument();
   });
 
-  it('신청 상태인 주문은 철회만 남는다', async () => {
-    mockedOrder.getUserOrders.mockResolvedValue([order({ status: 'REFUND_REQUESTED' })] as never);
-    mockedWorkflow.withdrawRequest.mockResolvedValue(order({ status: 'PAID' }) as never);
+  /** 교환은 뒤늦게 들어온 상태다 — 라벨 표를 빠뜨리면 카드에 영문 enum 이 그대로 찍힌다. */
+  it('교환 신청 상태도 한글 라벨로 나온다', async () => {
+    mockedOrder.getUserOrders.mockResolvedValue([order({ status: 'EXCHANGE_REQUESTED' })] as never);
     await renderAndWait();
 
-    expect(screen.queryByRole('button', { name: '환불 신청' })).not.toBeInTheDocument();
+    expect(screen.getByText('교환 신청됨')).toBeInTheDocument();
+    expect(screen.queryByText('EXCHANGE_REQUESTED')).not.toBeInTheDocument();
+  });
+
+  it('신청 상태인 주문은 철회만 남는다', async () => {
+    mockedOrder.getUserOrders.mockResolvedValue([order({ status: 'REFUND_REQUESTED' })] as never);
+    mockedOrder.getOrder.mockResolvedValue(order({ status: 'PAID' }) as never);
+    await renderAndWait();
+
+    expect(screen.queryByRole('button', { name: '반품 신청' })).not.toBeInTheDocument();
     await userEvent.click(screen.getByRole('button', { name: '신청 철회' }));
 
+    // 레코드가 없는 주문(이 변경 이전 신청)은 옛 경로로 철회된다.
     await waitFor(() => expect(mockedWorkflow.withdrawRequest).toHaveBeenCalledWith(100));
-    // 철회하면 신청 직전 상태로 돌아간다 — 서버 응답이 곧 새 상태다.
+    // 철회하면 신청 직전 상태로 돌아간다 — 서버가 정하고 화면은 다시 읽는다.
     expect(await screen.findByText('결제 완료')).toBeInTheDocument();
   });
 
@@ -257,7 +288,80 @@ describe('MyPage — 취소·환불 신청 진입점', () => {
 
     expect(screen.getByText('환불됨')).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: '취소 신청' })).not.toBeInTheDocument();
-    expect(screen.queryByRole('button', { name: '환불 신청' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: '반품 신청' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: '교환 신청' })).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: '신청 철회' })).not.toBeInTheDocument();
+    // 배송지 변경도 붙지 않는다 — 환불된 주문에 보낼 곳을 묻는 칸이 남아 있으면 안 된다.
+    expect(screen.queryByRole('button', { name: /배송지 확인/ })).not.toBeInTheDocument();
+  });
+});
+
+/**
+ * 배송지 변경의 <b>진입점</b> 검사.
+ *
+ * 서버의 {@code PATCH /orders/{id}/shipment/address} 는 처음부터 고객도 부를 수 있었는데
+ * 부르는 화면이 운영자 콘솔뿐이었다. 주소를 잘못 적은 고객에게 남은 방법은 전화뿐이었다.
+ */
+describe('MyPage — 배송지 변경 진입점', () => {
+  const shipment = (over: Record<string, unknown> = {}) =>
+    ({
+      id: 1, orderId: 100, status: 'PENDING',
+      recipientName: '홍길동', phone: '010-1111-2222',
+      postalCode: '06236', address1: '서울시 강남구 테헤란로 1', address2: '101호',
+      deliveryMemo: null, carrier: null, trackingNumber: null,
+      shippedAt: null, deliveredAt: null, ...over,
+    }) as never;
+
+  it('배송을 미리 읽지 않는다 — 펼칠 때 한 번만 부른다', async () => {
+    vi.mocked(shippingApi.get).mockResolvedValue(shipment());
+    await renderAndWait();
+
+    // 카드마다 미리 읽으면 주문 수만큼 요청이 나가고 대부분은 404 다.
+    expect(shippingApi.get).not.toHaveBeenCalled();
+
+    await userEvent.click(screen.getByRole('button', { name: /배송지 확인/ }));
+    await waitFor(() => expect(shippingApi.get).toHaveBeenCalledWith(100));
+  });
+
+  it('출고 전이면 배송지를 고쳐 저장할 수 있다', async () => {
+    vi.mocked(shippingApi.get).mockResolvedValue(shipment());
+    vi.mocked(shippingApi.changeAddress).mockResolvedValue(
+      shipment({ address1: '서울시 마포구 월드컵북로 2' })
+    );
+    await renderAndWait();
+
+    await userEvent.click(screen.getByRole('button', { name: /배송지 확인/ }));
+    await userEvent.click(await screen.findByRole('button', { name: '배송지 변경' }));
+    await userEvent.clear(screen.getByLabelText('주소'));
+    await userEvent.type(screen.getByLabelText('주소'), '서울시 마포구 월드컵북로 2');
+    await userEvent.click(screen.getByRole('button', { name: '변경 저장' }));
+
+    await waitFor(() =>
+      expect(shippingApi.changeAddress).toHaveBeenCalledWith(
+        100, expect.objectContaining({ address1: '서울시 마포구 월드컵북로 2' })
+      )
+    );
+    expect(await screen.findByText(/월드컵북로 2/)).toBeInTheDocument();
+  });
+
+  /** 버튼만 사라지면 고객은 화면이 고장난 줄 안다. 왜 못 바꾸는지를 대신 적는다. */
+  it('출고된 뒤에는 변경 버튼 대신 이유가 뜬다', async () => {
+    vi.mocked(shippingApi.get).mockResolvedValue(shipment({ status: 'IN_TRANSIT' }));
+    await renderAndWait();
+
+    await userEvent.click(screen.getByRole('button', { name: /배송지 확인/ }));
+
+    expect(await screen.findByText(/이미 출고되어/)).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: '배송지 변경' })).not.toBeInTheDocument();
+  });
+
+  /** 배송 생성 전 404 는 오류가 아니라 "아직 없음"이다 — 빨간 토스트를 띄우면 안 된다. */
+  it('배송이 아직 없으면 조용히 알린다', async () => {
+    vi.mocked(shippingApi.get).mockRejectedValue(new Error('404'));
+    await renderAndWait();
+
+    await userEvent.click(screen.getByRole('button', { name: /배송지 확인/ }));
+
+    expect(await screen.findByText(/아직 배송 정보가 만들어지지 않았습니다/)).toBeInTheDocument();
   });
 });

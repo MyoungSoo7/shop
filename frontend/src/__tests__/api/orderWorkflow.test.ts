@@ -3,7 +3,10 @@ import {
   orderWorkflowApi,
   canRequestCancellation,
   canRequestRefund,
+  canRequestExchange,
   isAwaitingApproval,
+  hasOpenRequest,
+  AWAITING_APPROVAL_STATUSES,
   ORDER_STATUS_LABEL,
   type OrderStatusValue,
 } from '@/api/orderWorkflow';
@@ -90,11 +93,39 @@ describe('신청 가능 여부 — 서버 전이표의 사본', () => {
     });
   });
 
+  it('교환 신청은 배송 단계에서 가능하되 취소 승인된 주문은 제외다', () => {
+    ['PAID', 'SHIPPING_PENDING', 'IN_TRANSIT', 'DELIVERED'].forEach((s) =>
+      expect(canRequestExchange(s)).toBe(true)
+    );
+    // 취소가 승인된 주문은 돈이 돌아가는 중이라 보낼 물건이 없다.
+    expect(canRequestExchange('CANCELLATION_APPROVED')).toBe(false);
+    expect(canRequestExchange('CREATED')).toBe(false);
+  });
+
+  it('종단 상태에서는 아무 신청도 열리지 않는다 (교환 포함)', () => {
+    ['CANCELED', 'REFUNDED'].forEach((s) => expect(canRequestExchange(s)).toBe(false));
+  });
+
   it('승인 대기는 두 신청 상태뿐이다', () => {
     expect(isAwaitingApproval('CANCELLATION_REQUESTED')).toBe(true);
     expect(isAwaitingApproval('REFUND_REQUESTED')).toBe(true);
     expect(isAwaitingApproval('PAID')).toBe(false);
     expect(isAwaitingApproval('CANCELLATION_APPROVED')).toBe(false);
+  });
+
+  /**
+   * 두 상수가 갈리는 지점. 주문 승인 큐에는 취소 승인·환불 승인 버튼밖에 없어서, 교환을 거기
+   * 섞으면 <b>맞는 버튼이 하나도 없는 행</b>이 서고 운영자가 그걸 환불로 승인해 버린다.
+   * 반면 철회는 셋 다 가능하다.
+   */
+  it('교환은 승인 큐에 들어가지 않지만 철회는 열린다', () => {
+    expect(isAwaitingApproval('EXCHANGE_REQUESTED')).toBe(false);
+    expect(AWAITING_APPROVAL_STATUSES).not.toContain('EXCHANGE_REQUESTED');
+
+    expect(hasOpenRequest('EXCHANGE_REQUESTED')).toBe(true);
+    expect(hasOpenRequest('CANCELLATION_REQUESTED')).toBe(true);
+    expect(hasOpenRequest('REFUND_REQUESTED')).toBe(true);
+    expect(hasOpenRequest('PAID')).toBe(false);
   });
 });
 
@@ -103,7 +134,7 @@ describe('ORDER_STATUS_LABEL', () => {
     const all: OrderStatusValue[] = [
       'CREATED', 'PAID', 'SHIPPING_PENDING', 'IN_TRANSIT', 'DELIVERED',
       'CANCELLATION_REQUESTED', 'CANCELLATION_APPROVED', 'REFUND_REQUESTED',
-      'REFUND_COMPLETED', 'CANCELED', 'REFUNDED',
+      'REFUND_COMPLETED', 'EXCHANGE_REQUESTED', 'CANCELED', 'REFUNDED',
     ];
     all.forEach((s) => {
       expect(ORDER_STATUS_LABEL[s]).toBeTruthy();
