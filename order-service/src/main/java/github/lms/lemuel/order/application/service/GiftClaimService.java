@@ -127,7 +127,7 @@ public class GiftClaimService implements SendGiftUseCase, ClaimGiftUseCase {
     public boolean resendLink(Long orderId) {
         // 평문 토큰은 발급 순간에만 존재한다. 그래서 재발송은 "같은 링크를 다시 보내기"가 아니라
         // 반드시 새 토큰이다 — 옛 링크는 그 자리에서 죽는다(GiftClaim#rotateToken 참조).
-        GiftClaim claim = getByOrderId(orderId);
+        GiftClaim claim = requireClaim(orderId);
         String token = GiftSecrets.newToken();
         claim.rotateToken(GiftSecrets.hashToken(token), LocalDateTime.now());
         GiftClaim reissued = saveGiftClaimPort.save(claim);
@@ -137,13 +137,13 @@ public class GiftClaimService implements SendGiftUseCase, ClaimGiftUseCase {
     @Override
     @Transactional(readOnly = true)
     public GiftClaim getByOrderId(Long orderId) {
-        return loadGiftClaimPort.findByOrderId(orderId).orElseThrow(GiftClaimNotFoundException::new);
+        return requireClaim(orderId);
     }
 
     @Override
     @Transactional
     public GiftClaim cancel(Long orderId) {
-        GiftClaim claim = getByOrderId(orderId);
+        GiftClaim claim = requireClaim(orderId);
         claim.cancel(LocalDateTime.now());
         return saveGiftClaimPort.save(claim);
     }
@@ -249,6 +249,18 @@ public class GiftClaimService implements SendGiftUseCase, ClaimGiftUseCase {
                 : address.recipientName();
         return new ShippingAddressSnapshot(name, address.phone(), address.postalCode(),
                 address.address1(), address.address2(), address.deliveryMemo());
+    }
+
+    /**
+     * 주문에 걸린 링크를 꺼낸다. 없으면 없는 것으로 끝낸다.
+     *
+     * <p>{@link #getByOrderId} 를 안에서 부르지 않는 이유는 스프링의 {@code @Transactional} 이
+     * 프록시로 걸리기 때문이다. 같은 객체 안에서 부르면 프록시를 지나지 않아 애노테이션이 조용히
+     * 사라진다 — 컴파일도 되고 테스트도 통과하므로 알아채기 어렵다. 그래서 트랜잭션 경계를 여는
+     * 공개 메서드와 실제 조회를 나눠 두고, 안에서는 항상 이 쪽을 부른다.
+     */
+    private GiftClaim requireClaim(Long orderId) {
+        return loadGiftClaimPort.findByOrderId(orderId).orElseThrow(GiftClaimNotFoundException::new);
     }
 
     private GiftClaim loadByToken(String token) {
