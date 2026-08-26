@@ -79,13 +79,13 @@ class MenuSeedIntegrationTest {
     }
 
     @Test
-    @DisplayName("시드 총 38행 — 커머스 + 운영 범위")
-    void seedsExactlyThirtySix() {
-        assertThat(adapter.findAll()).hasSize(38);
+    @DisplayName("시드 총 39행 — 커머스 + 운영 범위")
+    void seedsExactlyThirtyNine() {
+        assertThat(adapter.findAll()).hasSize(39);
     }
 
     @Test
-    @DisplayName("최상위 11개가 상단 네비 순서대로 들어간다")
+    @DisplayName("최상위 12개가 상단 네비 순서대로 들어간다")
     void rootsInOrder() {
         List<Menu> roots = adapter.findAll().stream()
                 .filter(m -> m.getParentId() == null)
@@ -94,7 +94,12 @@ class MenuSeedIntegrationTest {
 
         assertThat(roots).extracting(Menu::getName).containsExactly(
                 // 상품관리는 사라진 '정산' 그룹이 쓰던 자리(1)로 올라왔다 — 대시보드 바로 뒤다.
-                "대시보드", "상품관리", "배송", "승인", "시스템 관리",
+                // '반품·교환'은 '승인' 의 자식이 아니라 바로 뒤 형제다 — '승인' 은 ITEM 이라
+                // 자식을 붙이려면 GROUP 으로 바꿔야 하고, 그러면 그 링크로 들어가던 취소·환불
+                // 승인 큐가 링크가 아니게 된다. 맨 뒤(MAX+1)가 아닌 이유는 프론트 폴백
+                // (menuFallback.ts)이 같은 자리에 두기 때문이다 — 순서가 갈리면 서버가 죽어
+                // 폴백이 뜨는 순간에야 그 사실이 드러난다.
+                "대시보드", "상품관리", "배송", "승인", "반품·교환", "시스템 관리",
                 // 대량주문은 관리자 기능이 아니라 구매자가 자기 주문을 올리는 경로다 — SHOP 최상위.
                 // 나눠 결제는 주문(20)과 잔액 확인(30) 사이 — 주문에서 결제로 이어지는 순서다.
                 // 내 알림(35)은 내 포인트·상품권(30) 다음 — 둘 다 "내 것"을 보는 개인 화면이다.

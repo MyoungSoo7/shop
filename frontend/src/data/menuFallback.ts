@@ -52,6 +52,13 @@ export const FALLBACK_MENUS: FallbackMenuNode[] = [
     area: 'BACKOFFICE', type: 'ITEM', roles: ['ADMIN', 'MANAGER'],
   },
   {
+    // '승인' 의 자식이 아니라 형제다 — '승인' 은 ITEM 이라 자식을 붙이려면 GROUP 으로 바꿔야 하고,
+    // 그러면 지금 그 링크로 들어가는 취소·환불 승인 큐가 링크가 아니게 된다.
+    id: -122, name: '반품·교환', path: '/admin/approvals/returns', icon: '🔁',
+    description: '승인 · 회수 확인 · 환불 · 교환 재배송',
+    area: 'BACKOFFICE', type: 'ITEM', roles: ['ADMIN', 'MANAGER'],
+  },
+  {
     id: -7, name: '시스템 관리', shortName: '시스템', path: '/admin/system/menus', icon: '⚙️',
     description: 'System Administration', area: 'SYSTEM', type: 'GROUP', roles: ['ADMIN'],
     children: [

@@ -53,6 +53,7 @@ const AdminDashboardPage = lazy(() => import('./pages/AdminDashboardPage'));
 const ShippingAdminPage = lazy(() => import('./pages/ShippingAdminPage'));
 const ShippingPolicyAdminPage = lazy(() => import('./pages/ShippingPolicyAdminPage'));
 const OrderApprovalPage = lazy(() => import('./pages/OrderApprovalPage'));
+const ReturnRequestAdminPage = lazy(() => import('./pages/ReturnRequestAdminPage'));
 const SellerTierAdminPage = lazy(() => import('./pages/SellerTierAdminPage'));
 
 // 운영 관제 (최고 관리자 전용) — operation-service 인시던트 콘솔
@@ -151,6 +152,12 @@ function App() {
               element={<AdminOnlyRoute><SideNavLayout><ShippingPolicyAdminPage /></SideNavLayout></AdminOnlyRoute>} />
             {/* 취소·환불 승인 큐 — 사용자가 신청한 건을 운영자가 종단으로 보낸다 */}
             <Route path="/admin/approvals"    element={<AdminManagerRoute><OrderApprovalPage /></AdminManagerRoute>} />
+            {/* 반품·교환 처리 — 승인 → 회수 확인 → 환불/재배송. 위 승인 큐와 나눈 이유는 신청 하나가
+                단계마다 다른 버튼을 요구해서다. URL 이 /admin/return-requests 가 아닌 이유: 그건 이
+                화면이 부르는 API 경로이고, 겹치면 새로고침 때 목록 JSON 이 렌더된다. 승인 그룹 아래로
+                두면 nginx SPA 폴백(approvals 접두사)에 그대로 얹힌다. */}
+            <Route path="/admin/approvals/returns"
+              element={<AdminManagerRoute><ReturnRequestAdminPage /></AdminManagerRoute>} />
             <Route path="/tags"               element={<AdminManagerRoute><TagManagementPage /></AdminManagerRoute>} />
 
             {/* ── 최고 관리자 전용: 운영 관제 — 시스템 관리(운영관리)로 편입, 구 경로는 리다이렉트 ── */}

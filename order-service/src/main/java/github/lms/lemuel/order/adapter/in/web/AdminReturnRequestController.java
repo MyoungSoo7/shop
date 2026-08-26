@@ -32,6 +32,7 @@ import java.util.List;
  *   GET  /admin/return-requests/{id}                  → 단건
  *   POST /admin/return-requests/{id}/approve          → 승인
  *   POST /admin/return-requests/{id}/reject           → 거절 (주문 상태 복귀)
+ *   PUT  /admin/return-requests/{id}/return-waybill   → 회수 송장 대리 등록
  *   POST /admin/return-requests/{id}/collect          → 회수 확인 (재고 원복)
  *   POST /admin/return-requests/{id}/exchange-shipment→ 교환품 재배송 (배송 흐름 복귀)
  *   POST /admin/return-requests/{id}/refund           → 환불 실행 + 신청 종료
@@ -91,6 +92,18 @@ public class AdminReturnRequestController {
                                                         Principal principal) {
         return ResponseEntity.ok(ReturnRequestResponse.from(
                 processOrderReturnUseCase.reject(requestId, body == null ? null : body.reason(), actor(principal))));
+    }
+
+    @Operation(summary = "회수 송장 대리 등록",
+            description = "고객이 전화로 알려 온 송장을 운영자가 대신 적는다")
+    @PutMapping("/{requestId}/return-waybill")
+    public ResponseEntity<ReturnRequestResponse> registerReturnWaybill(
+            @PathVariable Long requestId,
+            @Valid @RequestBody ReturnWaybillRequest request,
+            Principal principal) {
+        return ResponseEntity.ok(ReturnRequestResponse.from(
+                requestOrderReturnUseCase.registerReturnWaybill(
+                        requestId, request.carrier(), request.trackingNumber(), actor(principal))));
     }
 
     @Operation(summary = "회수 확인",

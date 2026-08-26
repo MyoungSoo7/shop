@@ -15,15 +15,20 @@ const childrenOf = (role: string, groupName: string) =>
   resolveFallbackMenus(role).find((m) => m.name === groupName)?.children.map((c) => c.name) ?? [];
 
 describe('상단 네비 — 역할별 항목·순서 고정', () => {
-  it('ADMIN: 대시보드·상품관리·배송·승인·시스템', () => {
+  // '반품·교환'은 '승인' 바로 뒤다 — '승인' 의 자식이 아니라 형제. '승인' 은 ITEM 이라
+  // 자식을 붙이려면 GROUP 으로 바꿔야 하고, 그러면 지금 그 링크로 들어가는 취소·환불 승인
+  // 큐가 링크가 아니게 된다. 시드(V20260827160000)도 같은 자리에 끼우도록 뒤를 한 칸 민다.
+  it('ADMIN: 대시보드·상품관리·배송·승인·반품교환·시스템', () => {
     expect(labelsOf('ADMIN')).toEqual([
-      '대시보드', '상품관리', '배송', '승인', '시스템',
+      '대시보드', '상품관리', '배송', '승인', '반품·교환', '시스템',
     ]);
   });
 
   it('MANAGER: ADMIN 목록에서 시스템만 빠진다', () => {
+    // 반품 응대는 CS 업무라 MANAGER 에게도 열린다 — 서버의 /admin/return-requests/**
+    // 매처가 ADMIN,MANAGER 이므로 죽은 링크가 아니다.
     expect(labelsOf('MANAGER')).toEqual([
-      '대시보드', '상품관리', '배송', '승인',
+      '대시보드', '상품관리', '배송', '승인', '반품·교환',
     ]);
   });
 

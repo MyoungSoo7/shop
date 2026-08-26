@@ -239,6 +239,20 @@ export const adminReturnRequestApi = {
     return response.data;
   },
 
+  /**
+   * 회수 송장 대리 등록.
+   *
+   * <p>고객이 화면 대신 전화로 송장을 알려 오는 일이 잦다. 이 경로가 없으면 회수 확인이
+   * 영영 눌리지 않는다 — 회수 확인은 송장을 근거로만 찍히기 때문이다.
+   */
+  registerReturnWaybill: async (
+    requestId: number, payload: WaybillPayload,
+  ): Promise<ReturnRequestResponse> => {
+    const response = await api.put<ReturnRequestResponse>(
+      `/admin/return-requests/${requestId}/return-waybill`, payload);
+    return response.data;
+  },
+
   /** 회수 확인 — 이 시점에 재고가 판매 가능으로 복귀한다. */
   collect: async (requestId: number): Promise<ReturnRequestResponse> => {
     const response = await api.post<ReturnRequestResponse>(`/admin/return-requests/${requestId}/collect`);
