@@ -16,6 +16,18 @@ import type { MenuArea, MenuNodeType, NavMenuNode } from '@/api/menu';
  * 결과가 나온다. 어차피 폴백은 "서버가 죽었을 때의 근사치"이고, 실제 인가는 각 API 가 한다.
  */
 export interface FallbackMenuNode {
+  /**
+   * <b>트리 전체에서</b> 유일해야 한다. 최상위와 남의 그룹 자식까지 통틀어서다. 서버가 주는
+   * 실제 메뉴 id 와 섞이지 않도록 전부 음수를 쓴다.
+   *
+   * <p>한 번 겹친 적이 있다: 최상위 '반품·교환'이 시스템 그룹의 자식 '수강 신청'과 같은 -122 를
+   * 집었다. 새 화면은 대개 그룹 자식으로 들어가 뒷번호가 계속 늘어나므로, 최상위에 번호를
+   * 새로 줄 때 "지금 안 쓰는 것 같은" 뒷번호를 집으면 이렇게 된다. 앞의 빈 번호부터 채운다.
+   *
+   * <p>지금은 겹쳐도 화면이 곧바로 깨지지는 않는다 — 상단 네비의 활성 표시는 트레일의 <i>뿌리</i>
+   * id 만 보기 때문이다(`Layout.tsx`). 그래서 눈으로는 안 잡힌다. `menuFallbackParity.test.ts` 의
+   * 유일성 검사가 대신 잡는다.
+   */
   id: number;
   name: string;
   shortName?: string;
@@ -54,7 +66,7 @@ export const FALLBACK_MENUS: FallbackMenuNode[] = [
   {
     // '승인' 의 자식이 아니라 형제다 — '승인' 은 ITEM 이라 자식을 붙이려면 GROUP 으로 바꿔야 하고,
     // 그러면 지금 그 링크로 들어가는 취소·환불 승인 큐가 링크가 아니게 된다.
-    id: -122, name: '반품·교환', path: '/admin/approvals/returns', icon: '🔁',
+    id: -5, name: '반품·교환', path: '/admin/approvals/returns', icon: '🔁',
     description: '승인 · 회수 확인 · 환불 · 교환 재배송',
     area: 'BACKOFFICE', type: 'ITEM', roles: ['ADMIN', 'MANAGER'],
   },

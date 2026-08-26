@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { resolveFallbackMenus } from '@/data/menuFallback';
+import { FALLBACK_MENUS, resolveFallbackMenus, type FallbackMenuNode } from '@/data/menuFallback';
 
 /**
  * 네비게이션 회귀 고정 — 트리 기반 네비게이션이 <b>메뉴 시드와 같은 것</b>을 그리는지.
@@ -100,5 +100,33 @@ describe('사이드바 머리글', () => {
     expect(system?.label).toBe('시스템');
     expect(system?.name).toBe('시스템 관리');
     expect(system?.description).toBe('System Administration');
+  });
+});
+
+describe('폴백 id 유일성', () => {
+  // 역할로 거르기 *전*의 원본을 본다. 거른 트리만 보면 역할이 달라 한 번도 같이 그려지지 않는
+  // 두 항목의 충돌을 놓친다 — 실제로 겹쳤던 최상위 '반품·교환'(ADMIN·MANAGER)과 시스템 자식
+  // '수강 신청'(ADMIN)이 그런 짝이었다.
+  const flatten = (nodes: FallbackMenuNode[]): FallbackMenuNode[] =>
+    nodes.flatMap((node) => [node, ...flatten(node.children ?? [])]);
+
+  it('트리 전체에서 id 가 겹치지 않는다', () => {
+    const all = flatten(FALLBACK_MENUS);
+    const seen = new Map<number, string>();
+    const dupes: string[] = [];
+
+    all.forEach((node) => {
+      const owner = seen.get(node.id);
+      // 어느 둘이 겹쳤는지까지 남긴다 — 개수만 세면 고칠 자리를 다시 찾아야 한다.
+      if (owner !== undefined) dupes.push(`${node.id}: ${owner} ↔ ${node.name}`);
+      else seen.set(node.id, node.name);
+    });
+
+    expect(dupes).toEqual([]);
+    expect(all.length).toBe(seen.size);
+  });
+
+  it('id 는 전부 음수다 — 서버가 주는 실제 메뉴 id 와 섞이면 안 된다', () => {
+    expect(flatten(FALLBACK_MENUS).filter((node) => node.id >= 0)).toEqual([]);
   });
 });
