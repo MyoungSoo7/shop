@@ -14,6 +14,10 @@ description: 커머스 도메인 핵심 규칙 — 주문/결제/텐더 상태�
 Order:   CREATED → PAID → SHIPPING_PENDING → IN_TRANSIT → DELIVERED
               ↘ CANCELLATION_REQUESTED → CANCELLATION_APPROVED → CANCELED
               ↘ REFUND_REQUESTED → REFUNDED   (종단: CANCELED·REFUNDED)
+              ↘ EXCHANGE_REQUESTED → SHIPPING_PENDING (교환품 재배송 — 되돌아간다)
+                                   ↘ REFUND_REQUESTED / REFUNDED (교환 불가 판정 시)
+ReturnRequest: REQUESTED → APPROVED → COLLECTED → COMPLETED
+                        ↘ REJECTED / WITHDRAWN  (종단: COMPLETED·REJECTED·WITHDRAWN)
 Payment: READY → AUTHORIZED → CAPTURED → REFUNDED   (AUTHORIZED→FAILED/CANCELED)
 Tender:  PENDING → AUTHORIZED → CAPTURED → REFUNDED  (→FAILED)
 ```
@@ -23,6 +27,18 @@ Tender:  PENDING → AUTHORIZED → CAPTURED → REFUNDED  (→FAILED)
 - CAPTURED = 정산 대상. `capture` 이후 취소 불가(환불 경로 사용).
 - IN_TRANSIT/DELIVERED 도달 시 `shipped=true` 영구기록 — 이후 환불 배송비 차감 근거.
 - `REFUND_COMPLETED` 는 @Deprecated(레거시 호환) — 신규 전이는 `REFUNDED` 하나로.
+- **교환은 환불과 별도 상태**다. 교환은 배송 흐름으로 되돌아가지만 `REFUND_REQUESTED` 에서 갈 수 있는
+  곳은 `REFUNDED` 뿐이라, 교환을 환불 신청으로 받아 두면 되돌아갈 길이 막힌다.
+- **신청 상태와 주문 상태는 별개 축**이다(`OrderReturnRequest` ↔ `Order`). 반품 신청이 REJECTED 여도
+  주문은 신청 직전 상태로 돌아갈 뿐이라, 두 축을 한 enum 으로 합치면 "거절된 배송중 주문"을 표현할 수 없다.
+  예외도 나눠 둔다 — `InvalidReturnRequestStateException` 은 신청 상태, `InvalidOrderStateException` 은 주문 상태.
+- 신청 레코드는 주문당 **열린 것 하나**(부분 유니크 인덱스 `ux_order_return_requests_open`). 서비스의
+  `findOpenByOrderId` 검사는 사람이 읽을 메시지용이고, 동시 요청의 최종 방어선은 DB 인덱스다.
+- **재고 원복은 회수 확인(COLLECTED) 시점**에만 — `restoreStockOnReturn`. 배송 후 환불은 물건이 고객
+  손에 있어 되돌리지 않는다. 승인 시점에 원복하면 오지 않은 물건이 판매 가능 재고가 된다.
+- 무통장·가상계좌(`PaymentDomain.awaitsDeposit()`)는 PG 로 되돌릴 길이 없어 **환불 계좌**가 필요하다.
+  필요 여부는 접수 시점에 굳혀 `refund_account_required` 로 보관한다(대기열이 결제를 다시 묻지 않도록,
+  그리고 접수 후 결제가 바뀌어도 고객이 계좌를 낸 근거와 판정이 어긋나지 않도록).
 - `TenderType`: CARD/KAKAO_PAY/…/VIRTUAL_ACCOUNT 은 `usesExternalPg=true`, POINT/GIFT_CARD 은 내부잔액(PG 없이 즉시 캡처).
   환불은 **외부 PG 먼저, 내부잔액 마지막 복원**.
 

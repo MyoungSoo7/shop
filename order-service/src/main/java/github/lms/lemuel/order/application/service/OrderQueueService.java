@@ -39,6 +39,10 @@ public class OrderQueueService implements ViewOrderQueuesUseCase {
                     List.of(OrderStatus.REFUND_REQUESTED), false),
             new QueueDef("CANCELLATION_REQUESTED", "취소 신청", 24,
                     List.of(OrderStatus.CANCELLATION_REQUESTED), false),
+            // 교환은 환불보다 아래에 둔다 — 돈이 묶이는 대신 물건이 묶이고, 되돌리는 비용이 낮다.
+            // 다만 회수·재배송 두 번의 배송이 남아 있어 방치하면 체감 지연이 가장 길어진다.
+            new QueueDef("EXCHANGE_REQUESTED", "교환 신청", 24,
+                    List.of(OrderStatus.EXCHANGE_REQUESTED), false),
             // 승인은 났는데 종단(CANCELED)까지 못 간 주문. 고객 화면에는 "취소 승인"이 떠 있고
             // 실제로는 아무것도 돌려받지 못한 상태라, 신청 대기보다 오히려 나쁘다.
             new QueueDef("CANCELLATION_APPROVED", "취소 승인 후 미완료", 24,

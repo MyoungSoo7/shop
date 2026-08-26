@@ -241,6 +241,11 @@ public class SecurityConfig {
                         // CS 업무라 MANAGER 까지 연다. 목록이 아니라 집계만 나가지만, 밀린 취소·환불
                         // 신청 건수는 "지금 이 가게가 어디까지 감당하고 있는가"를 그대로 드러낸다.
                         .requestMatchers("/admin/order-queues", "/admin/order-queues/**").hasAnyRole("ADMIN", "MANAGER")
+                        // 반품·교환 처리 콘솔 — 승인·거절·회수 확인·환불 실행·환불 계좌 정정. 돈이 나가는
+                        // 경로라 환불 콘솔과 같은 등급으로 묶되, 반품 응대는 CS 업무 그 자체라 MANAGER 까지
+                        // 연다. 고객이 스스로 하는 신청·철회는 여기가 아니라 /orders/{id}/return-requests
+                        // 아래에 있고, 그쪽은 컨트롤러가 주문 주인을 직접 대조한다.
+                        .requestMatchers("/admin/return-requests", "/admin/return-requests/**").hasAnyRole("ADMIN", "MANAGER")
                         // 결제 환불 이력 조회 (관리자·매니저·본인) — 더 세밀한 권한은 향후 Audit PR 에서
                         .requestMatchers("/api/payments/*/refunds").hasAnyRole("ADMIN", "MANAGER", "USER")
                         // 환불 실행(직접 PG 환불) — "어드민 승인 후 환불" 원칙에 따라 운영자 전용.

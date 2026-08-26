@@ -58,7 +58,10 @@ public class SalesStatsService implements ViewSalesStatsUseCase {
             OrderStatus.IN_TRANSIT,
             OrderStatus.DELIVERED,
             OrderStatus.CANCELLATION_REQUESTED,
-            OrderStatus.REFUND_REQUESTED);
+            OrderStatus.REFUND_REQUESTED,
+            // 교환은 돈이 움직이지 않는다 — 같은 값의 물건이 오갈 뿐이라 매출에서 빼면 그 기간의
+            // 매출이 교환 건수만큼 줄었다가 재배송 후 되살아나는 톱니가 생긴다.
+            OrderStatus.EXCHANGE_REQUESTED);
 
     private final LoadSalesStatsPort salesPort;
     private final Clock clock;

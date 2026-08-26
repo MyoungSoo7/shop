@@ -30,6 +30,14 @@ public enum OrderNotifiableEvent {
     /** 환불 신청 접수. */
     REFUND_RECEIVED("환불 신청이 접수되었습니다"),
 
+    /**
+     * 교환 신청 접수.
+     *
+     * <p>환불 신청과 문구를 나눈다. 교환은 돈이 돌아오지 않고 물건이 다시 오는 일이라, "환불 신청이
+     * 접수되었습니다"를 받은 고객은 오지 않을 입금을 기다리게 된다.
+     */
+    EXCHANGE_RECEIVED("교환 신청이 접수되었습니다"),
+
     /** 주문 취소 확정. */
     ORDER_CANCELED("주문이 취소되었습니다"),
 
@@ -65,6 +73,7 @@ public enum OrderNotifiableEvent {
             case DELIVERED -> DELIVERED;
             case CANCELLATION_REQUESTED -> CANCELLATION_RECEIVED;
             case REFUND_REQUESTED -> REFUND_RECEIVED;
+            case EXCHANGE_REQUESTED -> EXCHANGE_RECEIVED;
             case CANCELED -> ORDER_CANCELED;
             case REFUNDED, REFUND_COMPLETED -> REFUND_COMPLETED;
             // CREATED(아직 결제 전)·SHIPPING_PENDING(창고 내부 사정)·CANCELLATION_APPROVED(중간 상태)는

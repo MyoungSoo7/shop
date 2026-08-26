@@ -177,6 +177,28 @@ public class ChangeOrderStatusService implements ChangeOrderStatusUseCase {
         return refunded;
     }
 
+    @Override
+    @Transactional
+    public Order requestExchange(Long orderId, String reason, String requestedBy) {
+        return changeStatus(orderId, OrderStatus.EXCHANGE_REQUESTED, requestedBy, reason);
+    }
+
+    @Override
+    @Transactional
+    public Order resumeShippingAfterExchange(Long orderId, String reason, String operator) {
+        Order order = loadOrderPort.findById(orderId)
+                .orElseThrow(() -> new OrderNotFoundException(orderId));
+
+        // 교환 재배송은 교환 신청 상태에서만 시작된다. 이 검사가 없으면 아무 주문이나 배송 대기로
+        // 되돌릴 수 있는 경로가 생긴다 — 종단(REFUNDED)까지 간 주문에는 전이표가 막지만,
+        // 배송 중이던 주문을 배송 대기로 되돌리는 것은 전이표만으로는 걸러지지 않는다.
+        if (order.getStatus() != OrderStatus.EXCHANGE_REQUESTED) {
+            throw new InvalidOrderStateException(order.getStatus(),
+                    "교환 재배송은 EXCHANGE_REQUESTED 상태에서만 시작할 수 있습니다");
+        }
+        return changeStatus(orderId, OrderStatus.SHIPPING_PENDING, operator, reason);
+    }
+
     private static String refundApprovalKey(Long orderId) {
         return "order-" + orderId + "-refund-approve";
     }

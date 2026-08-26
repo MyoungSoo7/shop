@@ -49,7 +49,9 @@ public class WithdrawOrderRequestService implements WithdrawOrderRequestUseCase 
                 .orElseThrow(() -> new OrderNotFoundException(orderId));
 
         OrderStatus requested = order.getStatus();
-        if (requested != OrderStatus.CANCELLATION_REQUESTED && requested != OrderStatus.REFUND_REQUESTED) {
+        if (requested != OrderStatus.CANCELLATION_REQUESTED
+                && requested != OrderStatus.REFUND_REQUESTED
+                && requested != OrderStatus.EXCHANGE_REQUESTED) {
             throw new InvalidOrderStateException(requested, "철회할 신청이 없습니다");
         }
 

@@ -31,6 +31,17 @@ public enum OrderStatus {
     CANCELLATION_APPROVED,
     REFUND_REQUESTED,
     /**
+     * 교환 신청됨 — 고객이 <b>환불이 아니라 같은 상품으로의 교체</b>를 요청한 상태.
+     *
+     * <p>환불 신청과 나뉘어 있는 이유는 끝나는 곳이 다르기 때문이다. 환불 신청에서 갈 수 있는 곳은
+     * {@link #REFUNDED} 뿐이지만, 교환은 회수 → 재배송을 거쳐 <b>배송 흐름으로 되돌아간다</b>
+     * ({@code SHIPPING_PENDING}). 교환을 환불 신청으로 받아 두면 그 주문은 되돌아갈 길이 없어
+     * 운영자가 손으로 상태를 되돌리기 전까지 묶인다.
+     *
+     * <p>교환 도중 재고가 없어 환불로 전환하는 경로({@code → REFUND_REQUESTED})도 함께 연다.
+     */
+    EXCHANGE_REQUESTED,
+    /**
      * @deprecated 환불 완료 종단은 {@link #REFUNDED} 로 일원화됨. 신규 전이 없음.
      * enum 값 자체는 과거 이 상태로 기록된 DB 행과의 호환을 위해 보존한다.
      */
@@ -43,13 +54,17 @@ public enum OrderStatus {
 
     static {
         ALLOWED.put(CREATED, EnumSet.of(PAID, CANCELED, CANCELLATION_REQUESTED));
-        ALLOWED.put(PAID, EnumSet.of(SHIPPING_PENDING, REFUND_REQUESTED, REFUNDED, CANCELLATION_REQUESTED));
-        ALLOWED.put(SHIPPING_PENDING, EnumSet.of(IN_TRANSIT, REFUND_REQUESTED, REFUNDED));
-        ALLOWED.put(IN_TRANSIT, EnumSet.of(DELIVERED, REFUND_REQUESTED, REFUNDED));
-        ALLOWED.put(DELIVERED, EnumSet.of(REFUND_REQUESTED, REFUNDED));
+        ALLOWED.put(PAID, EnumSet.of(SHIPPING_PENDING, REFUND_REQUESTED, REFUNDED, CANCELLATION_REQUESTED,
+                EXCHANGE_REQUESTED));
+        ALLOWED.put(SHIPPING_PENDING, EnumSet.of(IN_TRANSIT, REFUND_REQUESTED, REFUNDED, EXCHANGE_REQUESTED));
+        ALLOWED.put(IN_TRANSIT, EnumSet.of(DELIVERED, REFUND_REQUESTED, REFUNDED, EXCHANGE_REQUESTED));
+        ALLOWED.put(DELIVERED, EnumSet.of(REFUND_REQUESTED, REFUNDED, EXCHANGE_REQUESTED));
         ALLOWED.put(CANCELLATION_REQUESTED, EnumSet.of(CANCELLATION_APPROVED, CANCELED));
         ALLOWED.put(CANCELLATION_APPROVED, EnumSet.of(CANCELED, REFUND_REQUESTED, REFUNDED));
         ALLOWED.put(REFUND_REQUESTED, EnumSet.of(REFUNDED));
+        // 교환은 재배송으로 배송 흐름에 되돌아가고(SHIPPING_PENDING), 교체할 재고가 없으면 환불로
+        // 전환된다(REFUND_REQUESTED). REFUNDED 직행은 이미 전액 환불된 결제의 멱등 확정 경로다.
+        ALLOWED.put(EXCHANGE_REQUESTED, EnumSet.of(SHIPPING_PENDING, REFUND_REQUESTED, REFUNDED));
         // 종단 상태 — 추가 전이 없음
         ALLOWED.put(REFUND_COMPLETED, EnumSet.noneOf(OrderStatus.class));
         ALLOWED.put(CANCELED, EnumSet.noneOf(OrderStatus.class));

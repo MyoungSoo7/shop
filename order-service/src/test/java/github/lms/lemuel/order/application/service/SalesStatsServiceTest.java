@@ -193,7 +193,7 @@ class SalesStatsServiceTest {
 
         assertThat(captureCriteria().statuses())
                 .containsExactly("PAID", "SHIPPING_PENDING", "IN_TRANSIT", "DELIVERED",
-                        "CANCELLATION_REQUESTED", "REFUND_REQUESTED")
+                        "CANCELLATION_REQUESTED", "REFUND_REQUESTED", "EXCHANGE_REQUESTED")
                 .doesNotContain("CREATED", "CANCELLATION_APPROVED", "CANCELED",
                         "REFUNDED", "REFUND_COMPLETED");
     }
@@ -333,7 +333,7 @@ class SalesStatsServiceTest {
         assertThat(breakdown.from()).isEqualTo(KST_TODAY.minusDays(29));
         assertThat(breakdown.to()).isEqualTo(KST_TODAY);
         assertThat(breakdown.statuses()).containsExactly("PAID", "SHIPPING_PENDING", "IN_TRANSIT",
-                "DELIVERED", "CANCELLATION_REQUESTED", "REFUND_REQUESTED");
+                "DELIVERED", "CANCELLATION_REQUESTED", "REFUND_REQUESTED", "EXCHANGE_REQUESTED");
     }
 
     @Test

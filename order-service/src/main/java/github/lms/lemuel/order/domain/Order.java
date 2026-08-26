@@ -363,7 +363,7 @@ public class Order {
     /**
      * 취소·환불 <b>신청 철회</b> — 신청 상태에서 신청 직전 상태로 되돌린다.
      *
-     * <p>신청 상태(CANCELLATION_REQUESTED / REFUND_REQUESTED)에서 나가는 길이 승인뿐이면, 마음이
+     * <p>신청 상태(CANCELLATION_REQUESTED / REFUND_REQUESTED / EXCHANGE_REQUESTED)에서 나가는 길이 승인뿐이면, 마음이
      * 바뀐 고객의 주문은 운영자가 처리할 때까지 묶인다. 철회는 그 막다른 길을 여는 정상 경로다.
      *
      * <p>되돌아갈 상태를 임의로 받지 않는다 — <b>그 신청을 낼 수 있었던 상태</b>여야 한다
@@ -376,7 +376,8 @@ public class Order {
      */
     public void withdrawRequest(OrderStatus restoreTo) {
         if (this.status != OrderStatus.CANCELLATION_REQUESTED
-                && this.status != OrderStatus.REFUND_REQUESTED) {
+                && this.status != OrderStatus.REFUND_REQUESTED
+                && this.status != OrderStatus.EXCHANGE_REQUESTED) {
             throw new InvalidOrderStateException(this.status, "철회할 신청이 없습니다");
         }
         if (restoreTo == null) {

@@ -157,6 +157,18 @@ public class RefundPaymentUseCase implements RefundPaymentPort {
                     "Refund amount " + refundAmount + " exceeds refundable " + payment.getRefundableAmount());
         }
 
+        // PG 거래 번호가 없는 결제는 여기서 끊는다. 무통장·가상계좌처럼 입금으로 받은 돈은 되돌릴
+        // PG 거래 자체가 없어서 pgTransactionId 가 비어 있을 수 있는데, 그대로 내려보내면
+        // PaymentGateway.fromTransactionId 가 "라우팅할 PG 를 못 찾겠다"는 취지의 예외를 던진다 —
+        // 운영자는 PG 장애로 읽고 재시도를 반복하지만 몇 번을 눌러도 결과가 같다. 실제로 필요한
+        // 행동은 고객 계좌로 송금하는 것이므로, 그 사실을 그대로 말한다.
+        if (payment.getPgTransactionId() == null || payment.getPgTransactionId().isBlank()) {
+            String message = "PG 거래 번호가 없는 결제입니다 — 계좌 환불 대상이라면 반품 신청의 환불 계좌로 "
+                    + "송금해 주세요 (paymentId=" + paymentId + ", method=" + payment.getPaymentMethod() + ")";
+            refundLifecycle.fail(refund.getId(), message);
+            throw new PaymentInvariantViolationException(message);
+        }
+
         // PG 환불 호출. 실패하면 독립 트랜잭션으로 FAILED 이력을 남기고(재시도 근거) 예외를 던져
         // 공유 트랜잭션(결제/주문/이벤트)을 롤백한다 → "환불 성공 시에만 확정" + 유령 환불 방지.
         // 원시 PG 예외(HttpServerErrorException 등)는 RefundException 으로 변환해 502 누수 대신

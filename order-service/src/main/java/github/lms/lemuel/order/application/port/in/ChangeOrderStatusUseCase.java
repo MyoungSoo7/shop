@@ -17,6 +17,21 @@ public interface ChangeOrderStatusUseCase {
 
     Order approveRefund(Long orderId, String reason, String operator);
 
+    /**
+     * 교환 신청 — 주문을 {@code EXCHANGE_REQUESTED} 로 옮긴다.
+     *
+     * <p>환불 신청과 나눠 둔 이유는 끝나는 곳이 다르기 때문이다. 교환은 회수 → 재배송을 거쳐
+     * 배송 흐름으로 <b>되돌아간다</b>({@code → SHIPPING_PENDING}). 이걸 환불 신청으로 받아 두면
+     * 그 주문이 갈 수 있는 곳은 {@code REFUNDED} 뿐이라 되돌아갈 길이 막힌다.
+     */
+    Order requestExchange(Long orderId, String reason, String requestedBy);
+
+    /**
+     * 교환품 재배송 시작 — 주문을 {@code EXCHANGE_REQUESTED} 에서 {@code SHIPPING_PENDING} 으로
+     * 되돌린다. 회수가 확인된 신청에서만 호출된다.
+     */
+    Order resumeShippingAfterExchange(Long orderId, String reason, String operator);
+
     Order changeShippingStatus(Long orderId, String status, String reason, String operator);
 
     /**
