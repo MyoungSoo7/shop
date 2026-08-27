@@ -349,6 +349,82 @@ class SecurityAuthorizationMatrixTest {
     }
 
     /**
+     * 상품 옵션(SKU) 쓰기 — 경로가 {@code /admin} 아래가 아니라서 샜던 자리.
+     *
+     * <p>앞의 네 사고와 원인이 같다(매처 누락 → {@code anyRequest().authenticated()}). 다만
+     * 여기는 <b>경로 모양</b> 때문에 더 안 보였다 — 관리자 조작인데 주소가 {@code /admin} 으로
+     * 시작하지 않아, 관리자 경로를 훑는 눈에도 목록을 훑는 눈에도 걸리지 않는다.
+     * 열려 있던 동안 로그인한 누구나 남의 상품에 SKU 를 만들며 추가금과 초기재고를 자기가
+     * 정할 수 있었고, {@code decrease-stock} 으로 남의 재고를 깎을 수 있었다.
+     *
+     * <p>동시에 <b>닫힌 범위</b>도 못 박는다. {@code /variants/resolve} 는 구매자가 주문 시점에
+     * 부르는 경로라 ADMIN 으로 잠기면 주문이 죽는다. 매처의 {@code *} 를 {@code **} 로 넓히는
+     * 순간 그 경로가 함께 잠기는데, 그건 "더 안전해졌다"처럼 보이는 변경이라 리뷰에서 통과하기
+     * 쉽다 — 그래서 여기서 빨간불이 나야 한다. 목록 GET 도 같은 이유로 열려 있어야 한다.
+     */
+    @Nested
+    @DisplayName("상품 옵션(SKU) 쓰기 — ADMIN 전용, 단 resolve·조회는 열린 채로")
+    class ProductVariantWrite {
+
+        @ParameterizedTest(name = "USER → 403: POST {0}")
+        @ValueSource(strings = {
+                "/products/1/variants",
+                "/products/1/variants/7/decrease-stock"
+        })
+        void 일반_사용자는_403(String path) throws Exception {
+            mvc.perform(post(path).with(user("u").roles("USER")).with(csrf()))
+                    .andExpect(status().isForbidden());
+        }
+
+        @Test
+        @DisplayName("MANAGER 도 못 쓴다 — 재고·추가금은 상품 콘솔(/admin/products)과 같은 등급이다")
+        void 매니저도_403() throws Exception {
+            mvc.perform(post("/products/1/variants").with(user("m").roles("MANAGER")).with(csrf()))
+                    .andExpect(status().isForbidden());
+        }
+
+        @Test
+        @DisplayName("ADMIN 은 통과한다 — 너무 좁게 잠겨 콘솔이 죽는 것도 회귀다")
+        void ADMIN_은_통과한다() throws Exception {
+            mvc.perform(post("/products/1/variants").with(user("a").roles("ADMIN")).with(csrf()))
+                    .andExpect(status().isOk());
+        }
+
+        @Test
+        @DisplayName("옵션 조합 해석(resolve)은 구매자 경로라 USER 도 통과한다")
+        void resolve_는_구매자도_통과한다() throws Exception {
+            mvc.perform(post("/products/1/variants/resolve").with(user("u").roles("USER")).with(csrf()))
+                    .andExpect(status().isOk());
+        }
+
+        /**
+         * 읽기를 열어 두면 쓰기만 잠근 "메서드 구멍"이 된다 — 쿠폰 사고와 같은 형태다.
+         * 이 목록이 내보내는 것은 SKU 별 재고 수량과 낙관락 버전이라, 구매자에게 필요한
+         * 정보가 아니라 남의 재고를 세는 수단이다. 구매자 경로는 options_json 과 resolve 다.
+         */
+        @Test
+        @DisplayName("옵션 목록 조회도 ADMIN 전용 — 재고 수량이 나가는 읽기다")
+        void 목록_조회는_USER_에게_403() throws Exception {
+            mvc.perform(get("/products/1/variants").with(user("u").roles("USER")))
+                    .andExpect(status().isForbidden());
+        }
+
+        @Test
+        @DisplayName("ADMIN 은 목록을 읽는다 — 콘솔이 옵션을 못 그리면 그것도 회귀다")
+        void 목록_조회는_ADMIN_은_통과한다() throws Exception {
+            mvc.perform(get("/products/1/variants").with(user("a").roles("ADMIN")))
+                    .andExpect(status().isOk());
+        }
+
+        @Test
+        @DisplayName("미인증은 401 — 403 과 구분돼야 화면이 재로그인을 안내할 수 있다")
+        void 미인증은_401() throws Exception {
+            mvc.perform(post("/products/1/variants").with(csrf()))
+                    .andExpect(status().isUnauthorized());
+        }
+    }
+
+    /**
      * 선물 수령 — <b>일부러 열어 둔</b> 경로.
      *
      * <p>이 클래스의 다른 묶음이 전부 "닫혔는지"를 보는 데 반해 여기는 "열려 있는지"를 본다.

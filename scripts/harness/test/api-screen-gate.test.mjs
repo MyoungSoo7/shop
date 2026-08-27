@@ -59,7 +59,10 @@ const MACHINE_ONLY = new Map([
  */
 const SCREEN_PENDING = new Map([
   // --- order-service ---
-  ['order-service/PublicEcommerceCategoryController', '쇼핑 카테고리 탐색 — 관리 화면만 있다'],
+  // 카테고리 탐색 화면이 생겼다(2026-08-27, /browse). 사유가 "관리 화면만 있다"였던 것이 그대로
+  // 설계가 됐다 — 관리 API(/admin/categories)는 비활성 분류까지 내려주므로, 구매자 화면이
+  // 그것을 부르면 아직 열지 않은 분류가 노출된다. 그래서 화면을 옮겨 붙인 게 아니라 공개
+  // API 를 부르는 화면을 따로 만들었다.
   // 환불 운영 콘솔이 생겼다(2026-08-22, /admin/settlement/refunds). 자동 재시도 5회가 끝나면
   // 스케줄러가 손대지 않는데, 그 대상을 볼 화면이 없었다 — 사람이 안 하면 영영 처리되지 않는 건이다.
   // RefundHistoryController 도 함께 내려간다: 화면이 행마다 결제별 환불 이력을 실제로 부른다
@@ -67,7 +70,11 @@ const SCREEN_PENDING = new Map([
   // PG 라우터 상태 카드가 생겼다(2026-08-22, 운영 관제 상단). 사유를 먼저 "설정 콘솔"에서
   // "읽기 전용 상태 점검"으로 정정한 것이 그대로 설계가 됐다 — 조작 버튼 없는 스냅샷 한 장이고,
   // order-service 표면이지만 읽는 맥락이 관제라 operation 화면에 얹었다.
-  ['order-service/ProductVariantController', '상품 옵션(SKU) 관리 화면'],
+  // 상품 옵션(SKU) 관리 화면이 생겼다(2026-08-27, /admin/system/product-variants).
+  // 이 부채는 성격이 달랐다: 화면이 없어 기능을 못 쓰는 정도가 아니라, 서버가 이 경로를
+  // 인가 목록에 올려 두지 않아 로그인한 누구나 남의 상품에 SKU 를 만들고 재고를 깎을 수
+  // 있었다. 경로가 /admin 아래가 아니라(/products/{id}/variants) 관리자 경로를 훑는 눈에
+  // 걸리지 않던 자리다 — 화면을 붙이려고 인가를 확인하다 드러났다.
   // 조직·멤버십 화면이 생겼다(2026-08-22, /admin/system/organizations). organization-service
   // 최초의 화면이다 — 그전까지 조직을 만들고 사람을 붙이는 경로가 API 뿐이었다.
 ]);
@@ -110,7 +117,11 @@ const SCREEN_PENDING = new Map([
 // 2026-08-22: 9 (정산 재실행 + 셀러 평판 — 둘 다 기존 화면에 구획 하나씩. 배선 0.
 //              사유를 먼저 정정·보강한 것이 배치와 형태를 정한 세 번째·네 번째 사례다.)
 // shop 분리(order + operation 범위) 시점 실측: 2
-const PENDING_BUDGET = 2;
+// 2026-08-27: 0 (남은 둘을 다 갚았다 — 카테고리 탐색(/browse)과 상품 옵션 관리
+//              (/admin/system/product-variants). 예산이 0 이라는 것은 "이 범위에서는 새
+//              컨트롤러에 화면이 반드시 따라온다"는 뜻이고, 미루려면 이 숫자를 올려야 해서
+//              그 판단이 diff 에 남는다.)
+const PENDING_BUDGET = 0;
 
 const read = (path) => readFileSync(path, 'utf8');
 

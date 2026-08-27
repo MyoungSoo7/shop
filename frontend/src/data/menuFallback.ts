@@ -117,6 +117,9 @@ export const FALLBACK_MENUS: FallbackMenuNode[] = [
       // 읽기 전용 조회라 등급이 낮다. 다만 '시스템 관리' 그룹 자체가 ADMIN 전용이라 지금은 MANAGER
       // 에게 이 줄이 그려지지 않는다 — 작업 큐·환불 운영과 같은 상태다. 그룹이 열리는 날 같이 열린다.
       { id: -126, name: '동의 이력', path: '/admin/system/privacy-consents', icon: '📝', description: '주문 시점 개인정보 동의 · 문안 버전별 조회', area: 'SYSTEM', type: 'ITEM', roles: ['ADMIN', 'MANAGER'] },
+      // 상품 옵션은 '옵션 카탈로그'(축·값 사전) 옆이 어울리지만 그 자리의 sort_order 가 차 있어
+      // 맨 뒤다. 등급은 ADMIN 만 — 재고 차감이 주문 없이 재고를 줄이고 되돌릴 수 없어서다.
+      { id: -127, name: '상품 옵션', path: '/admin/system/product-variants', icon: '🧩', description: '상품별 SKU 재고 · 추가금 · 조합 해석', area: 'SYSTEM', type: 'ITEM', roles: ['ADMIN'] },
     ],
   },
   {
@@ -170,6 +173,13 @@ export const FALLBACK_MENUS: FallbackMenuNode[] = [
     // 화면 경로에 담을 식별자가 없다(보내는 이를 토큰에서 읽으므로).
     id: -17, name: '포인트 선물', path: '/my/point-transfer', icon: '🎁',
     description: '내 포인트를 다른 회원에게 보내기',
+    area: 'SHOP', type: 'ITEM', roles: ['USER'],
+  },
+  {
+    // 카테고리 탐색 — 화면은 /browse 이고 API 는 /categories 다. 위 셋과 같은 이유로
+    // 화면 경로를 API 세그먼트와 겹치지 않게 둔다. 고른 분류는 ?category=슬러그로 남는다.
+    id: -18, name: '카테고리 탐색', path: '/browse', icon: '🧭',
+    description: '분류를 골라 그 안의 상품 둘러보기',
     area: 'SHOP', type: 'ITEM', roles: ['USER'],
   },
 ];

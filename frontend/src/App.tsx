@@ -26,6 +26,7 @@ const MyBalancesPage = lazy(() => import('./pages/MyBalancesPage'));
 const WishlistPage = lazy(() => import('./pages/WishlistPage'));
 const AddressBookPage = lazy(() => import('./pages/AddressBookPage'));
 const PointTransferPage = lazy(() => import('./pages/PointTransferPage'));
+const CategoryBrowsePage = lazy(() => import('./pages/CategoryBrowsePage'));
 const InquiryPage = lazy(() => import('./pages/InquiryPage'));
 const NotificationsPage = lazy(() => import('./pages/NotificationsPage'));
 const BulkOrderPage = lazy(() => import('./pages/BulkOrderPage'));
@@ -57,6 +58,7 @@ const TagManagementPage = lazy(() => import('./pages/TagManagementPage'));
 const EcommerceCategoryAdmin = lazy(() => import('./pages/EcommerceCategoryAdmin'));
 const DisplaySectionAdminPage = lazy(() => import('./pages/DisplaySectionAdminPage'));
 const OptionCatalogAdminPage = lazy(() => import('./pages/OptionCatalogAdminPage'));
+const ProductVariantAdmin = lazy(() => import('./pages/ProductVariantAdmin'));
 const AdminDashboardPage = lazy(() => import('./pages/AdminDashboardPage'));
 const ShippingAdminPage = lazy(() => import('./pages/ShippingAdminPage'));
 const ShippingPolicyAdminPage = lazy(() => import('./pages/ShippingPolicyAdminPage'));
@@ -152,6 +154,10 @@ function App() {
             {/* 포인트 선물 — API 는 /api/points/transfers 다. 화면에 담을 식별자가 없는 것은
                 보내는 이를 경로가 아니라 토큰에서 읽기 때문이다. */}
             <Route path="/my/point-transfer" element={<ProtectedRoute><PointTransferPage /></ProtectedRoute>} />
+            {/* 카테고리 탐색 — 경로가 /categories 가 아닌 이유는 위 '내 문의'와 같다.
+                categories 는 nginx 두 벌이 게이트웨이로 프록시하는 API 세그먼트라,
+                같으면 새로고침에서 카테고리 목록 JSON 이 뜬다. 고른 분류는 ?category=슬러그. */}
+            <Route path="/browse" element={<ProtectedRoute><CategoryBrowsePage /></ProtectedRoute>} />
             {/* 찜 — 장바구니와 다른 목록이다("지금 살 것" 대 "언젠가 살 것"). 경로도 섞지 않는다. */}
             <Route path="/wishlist"    element={<ProtectedRoute><WishlistPage /></ProtectedRoute>} />
             {/* 알림 푸시 SSE 구독 — 수신함이 아니라 스트림이다(서버가 알림을 저장하지 않는다). */}
@@ -230,6 +236,9 @@ function App() {
               element={<AdminOnlyRoute><SideNavLayout><DisplaySectionAdminPage /></SideNavLayout></AdminOnlyRoute>} />
             <Route path="/admin/system/option-catalog"
               element={<AdminOnlyRoute><SideNavLayout><OptionCatalogAdminPage /></SideNavLayout></AdminOnlyRoute>} />
+            {/* 옵션 카탈로그(축·값 사전)와 다른 화면이다 — 이쪽은 상품별 실물 SKU(재고·추가금). */}
+            <Route path="/admin/system/product-variants"
+              element={<AdminOnlyRoute><SideNavLayout><ProductVariantAdmin /></SideNavLayout></AdminOnlyRoute>} />
             <Route path="/admin/system/operation"
               element={<AdminOnlyRoute><SideNavLayout><OperationConsolePage /></SideNavLayout></AdminOnlyRoute>} />
             <Route path="/admin/system/points"

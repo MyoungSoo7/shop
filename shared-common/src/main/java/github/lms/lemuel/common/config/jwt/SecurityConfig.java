@@ -189,6 +189,29 @@ public class SecurityConfig {
                         .requestMatchers("/admin/menus/**").hasRole("ADMIN")
                         .requestMatchers("/admin/products/**").hasRole("ADMIN")
                         .requestMatchers("/admin/common-codes/**").hasRole("ADMIN")
+                        /*
+                         * 상품 옵션(SKU) 쓰기 — 경로가 /admin 아래가 아니라 /products/{id}/variants 라
+                         * 위의 열거에 걸리지 않고 anyRequest().authenticated() 로 떨어져 있었다.
+                         * 로그인만 하면 누구나 남의 상품에 SKU 를 만들면서 추가금(additionalPrice)과
+                         * 초기재고를 자기가 정할 수 있었고, decrease-stock 으로 남의 재고를 0 까지
+                         * 깎을 수 있었다. 재고 차감은 원래 주문 생성이 프로세스 안에서 부르는 경로라
+                         * HTTP 진입점은 운영자 조작 전용이다.
+                         *
+                         * 세그먼트 하나짜리 `*` 를 쓰는 이유: 구매자가 주문 시점에 부르는
+                         * POST /products/{id}/variants/resolve 를 이 매처가 삼키면 안 된다.
+                         * `*` 는 한 세그먼트만 매치하므로 /variants/resolve 는 어느 줄에도
+                         * 걸리지 않고 authenticated() 로 남는다.
+                         *
+                         * GET(목록)까지 ADMIN 인 이유: 처음엔 "화면이 그리려면 읽어야 한다"며
+                         * 열어 두려 했는데, 이 목록이 내보내는 것은 SKU 별 재고 수량과 낙관락
+                         * 버전이다 — 남의 상품 재고를 세는 일이 로그인만으로 되면 안 된다.
+                         * 구매자 경로는 상품의 options_json(진열)과 위 resolve 로 충분하고,
+                         * 실제로 이 목록을 부르는 화면은 관리자 콘솔뿐이다. 쓰기만 잠그고 읽기를
+                         * 두면 "역할 매처가 걸린 경로의 메서드 구멍" — 쿠폰 사고와 같은 형태가 된다.
+                         */
+                        .requestMatchers(HttpMethod.GET, "/products/*/variants").hasRole("ADMIN")
+                        .requestMatchers(HttpMethod.POST, "/products/*/variants").hasRole("ADMIN")
+                        .requestMatchers(HttpMethod.POST, "/products/*/variants/*/decrease-stock").hasRole("ADMIN")
                         // 송장 일괄 업로드 - 다건 출고를 한 번에 반영. dryRun 기본값이라 파라미터 누락 호출은 미리보기로 떨어진다.
                         .requestMatchers("/admin/shipments/**").hasAnyRole("ADMIN", "MANAGER")
                         // 셀러 배송비 정책 — 고객에게 청구되는 금액을 직접 바꾸므로 운송장 콘솔과 달리 ADMIN 만.
