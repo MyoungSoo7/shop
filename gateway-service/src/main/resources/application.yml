@@ -34,6 +34,16 @@ spring:
               #   권한 등급이 달라도 인가는 서비스 자체 보안 체인(Board/Education SecurityConfig)이 강제한다.
               predicates:
                 - Path=/api/ops/**,/api/boards/**,/admin/boards/**,/admin/education/**
+            - id: marketing-service
+              uri: ${MARKETING_SERVICE_URI:http://localhost:8096}
+              # 이벤트 프로모션(출석체크·럭키박스). /api/promotions 는 참여자 표면(로그인 사용자가
+              # 오늘 출석을 찍고 럭키박스를 연다), /admin/promotions 는 캠페인·경품·보상 운영 콘솔이다.
+              #
+              # 두 경로의 권한 등급이 다르지만 인가는 marketing-service 의 SecurityConfig 가 강제한다 —
+              # 게이트웨이는 길만 낸다. 여기 경로를 넣는 행위 자체가 "밖에서 닿게 만든다"는 결정이라,
+              # 서버가 막지 않는 경로를 올리면 그게 곧 무인증 공개다(gateway-route-gate 주석 참조).
+              predicates:
+                - Path=/api/promotions/**,/admin/promotions/**
             - id: notification-stream
               uri: ${OPERATION_SERVICE_URI:http://localhost:8092}
               # 알림 푸시 SSE — 스트림 하나만 노출한다. operation-service 의 notification 슬라이스가 서빙한다.

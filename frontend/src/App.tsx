@@ -27,6 +27,7 @@ const WishlistPage = lazy(() => import('./pages/WishlistPage'));
 const AddressBookPage = lazy(() => import('./pages/AddressBookPage'));
 const PointTransferPage = lazy(() => import('./pages/PointTransferPage'));
 const CategoryBrowsePage = lazy(() => import('./pages/CategoryBrowsePage'));
+const PromotionsPage = lazy(() => import('./pages/PromotionsPage'));
 const InquiryPage = lazy(() => import('./pages/InquiryPage'));
 const NotificationsPage = lazy(() => import('./pages/NotificationsPage'));
 const BulkOrderPage = lazy(() => import('./pages/BulkOrderPage'));
@@ -59,6 +60,7 @@ const EcommerceCategoryAdmin = lazy(() => import('./pages/EcommerceCategoryAdmin
 const DisplaySectionAdminPage = lazy(() => import('./pages/DisplaySectionAdminPage'));
 const OptionCatalogAdminPage = lazy(() => import('./pages/OptionCatalogAdminPage'));
 const ProductVariantAdmin = lazy(() => import('./pages/ProductVariantAdmin'));
+const PromotionAdminPage = lazy(() => import('./pages/PromotionAdminPage'));
 const AdminDashboardPage = lazy(() => import('./pages/AdminDashboardPage'));
 const ShippingAdminPage = lazy(() => import('./pages/ShippingAdminPage'));
 const ShippingPolicyAdminPage = lazy(() => import('./pages/ShippingPolicyAdminPage'));
@@ -158,6 +160,10 @@ function App() {
                 categories 는 nginx 두 벌이 게이트웨이로 프록시하는 API 세그먼트라,
                 같으면 새로고침에서 카테고리 목록 JSON 이 뜬다. 고른 분류는 ?category=슬러그. */}
             <Route path="/browse" element={<ProtectedRoute><CategoryBrowsePage /></ProtectedRoute>} />
+            {/* 이벤트(출석체크·럭키박스) — marketing-service 가 서빙한다(ADR 0045).
+                promotions 는 nginx 두 벌이 게이트웨이로 넘기는 API 세그먼트 목록에 없어서
+                화면 경로로 그대로 써도 새로고침에 JSON 이 뜨지 않는다. 고른 이벤트는 ?promotion=아이디. */}
+            <Route path="/promotions" element={<ProtectedRoute><PromotionsPage /></ProtectedRoute>} />
             {/* 찜 — 장바구니와 다른 목록이다("지금 살 것" 대 "언젠가 살 것"). 경로도 섞지 않는다. */}
             <Route path="/wishlist"    element={<ProtectedRoute><WishlistPage /></ProtectedRoute>} />
             {/* 알림 푸시 SSE 구독 — 수신함이 아니라 스트림이다(서버가 알림을 저장하지 않는다). */}
@@ -239,6 +245,11 @@ function App() {
             {/* 옵션 카탈로그(축·값 사전)와 다른 화면이다 — 이쪽은 상품별 실물 SKU(재고·추가금). */}
             <Route path="/admin/system/product-variants"
               element={<AdminOnlyRoute><SideNavLayout><ProductVariantAdmin /></SideNavLayout></AdminOnlyRoute>} />
+            {/* 이벤트 프로모션 관리 — API 는 marketing-service 의 /admin/promotions/** 다.
+                화면이 /admin/promotions 가 아닌 이유는 nginx SPA 폴백이 /admin 하위 중 정해진
+                네비 그룹만 index.html 로 돌려주기 때문이다(그 밖은 새로고침에서 404). */}
+            <Route path="/admin/system/promotions"
+              element={<AdminOnlyRoute><SideNavLayout><PromotionAdminPage /></SideNavLayout></AdminOnlyRoute>} />
             <Route path="/admin/system/operation"
               element={<AdminOnlyRoute><SideNavLayout><OperationConsolePage /></SideNavLayout></AdminOnlyRoute>} />
             <Route path="/admin/system/points"

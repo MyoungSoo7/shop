@@ -1,0 +1,11 @@
+{
+  "rewardId": "3f1b5c9a-2d64-4f0e-9a71-8c5e2b7d1f40",
+  "userId": 42,
+  "campaignId": "8e2a4d17-6b93-4c25-b0f8-31d7a9e5c6b2",
+  "campaignName": "8월 출석체크",
+  "source": "ATTENDANCE_GOAL",
+  "amount": "1000",
+  "expiresOn": "2027-08-24",
+  "memo": "5일 연속 출석 달성",
+  "requestedAt": "2026-08-24T09:15:30+09:00"
+}

@@ -289,6 +289,9 @@ app:
       owner: order-service # ADR 0035 — 이 모듈이 발행(소유)하는 토픽만 만든다(파티션 정본은 topic-catalog.json)
       payment-captured: lemuel.payment.captured
       payment-refunded: lemuel.payment.refunded
+      # 구독. owner 가 아니므로 이 모듈은 이 토픽을 만들지 않는다 — 만드는 쪽은 marketing-service 다.
+      # 이벤트 프로모션(출석·럭키박스) 보상 적립 요청. 포인트 원장은 order 안에서만 움직인다.
+      marketing-reward-requested: lemuel.marketing.reward_requested
   outbox:
     polling-delay-ms: 2000
   # 현금영수증 대행 연동. 운영(prod)에서만 실 어댑터가 뜨고, 그 외 프로파일은 모의 어댑터다.

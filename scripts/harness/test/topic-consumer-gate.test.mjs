@@ -46,9 +46,12 @@ const PUBLISH_ONLY = new Map([
   ['lemuel.organization.member_joined', '발행 전용 — 조직 마스터 통지, 소비자는 저장소 밖'],
   ['lemuel.organization.member_removed', '발행 전용 — 조직 마스터 통지, 소비자는 저장소 밖'],
   ['lemuel.organization.member_role_changed', '발행 전용 — 조직 마스터 통지, 소비자는 저장소 밖'],
-  // point 6종 — 포인트 원장. 원장은 order 안에서 닫히고 발행은 회계·관측용이다.
+  // point 5종 — 포인트 원장. 원장은 order 안에서 닫히고 발행은 회계·관측용이다.
+  // lemuel.point.granted 는 2026-08-27 에 여기서 빠졌다 — marketing-service 가 이벤트 프로모션
+  // 보상의 적립 성사 여부를 확인하려고 구독하면서 발행 전용이 아니게 됐다(요청 → 적립 → 확정의
+  // 되돌아오는 절반). 편입은 ADR 0024 절차대로 계약 스키마의 origin enum 에 PROMOTION_REWARD 를
+  // 더하는 것으로 끝냈다.
   ['lemuel.point.charged', '발행 전용 — 포인트 원장 통지, 소비자는 저장소 밖'],
-  ['lemuel.point.granted', '발행 전용 — 포인트 원장 통지, 소비자는 저장소 밖'],
   ['lemuel.point.used', '발행 전용 — 포인트 원장 통지, 소비자는 저장소 밖'],
   ['lemuel.point.restored', '발행 전용 — 포인트 원장 통지, 소비자는 저장소 밖'],
   ['lemuel.point.expired', '발행 전용 — 포인트 원장 통지, 소비자는 저장소 밖'],

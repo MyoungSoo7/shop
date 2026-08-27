@@ -27,6 +27,7 @@
         "CHARGE_BONUS",
         "ORDER_EARN",
         "MANUAL_GRANT",
+        "PROMOTION_REWARD",
         "REFUND_RESTORE"
       ]
     },

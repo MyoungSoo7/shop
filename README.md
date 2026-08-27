@@ -22,6 +22,7 @@
 | --- | --- | --- |
 | **커머스** | `order-service` (8088) | 회원·인증 · 상품/옵션/재고 · 카테고리·전시 · 장바구니 · 주문 · 결제(Toss PG·분할결제) · 환불 · **포인트 원장** · **기프트카드 원장** · 쿠폰 · 리뷰 · 배송/배송비정책 · 대량주문 · 셀러등급 · 조직/멤버십 · 관리자 백오피스(RBAC·메뉴·공통코드·감사로그) |
 | **운영** | `operation-service` (8092) | 관제(인시던트·신호 버킷·이상탐지) · 알림 팬아웃(다채널 + SSE 푸시) · 게시판(공지·FAQ·Q&A) · 교육 과정 관리 |
+| **마케팅** | `marketing-service` (8096) | 이벤트 프로모션 — 출석체크 · 럭키박스(가중치 추첨·수량 예약) · 캠페인 운영. **포인트 원장을 갖지 않는다** — 보상은 Kafka 로 order 에 요청하고 결과를 되받아 확정한다 ([ADR 0045](docs/adr/0045-marketing-service-extracted-from-legacy.md)) |
 | **관문** | `gateway-service` (8080) | 경로 라우팅만 — 자체 인증 필터 없음(인가는 각 서비스가 강제) |
 | **공용** | `shared-common` | Outbox 발행 머시너리 · JWT · 감사로그 · RateLimit · PDF · **이벤트 계약 픽스처** (`includeBuild` 로 합성되는 버전드 내부 라이브러리, [ADR 0021](docs/adr/0021-shared-common-as-platform-library.md)) |
 | **화면** | `frontend` | React 19 + Vite + TypeScript. 구매자 화면 + 관리자 콘솔 |
@@ -167,6 +168,7 @@ docker compose -f docker-compose.yml -f deploy/david/docker-compose.override.yml
 ```bash
 ./gradlew :order-service:bootRun        # 8088
 ./gradlew :operation-service:bootRun    # 8092
+./gradlew :marketing-service:bootRun    # 8096
 ./gradlew :gateway-service:bootRun      # 8080
 ```
 
@@ -188,6 +190,7 @@ npm run build && npm run preview     # /admin 직접진입은 이쪽에서만 �
 # 백엔드 — 테스트 + JaCoCo (전역 LINE 90% + 핵심 도메인 패키지 INSTRUCTION 80%)
 ./gradlew :order-service:test :order-service:jacocoTestCoverageVerification
 ./gradlew :operation-service:test :operation-service:jacocoTestCoverageVerification
+./gradlew :marketing-service:test :marketing-service:jacocoTestCoverageVerification
 
 # 프론트엔드 — 타입체크 + 테스트(커버리지 임계 lines/statements 90)
 cd frontend && npx tsc -p tsconfig.app.json --noEmit && npx vitest run
@@ -238,6 +241,7 @@ node scripts/harness/guard.mjs --list changed.txt
 | `/admin/{categories,products,pg,menus,common-codes,rbac,payment-expiry,stock-reclaim,seller-tiers,shipments,shipping-policies,option-catalog,display-sections,points,gift-cards,audit-logs,members,reviews,coupons,refunds}/**` | order-service |
 | `/api/ops/**` `/api/boards/**` `/admin/boards/**` `/admin/education/**` | operation-service |
 | `/api/notifications/stream` | operation-service (SSE 푸시) |
+| `/api/promotions/**` `/admin/promotions/**` | marketing-service |
 
 내부 발송 경로(`/internal/notifications/**`)는 **게이트웨이에 올리지 않는다** — 인증 없이 발송하는
 경로라 와일드카드로 노출하면 그대로 공개 API 가 된다.

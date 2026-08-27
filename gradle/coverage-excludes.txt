@@ -48,9 +48,10 @@
 **/common/pdf/**
 
 # 부트 진입점(@SpringBootApplication main)은 측정 대상이 아니다.
-# 이 저장소에 실재하는 세 개만 적는다 — settlement 시절의 13개를 그대로 두면
+# 이 저장소에 실재하는 것만 적는다 — settlement 시절의 13개를 그대로 두면
 # "이 서비스들도 여기 있다"는 인상만 남기고 아무것도 제외하지 않는다.
 # 새 서비스를 추가하면 여기에도 한 줄 추가할 것.
 **/LemuelApplication*
 **/GatewayServiceApplication*
 **/OperationServiceApplication*
+**/MarketingServiceApplication*

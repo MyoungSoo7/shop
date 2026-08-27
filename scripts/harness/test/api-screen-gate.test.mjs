@@ -37,9 +37,12 @@ const REPO_ROOT = join(dirname(fileURLToPath(import.meta.url)), '..', '..', '..'
  * 이 게이트가 훑는 서비스. `java-controllers.mjs` 의 정본 로스터(18개)보다 <b>좁다</b> —
  * board·education 은 아직 화면 대조 대상으로 편입되지 않았다. 넓히면 미분류 컨트롤러가
  * 새로 드러나므로 그때 사유와 함께 분류해야 한다(별도 작업). 라우팅 게이트는 정본 18개를 쓴다.
+ *
+ * marketing-service 는 신설과 <b>동시에</b> 편입했다(ADR 0045). 대상 밖으로 두면 화면 없는
+ * 컨트롤러가 부채로 잡히지도 않는다 — 그 상태가 이 게이트가 막으려던 바로 그 상태다.
  */
 const SERVICES = [
-  'order-service', 'operation-service',
+  'order-service', 'operation-service', 'marketing-service',
 ];
 
 /**

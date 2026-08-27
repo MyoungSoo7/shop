@@ -16,6 +16,21 @@ public enum PointLotOrigin {
     ORDER_EARN(true),
     /** 관리자 수기 지급. */
     MANUAL_GRANT(true),
+    /**
+     * 이벤트 프로모션 보상 — 출석체크·럭키박스 당첨 등.
+     *
+     * <p>{@code MANUAL_GRANT} 와 굳이 나눈 이유는 회계가 아니라 <b>추적</b>이다. 둘 다 판촉비로
+     * 같은 분개를 타지만, 수기 지급은 사람이 한 건씩 누른 것이고 이쪽은 marketing-service 가
+     * 이벤트로 요청한 것이다. 캠페인 하나가 원장에 얼마를 태웠는지 물으려면 출처가 갈려 있어야
+     * 하고, 반대로 판촉비가 튀었을 때 "누가 눌렀나" 와 "어떤 캠페인이 돌고 있나" 는 완전히
+     * 다른 조사다. 한 값에 뭉치면 그 질문을 원장에 던질 수 없다.
+     *
+     * <p>{@code referenceType} 은 보상의 출처(ATTENDANCE_DAILY·ATTENDANCE_GOAL·LUCKYBOX),
+     * {@code referenceId} 는 보상 UUID 다 — 그 짝이 적립의 멱등키이고, 같은 짝이 다시 와도
+     * 로트는 하나다. marketing 은 되돌아오는 {@code lemuel.point.granted} 에서 그 짝을 보고
+     * 자기 보상을 확정한다.
+     */
+    PROMOTION_REWARD(true),
     /** 환불로 되돌려 준 포인트인데 원 로트가 이미 소멸·소진되어 새로 발급한 경우. */
     REFUND_RESTORE(false),
     /**
