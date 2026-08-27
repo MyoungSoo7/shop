@@ -1,5 +1,6 @@
 package github.lms.lemuel.operation.anomaly.application.service;
 
+import github.lms.lemuel.operation.anomaly.adapter.out.persistence.SpringDataWriteConflictDetector;
 import github.lms.lemuel.operation.anomaly.application.port.in.DetectAnomaliesUseCase.DetectionSummary;
 import github.lms.lemuel.operation.anomaly.application.port.out.LoadMetricSeriesPort;
 import github.lms.lemuel.operation.anomaly.application.service.AnomalyIncidentApplier.Outcome;
@@ -53,7 +54,9 @@ class AnomalyDetectionServiceTest {
 
         Clock clock = Clock.fixed(Instant.parse("2026-07-12T00:00:00Z"), ZoneOffset.UTC);
         AnomalyEvaluator evaluator = new AnomalyEvaluator(new RollingWindowBaseline());
-        service = new AnomalyDetectionService(loadPort, evaluator, applier, props, clock);
+        // detector 는 목이 아니라 실제 어댑터 구현 — 진짜 스프링 데이터 예외가 재시도되는지를 증명한다.
+        service = new AnomalyDetectionService(loadPort, evaluator, applier, props,
+                new SpringDataWriteConflictDetector(), clock);
     }
 
     /** total=100, signal = fr*100 인 카운터 버킷. bucketStart 는 판정에 무관하므로 순번만 다르게 둔다. */

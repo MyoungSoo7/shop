@@ -1,10 +1,9 @@
 package github.lms.lemuel.operation.incident.application.service;
 
 import github.lms.lemuel.operation.incident.application.port.in.IngestAlertUseCase;
+import github.lms.lemuel.operation.incident.application.port.out.WriteConflictDetector;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.dao.DataIntegrityViolationException;
-import org.springframework.dao.OptimisticLockingFailureException;
 import org.springframework.stereotype.Service;
 
 import java.util.List;
@@ -16,8 +15,8 @@ import java.util.List;
  * <p>멱등성/경쟁 처리:
  * <ul>
  *   <li>repeat_interval 재전송 — refire 경로가 자연 멱등 (occurrenceCount 만 증가).</li>
- *   <li>동시 webhook 경쟁 — 이중 INSERT(uq_incident_active 위반)와 refire 낙관적 락 충돌을
- *       catch 하고 <b>새 트랜잭션으로 재시도</b>(최대 {@value #MAX_ATTEMPTS}회) → 매 시도가
+ *   <li>동시 webhook 경쟁 — 충돌 여부는 {@link WriteConflictDetector} 에게 묻고
+ *       <b>새 트랜잭션으로 재시도</b>(최대 {@value #MAX_ATTEMPTS}회) → 매 시도가
  *       최신 상태를 다시 읽으므로 결국 refire 로 병합된다.</li>
  *   <li>한 건의 실패는 배치 전체를 막지 않는다 — 실패 건수만 집계·로그.
  *       (웹 어댑터는 항상 200 응답 — Alertmanager 재시도 폭주 방지, 유실은 재전송이 보상)</li>
@@ -32,9 +31,11 @@ public class IngestAlertService implements IngestAlertUseCase {
     static final int MAX_ATTEMPTS = 5;
 
     private final AlertApplier alertApplier;
+    private final WriteConflictDetector writeConflictDetector;
 
-    public IngestAlertService(AlertApplier alertApplier) {
+    public IngestAlertService(AlertApplier alertApplier, WriteConflictDetector writeConflictDetector) {
         this.alertApplier = alertApplier;
+        this.writeConflictDetector = writeConflictDetector;
     }
 
     @Override
@@ -58,16 +59,16 @@ public class IngestAlertService implements IngestAlertUseCase {
     }
 
     private void applyWithConflictRetry(AlertCommand alert) {
-        // 동시 그룹 알림 경쟁: 이중 INSERT 는 uq_incident_active 위반(DataIntegrityViolation),
-        // 겹친 refire 는 @Version 충돌(OptimisticLockingFailure)로 나타난다. 실패한 트랜잭션은
-        // rollback-only 로 오염됐으므로 매번 새 트랜잭션(새 apply 호출)으로 재시도 —
+        // 동시 그룹 알림 경쟁이 어떤 예외로 나타나는지는 저장소 기술이 정하므로
+        // WriteConflictDetector(어댑터)에게 묻는다. 실패한 트랜잭션은 rollback-only 로
+        // 오염됐으므로 매번 새 트랜잭션(새 apply 호출)으로 재시도 —
         // 재시도는 최신 상태를 다시 읽어 자연스럽게 refire 경로로 수렴한다.
         for (int attempt = 1; ; attempt++) {
             try {
                 alertApplier.apply(alert);
                 return;
-            } catch (DataIntegrityViolationException | OptimisticLockingFailureException e) {
-                if (attempt >= MAX_ATTEMPTS) {
+            } catch (RuntimeException e) {
+                if (!writeConflictDetector.isWriteConflict(e) || attempt >= MAX_ATTEMPTS) {
                     throw e;
                 }
                 log.info("동시 webhook 경쟁 감지 — 재시도 {}/{}: fingerprint={}",

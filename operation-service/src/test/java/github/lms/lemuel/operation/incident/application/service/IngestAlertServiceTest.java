@@ -1,6 +1,8 @@
 package github.lms.lemuel.operation.incident.application.service;
 
+import github.lms.lemuel.operation.incident.adapter.out.persistence.SpringDataWriteConflictDetector;
 import github.lms.lemuel.operation.incident.application.port.in.IngestAlertUseCase.AlertCommand;
+import github.lms.lemuel.operation.incident.application.port.out.WriteConflictDetector;
 import github.lms.lemuel.operation.incident.application.port.in.IngestAlertUseCase.IngestResult;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -25,13 +27,20 @@ class IngestAlertServiceTest {
     @Mock
     AlertApplier alertApplier;
 
+    /**
+     * 목이 아니라 <b>실제 어댑터 구현</b>을 쓴다 — 이 테스트가 증명하려는 건
+     * "진짜 스프링 데이터 예외(uq 위반·낙관적 락)가 재시도된다" 이지
+     * "detector 가 true 를 주면 재시도된다" 가 아니다.
+     */
+    final WriteConflictDetector conflictDetector = new SpringDataWriteConflictDetector();
+
     private AlertCommand alert(String fingerprint) {
         return new AlertCommand(fingerprint, true, Map.of(), Map.of(), null, null);
     }
 
     @Test
     void 전건_성공_시_applied_가_전체_건수와_같다() {
-        IngestAlertService service = new IngestAlertService(alertApplier);
+        IngestAlertService service = new IngestAlertService(alertApplier, conflictDetector);
 
         IngestResult result = service.ingest(List.of(alert("a"), alert("b")));
 
@@ -43,7 +52,7 @@ class IngestAlertServiceTest {
         doThrow(new DataIntegrityViolationException("uq_incident_active"))
                 .doNothing()
                 .when(alertApplier).apply(any());
-        IngestAlertService service = new IngestAlertService(alertApplier);
+        IngestAlertService service = new IngestAlertService(alertApplier, conflictDetector);
 
         IngestResult result = service.ingest(List.of(alert("a")));
 
@@ -56,7 +65,7 @@ class IngestAlertServiceTest {
         doThrow(new RuntimeException("boom"))
                 .doNothing()
                 .when(alertApplier).apply(any());
-        IngestAlertService service = new IngestAlertService(alertApplier);
+        IngestAlertService service = new IngestAlertService(alertApplier, conflictDetector);
 
         IngestResult result = service.ingest(List.of(alert("a"), alert("b")));
 
@@ -69,7 +78,7 @@ class IngestAlertServiceTest {
                 .doThrow(new OptimisticLockingFailureException("version"))
                 .doNothing()
                 .when(alertApplier).apply(any());
-        IngestAlertService service = new IngestAlertService(alertApplier);
+        IngestAlertService service = new IngestAlertService(alertApplier, conflictDetector);
 
         IngestResult result = service.ingest(List.of(alert("a")));
 
@@ -81,7 +90,7 @@ class IngestAlertServiceTest {
     void 재시도_상한_소진_시_failed_로_집계하고_예외를_전파하지_않는다() {
         doThrow(new DataIntegrityViolationException("uq"))
                 .when(alertApplier).apply(any());   // 항상 실패 → MAX_ATTEMPTS 소진
-        IngestAlertService service = new IngestAlertService(alertApplier);
+        IngestAlertService service = new IngestAlertService(alertApplier, conflictDetector);
 
         IngestResult result = service.ingest(List.of(alert("a")));
 

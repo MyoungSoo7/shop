@@ -2,6 +2,7 @@ package github.lms.lemuel.operation.anomaly.application.service;
 
 import github.lms.lemuel.operation.anomaly.application.port.in.DetectAnomaliesUseCase;
 import github.lms.lemuel.operation.anomaly.application.port.out.LoadMetricSeriesPort;
+import github.lms.lemuel.operation.anomaly.application.port.out.WriteConflictDetector;
 import github.lms.lemuel.operation.anomaly.application.service.AnomalyIncidentApplier.Outcome;
 import github.lms.lemuel.operation.anomaly.domain.AnomalyDecision;
 import github.lms.lemuel.operation.anomaly.domain.AnomalyEvaluator;
@@ -12,8 +13,6 @@ import github.lms.lemuel.operation.signal.domain.BucketWindow;
 import github.lms.lemuel.operation.signal.domain.MetricBucket;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.dao.DataIntegrityViolationException;
-import org.springframework.dao.OptimisticLockingFailureException;
 import org.springframework.stereotype.Service;
 
 import java.time.Clock;
@@ -34,8 +33,9 @@ import java.util.Optional;
  *   <li>이상이면 인시던트 생성/refire, 정상이면서 직전 K개가 모두 정상이면 자동 해제한다.</li>
  * </ol>
  *
- * <p>한 metric 의 실패는 다른 metric 을 막지 않는다(건별 try). 동시 경쟁(중복 INSERT/낙관적 락)은
- * 새 트랜잭션 재시도로 refire 수렴 — 스캐너는 단일 스레드라 실제 경쟁은 드물지만 견고성을 유지한다.
+ * <p>한 metric 의 실패는 다른 metric 을 막지 않는다(건별 try). 동시 경쟁은
+ * {@link WriteConflictDetector} 로 판별해 새 트랜잭션 재시도로 refire 수렴 —
+ * 스캐너는 단일 스레드라 실제 경쟁은 드물지만 견고성을 유지한다.
  */
 @Service
 public class AnomalyDetectionService implements DetectAnomaliesUseCase {
@@ -48,14 +48,17 @@ public class AnomalyDetectionService implements DetectAnomaliesUseCase {
     private final AnomalyEvaluator evaluator;
     private final AnomalyIncidentApplier applier;
     private final OpsProperties properties;
+    private final WriteConflictDetector writeConflictDetector;
     private final Clock clock;
 
     public AnomalyDetectionService(LoadMetricSeriesPort loadMetricSeriesPort, AnomalyEvaluator evaluator,
-                                   AnomalyIncidentApplier applier, OpsProperties properties, Clock clock) {
+                                   AnomalyIncidentApplier applier, OpsProperties properties,
+                                   WriteConflictDetector writeConflictDetector, Clock clock) {
         this.loadMetricSeriesPort = loadMetricSeriesPort;
         this.evaluator = evaluator;
         this.applier = applier;
         this.properties = properties;
+        this.writeConflictDetector = writeConflictDetector;
         this.clock = clock;
     }
 
@@ -144,11 +147,13 @@ public class AnomalyDetectionService implements DetectAnomaliesUseCase {
 
     private Outcome applyWithConflictRetry(String metricKey, SignalCategory category,
                                            AnomalyDecision decision, boolean resolveEligible, Instant now) {
+        // 어떤 예외가 "동시 경쟁" 인지는 저장소 기술이 정하므로 WriteConflictDetector(어댑터)에게 묻는다.
+        // 실패한 트랜잭션은 rollback-only 로 오염됐으므로 매번 새 트랜잭션(새 apply 호출)으로 재시도한다.
         for (int attempt = 1; ; attempt++) {
             try {
                 return applier.apply(metricKey, category, decision, resolveEligible, now);
-            } catch (DataIntegrityViolationException | OptimisticLockingFailureException e) {
-                if (attempt >= MAX_ATTEMPTS) {
+            } catch (RuntimeException e) {
+                if (!writeConflictDetector.isWriteConflict(e) || attempt >= MAX_ATTEMPTS) {
                     throw e;
                 }
                 log.info("이상 인시던트 반영 경쟁 감지 — 재시도 {}/{}: metric={}", attempt, MAX_ATTEMPTS, metricKey);

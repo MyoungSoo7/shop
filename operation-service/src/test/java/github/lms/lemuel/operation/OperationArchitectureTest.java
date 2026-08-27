@@ -78,10 +78,12 @@ class OperationArchitectureTest {
      * G2 — 유스케이스가 스프링 저장소 예외를 직접 분기한다.
      * {@code @Service}·{@code @Transactional} 은 실용적 타협으로 허용하지만
      * {@code org.springframework.dao} 는 다르다 — "우리 저장소는 스프링 데이터다" 가 유스케이스에 박힌다.
+     *
+     * <p><b>2026-08-27 비었다.</b> {@code IngestAlertService}·{@code AnomalyDetectionService} 가
+     * {@code catch (DataIntegrityViolationException | OptimisticLockingFailureException)} 하던 것을
+     * 기능별 {@code WriteConflictDetector} 아웃바운드 포트로 옮겼다. 다시 채우지 마라.
      */
-    private static final Set<String> PERSISTENCE_TECH_ALLOWLIST = Set.of(
-            OPERATION_ROOT + "anomaly.application.service.AnomalyDetectionService",
-            OPERATION_ROOT + "incident.application.service.IngestAlertService");
+    private static final Set<String> PERSISTENCE_TECH_ALLOWLIST = Set.<String>of();
 
     /**
      * G3 — 기능 간 결합. 두 종류가 섞여 있고 처방이 서로 다르다.
