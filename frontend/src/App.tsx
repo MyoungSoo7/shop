@@ -23,6 +23,7 @@ const RecommendPage = lazy(() => import('./pages/RecommendPage'));
 const CartPage = lazy(() => import('./pages/CartPage'));
 const MyPage = lazy(() => import('./pages/MyPage'));
 const MyBalancesPage = lazy(() => import('./pages/MyBalancesPage'));
+const WishlistPage = lazy(() => import('./pages/WishlistPage'));
 const NotificationsPage = lazy(() => import('./pages/NotificationsPage'));
 const BulkOrderPage = lazy(() => import('./pages/BulkOrderPage'));
 const TenderCheckoutPage = lazy(() => import('./pages/TenderCheckoutPage'));
@@ -137,6 +138,8 @@ function App() {
             <Route path="/cart"         element={<ProtectedRoute><CartPage /></ProtectedRoute>} />
             <Route path="/mypage"       element={<ProtectedRoute><MyPage /></ProtectedRoute>} />
             <Route path="/my/balances" element={<ProtectedRoute><MyBalancesPage /></ProtectedRoute>} />
+            {/* 찜 — 장바구니와 다른 목록이다("지금 살 것" 대 "언젠가 살 것"). 경로도 섞지 않는다. */}
+            <Route path="/wishlist"    element={<ProtectedRoute><WishlistPage /></ProtectedRoute>} />
             {/* 알림 푸시 SSE 구독 — 수신함이 아니라 스트림이다(서버가 알림을 저장하지 않는다). */}
             <Route path="/notifications" element={<ProtectedRoute><NotificationsPage /></ProtectedRoute>} />
             {/* 대량주문 — 올리는 것과 주문이 나가는 것이 다른 버튼이다(검증/확정 분리). */}

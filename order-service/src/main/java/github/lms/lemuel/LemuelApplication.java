@@ -41,6 +41,9 @@ import org.springframework.scheduling.annotation.EnableScheduling;
         // organization — 셀러/기업 조직·멤버십 슬라이스(ADR 0042 흡수). 이 스캔이 빠지면
         // /api/organizations/** 가 조용히 404 가 되고 UseCase 빈이 없어 컨텍스트가 뜨지 않는다.
         "github.lms.lemuel.organization",
+        // 찜(위시리스트) — 이 스캔이 빠지면 /users/*/wishlist 가 조용히 404 가 된다. 컨트롤러가
+        // 등록되지 않아도 기동은 성공하므로(정적 리소스 핸들러가 대신 받는다) 아무 신호도 없다.
+        "github.lms.lemuel.wishlist",
         "github.lms.lemuel.common",
         // ADR 0020 Phase 5.5 — settlement 분리 완료. settlement/ledger/payout/chargeback/
         // pgreconciliation 코드는 settlement-service 로 이전돼 order 소스에 존재하지 않으므로

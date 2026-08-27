@@ -140,6 +140,26 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
                   </Link>
                 )}
 
+                {/* 찜 — USER 전용. 장바구니 옆에 두되 배지는 달지 않는다. 찜 개수는 "처리할 일"이
+                    아니라서, 빨간 숫자를 붙이면 지워야 할 것처럼 읽힌다. */}
+                {user.role === 'USER' && (
+                  <Link
+                    to="/wishlist"
+                    /* tap-target: 장바구니와 같은 규격 — 나란히 있는 버튼이 서로 다른 크기면 오탭이 는다. */
+                    className={`tap-target p-2 rounded-lg transition-colors ${
+                      isActive('/wishlist')
+                        ? 'text-blue-600 bg-blue-50'
+                        : 'text-gray-600 hover:text-blue-600 hover:bg-blue-50'
+                    }`}
+                    title="찜한 상품"
+                  >
+                    <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.8"
+                        d="M20.8 4.6a5.5 5.5 0 00-7.8 0L12 5.7l-1-1.1a5.5 5.5 0 00-7.8 7.8l1.1 1L12 21l7.7-7.6 1.1-1a5.5 5.5 0 000-7.8z" />
+                    </svg>
+                  </Link>
+                )}
+
                 {/* 마이페이지 — USER 전용 */}
                 {user.role === 'USER' && (
                   <Link

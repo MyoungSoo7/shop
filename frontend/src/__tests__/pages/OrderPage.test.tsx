@@ -16,6 +16,21 @@ vi.mock('@/contexts/useCart', () => ({
   useCart: () => ({ addItem }),
 }));
 
+// 이 화면은 Provider 없이 그대로 렌더한다. 상품 줄에 찜 하트가 붙은 뒤로는 useAuth·useToast 가
+// 트리 안에서 불리는데, 둘 다 Provider 밖이면 throw 하는 훅이라 화면 전체가 빈 <div/> 로 죽는다.
+// 컨텍스트 하나를 안 채운 대가가 "상품이 안 보인다"로 나타나므로, 여기 세 줄이 빠지면 이 파일의
+// 26개가 통째로 무너진다.
+const mockAuth = { user: null, userId: 7 as number | null, loading: false, refresh: vi.fn() };
+vi.mock('@/contexts/useAuth', () => ({ useAuth: () => mockAuth }));
+vi.mock('@/contexts/useToast', () => ({ useToast: () => ({ showToast: vi.fn() }) }));
+vi.mock('@/api/wishlist', () => ({
+  wishlistApi: {
+    contains: vi.fn().mockResolvedValue({ productId: 0, wished: false }),
+    add: vi.fn(),
+    remove: vi.fn(),
+  },
+}));
+
 vi.mock('@/api/product', () => ({
   productApi: { getAvailableProducts: vi.fn() },
 }));
@@ -212,6 +227,19 @@ describe('OrderPage — 상품 목록', () => {
     await userEvent.click(screen.getByTitle('장바구니 담기'));
 
     expect(addItem).toHaveBeenCalledWith(expect.objectContaining({ id: 1 }));
+  });
+
+  it('상품 줄에서 찜 하트를 눌러도 그 줄이 선택되지는 않는다', async () => {
+    const { wishlistApi } = await import('@/api/wishlist');
+    vi.mocked(wishlistApi.add).mockResolvedValue({ wished: true, changed: true, count: 1 });
+    render(<OrderPage />);
+    await screen.findByText('티셔츠');
+
+    // 줄 전체가 "이 상품 선택"이라, 하트 클릭이 위로 전파되면 찜 한 번에 주문 대상이 바뀐다.
+    await userEvent.click(screen.getByRole('button', { name: '찜하기' }));
+
+    expect(wishlistApi.add).toHaveBeenCalled();
+    expect(screen.queryByText('선택된 상품')).not.toBeInTheDocument();
   });
 
   it('상품을 고르기 전에는 주문 버튼이 잠겨 있다', async () => {

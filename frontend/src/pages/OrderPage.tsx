@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import OptionFacetPanel from '@/components/product/OptionFacetPanel';
+import WishlistHeart from '@/components/product/WishlistHeart';
 import {
   facetApi, countSelected, toggleFacetValue,
   type Facet, type FacetSelection,
@@ -340,6 +341,11 @@ const OrderFormTab: React.FC = () => {
                             <p className="text-sm font-semibold text-gray-900">{fmt(product.price)}</p>
                             <p className="text-xs text-gray-400">재고 {product.stockQuantity}개</p>
                           </div>
+                          {/* 찜 — 줄 전체가 "이 상품 선택"이라 클릭이 위로 올라가면 하트를 누른 것만으로
+                              주문 대상이 바뀐다. 장바구니 버튼과 같은 이유로 여기서 전파를 끊는다. */}
+                          <span onClick={(e) => e.stopPropagation()}>
+                            <WishlistHeart productId={product.id} className="tap-target p-1.5" />
+                          </span>
                           {/* `tap-target` — 아이콘 버튼이라 시각 크기는 30×30 이지만 터치 환경에서는
                               눌리는 영역만 44×44 로 넓힌다(index.css, 데스크톱 무영향). */}
                           <button

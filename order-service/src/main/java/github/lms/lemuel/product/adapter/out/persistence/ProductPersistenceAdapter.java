@@ -9,6 +9,7 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Component;
 
 import java.time.LocalDateTime;
+import java.util.Collection;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
@@ -35,6 +36,17 @@ public class ProductPersistenceAdapter implements LoadProductPort, SaveProductPo
         return repository.findById(productId)
                 .map(mapper::toDomain)
                 .map(this::withPrimaryCategory);
+    }
+
+    @Override
+    public List<Product> findAllByIds(Collection<Long> productIds) {
+        if (productIds.isEmpty()) {
+            // 빈 IN 절을 DB 까지 보내지 않는다 — 답이 정해져 있는 질문이다.
+            return List.of();
+        }
+        return withPrimaryCategories(repository.findAllById(productIds).stream()
+                .map(mapper::toDomain)
+                .toList());
     }
 
     @Override

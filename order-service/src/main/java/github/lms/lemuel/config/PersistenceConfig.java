@@ -38,6 +38,7 @@ import org.springframework.data.jpa.repository.config.EnableJpaRepositories;
     "github.lms.lemuel.settlement",
     "github.lms.lemuel.shipping",
     "github.lms.lemuel.user",
+    "github.lms.lemuel.wishlist",
 })
 @EnableJpaRepositories(basePackages = {
     "github.lms.lemuel.bulkorder",
@@ -62,6 +63,7 @@ import org.springframework.data.jpa.repository.config.EnableJpaRepositories;
     "github.lms.lemuel.settlement",
     "github.lms.lemuel.shipping",
     "github.lms.lemuel.user",
+    "github.lms.lemuel.wishlist",
 })
 public class PersistenceConfig {
 }

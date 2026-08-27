@@ -58,6 +58,7 @@ const ROUTES_WITHOUT_MENU = new Map([
   ['/gift/:token', '공개 — 링크로만 진입하는 선물 수령'],
   ['/order/toss/success', 'PG 콜백'],
   ['/cart', '헤더 장바구니 아이콘으로 진입'],
+  ['/wishlist', '헤더 찜 아이콘으로 진입 — 장바구니와 같은 자리, 같은 성격의 개인 목록'],
   ['/mypage', '헤더 MY 버튼으로 진입'],
   ['/tags', '관리 화면 내부 이동'],
   // 게시판은 메뉴 행이 시드가 아니라 런타임에 만들어진다(관리자가 /admin/system/boards 에서
