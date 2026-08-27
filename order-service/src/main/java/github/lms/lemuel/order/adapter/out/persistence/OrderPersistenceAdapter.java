@@ -67,6 +67,19 @@ public class OrderPersistenceAdapter
                 .collect(Collectors.toList());
     }
 
+    @Override
+    public List<Order> findByDestinationGroupId(String destinationGroupId) {
+        // 빈 값으로 부르면 묶음 id 가 없는 주문 전체를 훑을 뻔한 자리다. 그런 조회는 뜻이 없으므로
+        // 쿼리를 내보내지 않고 빈 목록으로 끝낸다.
+        if (destinationGroupId == null || destinationGroupId.isBlank()) {
+            return List.of();
+        }
+        return orderJpaRepository.findByDestinationGroupIdOrderByIdAsc(destinationGroupId)
+                .stream()
+                .map(this::toDomainWithItems)
+                .collect(Collectors.toList());
+    }
+
     /**
      * 관리자 목록 한 페이지.
      *

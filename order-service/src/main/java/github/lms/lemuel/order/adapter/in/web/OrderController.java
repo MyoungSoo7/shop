@@ -1,10 +1,12 @@
 package github.lms.lemuel.order.adapter.in.web;
 
 import github.lms.lemuel.order.adapter.in.web.request.CreateOrderRequest;
+import github.lms.lemuel.order.adapter.in.web.response.MultiDestinationOrderResponse;
 import github.lms.lemuel.order.adapter.in.web.response.MultiItemOrderResponse;
 import github.lms.lemuel.order.adapter.in.web.response.OrderResponse;
 import github.lms.lemuel.order.application.port.in.CancelOrderItemsUseCase;
 import github.lms.lemuel.order.application.port.in.ChangeOrderStatusUseCase;
+import github.lms.lemuel.order.application.port.in.CreateMultiDestinationOrderUseCase;
 import github.lms.lemuel.order.application.port.in.CreateMultiItemOrderUseCase;
 import github.lms.lemuel.order.application.port.in.CreateOrderUseCase;
 import github.lms.lemuel.order.application.port.in.GetOrderUseCase;
@@ -46,6 +48,7 @@ public class OrderController {
 
     private final CreateOrderUseCase createOrderUseCase;
     private final IdempotentMultiItemOrderUseCase createMultiItemOrderUseCase;
+    private final CreateMultiDestinationOrderUseCase createMultiDestinationOrderUseCase;
     private final GetOrderUseCase getOrderUseCase;
     private final ChangeOrderStatusUseCase changeOrderStatusUseCase;
     private final CancelOrderItemsUseCase cancelOrderItemsUseCase;
@@ -97,6 +100,59 @@ public class OrderController {
                 idempotencyKey);
         return ResponseEntity.status(HttpStatus.CREATED).body(MultiItemOrderResponse.from(order));
     }
+
+    @Operation(summary = "여러 곳 배송 주문 생성",
+            description = "한 번의 결제로 서로 다른 주소에 나눠 보낸다. 배송지마다 주문이 하나씩 생기고 "
+                    + "같은 묶음 id 를 공유한다 — 배송이 주문과 1:1 이라는 전제를 지키기 위해서다. "
+                    + "금액과 재고는 그 배송지에 담긴 라인에서만 나온다. 전부 한 트랜잭션이라 한 곳이 "
+                    + "품절이면 전체가 취소된다. 이 경로는 쿠폰을 받지 않는다.")
+    @ApiResponses({
+            @ApiResponse(responseCode = "201", description = "묶음 생성 성공"),
+            @ApiResponse(responseCode = "400", description = "배송지가 둘 미만이거나 상한 초과, 배송지에 상품 없음"),
+            @ApiResponse(responseCode = "409", description = "재고 부족·동시성 충돌·중복 제출 충돌")
+    })
+    @PostMapping("/multi-destination")
+    public ResponseEntity<MultiDestinationOrderResponse> createMultiDestinationOrder(
+            @Valid @RequestBody MultiDestinationOrderRequest request,
+            @Parameter(description = "중복 주문 방지용 멱등 키(선택). 같은 키 재요청은 동일 묶음 전체를 반환.")
+            @RequestHeader(value = "Idempotency-Key", required = false) String idempotencyKey) {
+        // 단건 경로와 같은 이유로 본인(또는 관리자)만 — 남의 userId 로 주문하면 그 사람의 재고·동의
+        // 기록이 남는다. 여기서는 배송지 수만큼이라 피해도 그 배수다.
+        ResourceOwnership.requireSelfOrAdmin(request.userId());
+        List<CreateMultiDestinationOrderUseCase.Destination> destinations = request.destinations().stream()
+                .map(d -> new CreateMultiDestinationOrderUseCase.Destination(
+                        d.shippingAddress().toSnapshot(),
+                        d.lines().stream()
+                                .map(l -> new CreateMultiItemOrderUseCase.Line(
+                                        l.productId(), l.variantId(), l.quantity()))
+                                .toList()))
+                .toList();
+        CreateMultiDestinationOrderUseCase.Result result = createMultiDestinationOrderUseCase.create(
+                new CreateMultiDestinationOrderUseCase.Command(
+                        request.userId(), destinations,
+                        toConsentSubmission(request.consents()), idempotencyKey));
+        return ResponseEntity.status(HttpStatus.CREATED)
+                .body(MultiDestinationOrderResponse.from(result.destinationGroupId(), result.orders()));
+    }
+
+    /**
+     * 여러 곳 배송 요청. 배송지가 자기 라인을 들고 있는 것이 이 레코드의 전부다 — 라인 목록을
+     * 바깥에 한 벌 두고 배송지 수만 받는 형태(원본이 그랬다)로는 "무엇을 어디로" 를 표현할 수 없고,
+     * 그래서 원본은 장바구니 전체를 배송지 수만큼 곱해 청구했다.
+     *
+     * <p>쿠폰 필드가 없다. 쿠폰의 최소 주문금액·1 인 한도는 주문 한 건에 걸리는 조건이라 N 건에
+     * 나누려면 배분 규칙이 먼저 필요하다. 필드만 받아 두고 무시하면 화면은 할인된 줄 알고
+     * 사용자는 정가를 낸다.
+     */
+    public record MultiDestinationOrderRequest(
+            @jakarta.validation.constraints.NotNull Long userId,
+            @jakarta.validation.constraints.NotEmpty @Valid List<DestinationRequest> destinations,
+            @Valid List<ConsentRequest> consents) {}
+
+    /** 배송지 한 곳과 그곳으로 갈 상품들. 배송지는 이 경로에서 언제나 필수다. */
+    public record DestinationRequest(
+            @jakarta.validation.constraints.NotNull @Valid ShippingAddressRequest shippingAddress,
+            @jakarta.validation.constraints.NotEmpty @Valid List<LineRequest> lines) {}
 
     @Operation(summary = "쿠폰 미리보기 (장바구니 기준)",
             description = "주문을 만들지 않고 할인액만 계산한다. 주문 생성과 같은 라인 입력을 받아 같은 상품 마스터에서 "

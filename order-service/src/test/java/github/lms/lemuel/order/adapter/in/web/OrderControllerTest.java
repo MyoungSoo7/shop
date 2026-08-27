@@ -40,6 +40,7 @@ class OrderControllerTest {
     @MockitoBean JwtUtil jwtUtil;
     @MockitoBean CreateOrderUseCase createOrderUseCase;
     @MockitoBean IdempotentMultiItemOrderUseCase createMultiItemOrderUseCase;
+    @MockitoBean github.lms.lemuel.order.application.port.in.CreateMultiDestinationOrderUseCase createMultiDestinationOrderUseCase;
     @MockitoBean GetOrderUseCase getOrderUseCase;
     @MockitoBean ChangeOrderStatusUseCase changeOrderStatusUseCase;
     @MockitoBean github.lms.lemuel.order.application.port.in.CancelOrderItemsUseCase cancelOrderItemsUseCase;

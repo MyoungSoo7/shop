@@ -32,6 +32,10 @@ public interface OrderPersistenceMapper {
                 entity.isShipped(),
                 entity.isStockRestored());
         order.attachShippingAddress(toAddressSnapshot(entity));
+        // 묶음 id 는 toEntity 쪽에서는 이름이 같아 MapStruct 가 알아서 옮기지만, 복원은 rehydrate
+        // 팩토리를 거치므로 여기서 손으로 붙여야 한다. 빠뜨리면 저장은 되는데 다시 읽으면 사라져,
+        // 여러 곳 배송 재요청이 묶음 대신 주문 한 건만 돌려준다.
+        order.attachDestinationGroup(entity.getDestinationGroupId());
         return order;
     }
 

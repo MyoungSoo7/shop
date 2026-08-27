@@ -153,6 +153,20 @@ export interface MultiItemOrderResponse {
   items: MultiItemOrderLine[];
 }
 
+/**
+ * POST /orders/multi-destination 응답 — 한 번의 결제로 만들어진 주문 <b>여러 건</b>.
+ *
+ * 배송지 하나가 주문 하나다. 그래서 `orders` 의 각 원소는 단일 배송지 주문과 같은 모양이고,
+ * `totalAmount` 는 서버가 그 주문들을 더한 값이다 — 화면이 다시 더하지 않는다. 원본(ssg-front)의
+ * 같은 기능이 바로 그 자리에서 틀렸다: 장바구니 총액을 배송지 수만큼 곱해 청구하면서 재고는 한
+ * 벌만 뺐다.
+ */
+export interface MultiDestinationOrderResponse {
+  destinationGroupId: string;
+  totalAmount: number;
+  orders: MultiItemOrderResponse[];
+}
+
 // Payment Types
 export interface PaymentRequest {
   orderId: number;

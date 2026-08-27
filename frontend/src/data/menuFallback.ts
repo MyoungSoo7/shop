@@ -151,6 +151,13 @@ export const FALLBACK_MENUS: FallbackMenuNode[] = [
     id: -14, name: '내 문의', path: '/my/inquiries', icon: '💬', description: '상품 문의 · 주문 문의 · 1:1 문의',
     area: 'SHOP', type: 'ITEM', roles: ['USER'],
   },
+  {
+    // 여러 곳 배송 — 화면 URL 이 /orders/multi-destination 이 아닌 이유는 '내 문의'와 같다.
+    // orders(복수) 는 nginx 가 게이트웨이로 프록시하는 API 세그먼트다.
+    id: -15, name: '여러 곳 배송', path: '/order/multi-destination', icon: '🚚',
+    description: '한 번에 담고 여러 주소로 나눠 보내기',
+    area: 'SHOP', type: 'ITEM', roles: ['USER'],
+  },
 ];
 
 const accessible = (node: FallbackMenuNode, role: string | null): boolean =>

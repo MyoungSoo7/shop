@@ -79,13 +79,13 @@ class MenuSeedIntegrationTest {
     }
 
     @Test
-    @DisplayName("시드 총 43행 — 커머스 + 운영 범위")
-    void seedsExactlyFortyThree() {
-        assertThat(adapter.findAll()).hasSize(43);
+    @DisplayName("시드 총 44행 — 커머스 + 운영 범위")
+    void seedsExactlyFortyFour() {
+        assertThat(adapter.findAll()).hasSize(44);
     }
 
     @Test
-    @DisplayName("최상위 14개가 상단 네비 순서대로 들어간다")
+    @DisplayName("최상위 15개가 상단 네비 순서대로 들어간다")
     void rootsInOrder() {
         List<Menu> roots = adapter.findAll().stream()
                 .filter(m -> m.getParentId() == null)
@@ -110,7 +110,10 @@ class MenuSeedIntegrationTest {
                 // 내 문의(40)는 그 뒤. 경로가 /inquiries 가 아니라 /my/inquiries 인 것은 nginx
                 // 두 벌이 inquiries 세그먼트를 게이트웨이로 프록시하기 때문이다 — 같은 이름의
                 // SPA 라우트를 두면 새로고침에서 목록 JSON 이 그대로 렌더된다.
-                "주문하기", "추천받기", "대량주문", "나눠 결제", "내 포인트·상품권", "내 알림", "내 문의");
+                // 여러 곳 배송(45)은 맨 뒤다. 앞의 셋과 달리 뒤를 밀지 않는 이유는 끼어들 자리가
+                // 없기 때문이다 — SHOP 최상위는 7·8·20·25·30·35·40 으로 차 있고 이 항목은 그 뒤다.
+                "주문하기", "추천받기", "대량주문", "나눠 결제", "내 포인트·상품권", "내 알림", "내 문의",
+                "여러 곳 배송");
     }
 
     @Test
@@ -250,7 +253,7 @@ class MenuSeedIntegrationTest {
     }
 
     @Test
-    @DisplayName("구매자 메뉴 7개는 USER 에게만 보인다 — 관리자 네비에는 주문/추천/대량주문/결제/잔액/알림/문의가 없었다")
+    @DisplayName("구매자 메뉴 8개는 USER 에게만 보인다 — 관리자 네비에는 주문/추천/대량주문/결제/잔액/알림/문의/여러곳배송이 없었다")
     void shopMenusAreUserOnly() {
         Set<String> shopNames = adapter.findAll().stream()
                 .filter(m -> m.getArea() == MenuArea.SHOP)
@@ -259,7 +262,8 @@ class MenuSeedIntegrationTest {
 
         assertThat(shopNames)
                 .containsExactlyInAnyOrder(
-                        "주문하기", "추천받기", "대량주문", "나눠 결제", "내 포인트·상품권", "내 알림", "내 문의");
+                        "주문하기", "추천받기", "대량주문", "나눠 결제", "내 포인트·상품권", "내 알림", "내 문의",
+                        "여러 곳 배송");
         assertThat(adapter.findAll()).filteredOn(m -> m.getArea() == MenuArea.SHOP)
                 .allSatisfy(m -> assertThat(m.allowedRoles()).containsExactly("USER"));
     }

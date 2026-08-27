@@ -26,9 +26,18 @@ public interface CreateMultiItemOrderUseCase {
      *                        뜻이고, 어느 경로가 그런지는 {@code order-consent-gate} 가 이름으로 붙들고
      *                        있다. 빈 목록은 뜻이 다르다 — 받기는 하는데 아무것도 안 왔다는 것이라
      *                        필수 항목 누락으로 거절된다
+     * @param destinationGroupId 여러 곳 배송 묶음 id. {@code null} 이면 배송지가 하나뿐인 보통의 주문이다.
+     *                        이 값이 있으면 같은 값을 가진 다른 주문들과 한 번의 결제에서 나온 형제가 된다
      */
     Order create(Long userId, List<Line> lines, String couponCode,
-                 ShippingAddressSnapshot shippingAddress, ConsentSubmission consent);
+                 ShippingAddressSnapshot shippingAddress, ConsentSubmission consent,
+                 String destinationGroupId);
+
+    /** 배송지가 하나뿐인 보통의 주문 (묶음 개념이 없던 기존 호출 호환). */
+    default Order create(Long userId, List<Line> lines, String couponCode,
+                         ShippingAddressSnapshot shippingAddress, ConsentSubmission consent) {
+        return create(userId, lines, couponCode, shippingAddress, consent, null);
+    }
 
     /** 동의를 받지 않는 경로 (배송지만 있는 기존 호출 호환). */
     default Order create(Long userId, List<Line> lines, String couponCode,

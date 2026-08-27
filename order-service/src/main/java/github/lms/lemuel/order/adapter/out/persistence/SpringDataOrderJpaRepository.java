@@ -38,6 +38,13 @@ public interface SpringDataOrderJpaRepository extends JpaRepository<OrderJpaEnti
                                         @Param("to") LocalDateTime to);
 
     /**
+     * 여러 곳 배송 묶음의 주문들. 만들어진 순서(id 오름차순)를 그대로 돌려준다 —
+     * 화면이 "첫 번째 배송지" 로 부르는 것이 첫 주문이어야 하기 때문이다.
+     * 부분 인덱스 {@code ix_orders_destination_group} 이 커버.
+     */
+    List<OrderJpaEntity> findByDestinationGroupIdOrderByIdAsc(String destinationGroupId);
+
+    /**
      * 회수 대기 후보 — 배송된 물건에 환불·취소가 끝났는데 재고가 아직 돌아오지 않은 주문.
      *
      * <p>인덱스로 좁힐 수 있는 조건까지만 거른다. 최종 판정(라인 존재 포함)은 도메인이 하므로

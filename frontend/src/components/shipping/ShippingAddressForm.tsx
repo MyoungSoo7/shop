@@ -12,6 +12,14 @@ export interface ShippingAddressFormProps {
   value: ShippingAddressRequest;
   onChange: (next: ShippingAddressRequest) => void;
   disabled?: boolean;
+  /**
+   * 한 화면에 이 폼이 둘 이상 그려질 때 붙이는 접두사(여러 곳 배송).
+   *
+   * <p>없으면 모든 입력의 id 가 고정값이라 두 번째 폼부터 id 가 겹치고, 그러면 라벨을 눌렀을 때
+   * <b>첫 번째 폼</b>의 칸에 포커스가 간다 — 두 번째 배송지의 받는 분을 적으려던 사람이 첫 번째
+   * 배송지를 덮어쓴다. 기본값을 두지 않아 기존 한 장짜리 화면은 그대로다.
+   */
+  idPrefix?: string;
 }
 
 // 값 검사(`isShippingAddressComplete`)와 빈 폼(`emptyShippingAddress`)은 `@/lib/shippingAddress`
@@ -22,10 +30,14 @@ const field =
   'w-full px-3 py-2.5 border border-gray-300 rounded-lg text-sm text-gray-900 ' +
   'focus:ring-2 focus:ring-blue-500 focus:border-blue-500 disabled:bg-gray-100';
 
-const ShippingAddressForm: React.FC<ShippingAddressFormProps> = ({ value, onChange, disabled }) => {
+const ShippingAddressForm: React.FC<ShippingAddressFormProps> = ({
+  value, onChange, disabled, idPrefix,
+}) => {
   const set = (key: keyof ShippingAddressRequest) => (
     e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>,
   ) => onChange({ ...value, [key]: e.target.value });
+
+  const fieldId = (name: string) => (idPrefix ? `${idPrefix}-${name}` : name);
 
   return (
     <div className="space-y-3">
@@ -33,50 +45,50 @@ const ShippingAddressForm: React.FC<ShippingAddressFormProps> = ({ value, onChan
 
       <div className="grid grid-cols-2 gap-3">
         <div>
-          <label htmlFor="recipientName" className="block text-sm font-medium text-gray-700 mb-1.5">
+          <label htmlFor={fieldId('recipientName')} className="block text-sm font-medium text-gray-700 mb-1.5">
             받는 분
           </label>
-          <input id="recipientName" className={field} value={value.recipientName}
+          <input id={fieldId('recipientName')} className={field} value={value.recipientName}
             onChange={set('recipientName')} disabled={disabled} autoComplete="name" />
         </div>
         <div>
-          <label htmlFor="phone" className="block text-sm font-medium text-gray-700 mb-1.5">
+          <label htmlFor={fieldId('phone')} className="block text-sm font-medium text-gray-700 mb-1.5">
             연락처
           </label>
-          <input id="phone" className={field} value={value.phone} onChange={set('phone')}
+          <input id={fieldId('phone')} className={field} value={value.phone} onChange={set('phone')}
             disabled={disabled} autoComplete="tel" placeholder="010-0000-0000" />
         </div>
       </div>
 
       <div>
-        <label htmlFor="postalCode" className="block text-sm font-medium text-gray-700 mb-1.5">
+        <label htmlFor={fieldId('postalCode')} className="block text-sm font-medium text-gray-700 mb-1.5">
           우편번호
         </label>
-        <input id="postalCode" className={field} value={value.postalCode}
+        <input id={fieldId('postalCode')} className={field} value={value.postalCode}
           onChange={set('postalCode')} disabled={disabled} autoComplete="postal-code" />
       </div>
 
       <div>
-        <label htmlFor="address1" className="block text-sm font-medium text-gray-700 mb-1.5">
+        <label htmlFor={fieldId('address1')} className="block text-sm font-medium text-gray-700 mb-1.5">
           주소
         </label>
-        <input id="address1" className={field} value={value.address1} onChange={set('address1')}
+        <input id={fieldId('address1')} className={field} value={value.address1} onChange={set('address1')}
           disabled={disabled} autoComplete="address-line1" />
       </div>
 
       <div>
-        <label htmlFor="address2" className="block text-sm font-medium text-gray-700 mb-1.5">
+        <label htmlFor={fieldId('address2')} className="block text-sm font-medium text-gray-700 mb-1.5">
           상세 주소 <span className="text-gray-400 font-normal">(선택)</span>
         </label>
-        <input id="address2" className={field} value={value.address2 ?? ''} onChange={set('address2')}
+        <input id={fieldId('address2')} className={field} value={value.address2 ?? ''} onChange={set('address2')}
           disabled={disabled} autoComplete="address-line2" />
       </div>
 
       <div>
-        <label htmlFor="deliveryMemo" className="block text-sm font-medium text-gray-700 mb-1.5">
+        <label htmlFor={fieldId('deliveryMemo')} className="block text-sm font-medium text-gray-700 mb-1.5">
           배송 요청사항 <span className="text-gray-400 font-normal">(선택)</span>
         </label>
-        <textarea id="deliveryMemo" rows={2} className={field} value={value.deliveryMemo ?? ''}
+        <textarea id={fieldId('deliveryMemo')} rows={2} className={field} value={value.deliveryMemo ?? ''}
           onChange={set('deliveryMemo')} disabled={disabled} />
       </div>
     </div>

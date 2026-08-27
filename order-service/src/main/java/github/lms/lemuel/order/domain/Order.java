@@ -35,6 +35,7 @@ public class Order {
     private boolean shipped = false;                   // 배송 시작(IN_TRANSIT/DELIVERED 도달) 여부 — 상태 전이와 무관하게 보존.
     private boolean stockRestored = false;             // 재고 원복 완료 — 이중 원복 방지(멱등 플래그).
     private ShippingAddressSnapshot shippingAddress;   // 주문 시점 배송지 스냅샷(레거시 주문은 null).
+    private String destinationGroupId;                 // 여러 곳 배송 묶음 id — 한 번의 결제에서 나온 주문들이 공유(단일 배송지는 null).
     private final List<OrderItem> items = new ArrayList<>();
 
     // 정본 생성자 — 생성/복원 팩토리(create/createMultiItem/rehydrate)만 통과(Settlement 와 동형).
@@ -560,6 +561,35 @@ public class Order {
             throw new OrderInvariantViolationException("주문 배송지 스냅샷은 다시 지정할 수 없습니다");
         }
         this.shippingAddress = address;
+    }
+
+    /**
+     * 여러 곳 배송 묶음 id. 한 번의 결제로 여러 주소에 나눠 보낸 주문들이 같은 값을 갖는다.
+     * 배송지가 하나뿐인 보통의 주문은 {@code null} 이다.
+     *
+     * <p>주문 하나를 N 곳으로 쪼개지 않고 배송지마다 주문을 하나씩 만드는 것은 배송이 주문과
+     * 1:1 이라는 불변식을 지키기 위해서다. 그렇게 흩어진 주문들이 한 번의 결제에서 나왔다는
+     * 사실은 이 값에만 남는다.
+     */
+    public String getDestinationGroupId() {
+        return destinationGroupId;
+    }
+
+    /**
+     * 묶음 id 를 붙인다 — 생성 시 한 번, 영속 레코드 복원 시 한 번.
+     *
+     * <p>배송지 스냅샷과 같은 이유로 덮어쓸 수 없다. 이 값이 바뀌면 이미 만들어진 주문이
+     * 다른 결제의 묶음으로 옮겨 가고, 멱등 재요청이 원래와 다른 주문 집합을 돌려준다.
+     * {@code null} 은 무시한다(묶음이 아닌 주문의 복원 경로).
+     */
+    public void attachDestinationGroup(String groupId) {
+        if (groupId == null) {
+            return;
+        }
+        if (this.destinationGroupId != null) {
+            throw new OrderInvariantViolationException("주문의 배송 묶음 id 는 다시 지정할 수 없습니다");
+        }
+        this.destinationGroupId = groupId;
     }
 
     /**

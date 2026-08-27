@@ -69,6 +69,10 @@ public class OrderJpaEntity {
     @Column(name = "delivery_memo", length = 500)
     private String deliveryMemo;
 
+    // 여러 곳 배송 묶음 id(UUID). 한 번의 결제에서 나온 주문들이 같은 값을 갖고, 단일 배송지 주문은 비어 있다.
+    @Column(name = "destination_group_id", length = 36)
+    private String destinationGroupId;
+
     @Column(name = "created_at", nullable = false, updatable = false)
     private LocalDateTime createdAt;
 

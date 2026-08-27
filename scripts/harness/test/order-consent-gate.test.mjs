@@ -4,8 +4,13 @@
 // 오버로드를 함께 둔다. 오버로드는 편의가 아니라 **선언**이다 — 그 경로는 개인정보 제3자 제공
 // 동의를 받지 않는다는 뜻이고, 지금은 그런 경로가 넷뿐이다.
 //
-//   CreateMultiItemOrderUseCase#create      (…, ShippingAddressSnapshot, ConsentSubmission)  ← 5개가 정식
+//   CreateMultiItemOrderUseCase#create      (…, ShippingAddressSnapshot, ConsentSubmission[, String groupId])
 //   IdempotentMultiItemOrderUseCase#create  (…, ConsentSubmission, String idempotencyKey)    ← 6개가 정식
+//
+// 앞의 것은 동의를 싣는 형태가 **둘**이다. 여러 곳 배송이 배송지 묶음 id 를 마지막에 덧붙이면서
+// 6개짜리가 정식이 되고 5개짜리가 그 default 오버로드로 남았는데, 둘 다 동의는 다섯 번째다.
+// 그래서 "정식 아리티 하나"로 재면 안 된다 — 5개로 동의를 제대로 넘기는 호출이 실재한다
+// (IdempotentMultiItemOrderService). 아리티의 **집합**으로 재고, 동의 자리는 자리로 본다.
 //
 // 위험한 것은 새 호출자가 짧은 오버로드를 고르는 순간이다. 컴파일도 되고 테스트도 통과하고
 // 주문도 정상으로 생성된다. 빠지는 것은 동의 이력 한 줄뿐이라 런타임에 아무 신호가 없다.
@@ -33,12 +38,17 @@ const mainJava = execFileSync('git', ['ls-files', '*.java'], { cwd: repoRoot })
 
 const read = (f) => readFileSync(join(repoRoot, f), 'utf8');
 
-/** UseCase 타입별 "동의를 포함한" 정식 인자 개수. 이보다 짧으면 동의를 안 받는 경로다. */
-const FULL_ARITY = {
-  CreateMultiItemOrderUseCase: 5,
-  IdempotentMultiItemOrderUseCase: 6,
+/**
+ * UseCase 타입별 "동의를 싣는" 인자 개수들. 여기 없는 개수면 동의를 안 받는 오버로드다.
+ *
+ * <p>CreateMultiItemOrderUseCase 가 둘인 이유는 파일 머리말 참조 — 6개(배송지 묶음 id 까지)가
+ * 정식이고 5개는 그 id 를 뺀 default 오버로드다. 둘 다 동의는 같은 자리에 있다.
+ */
+const CONSENT_ARITIES = {
+  CreateMultiItemOrderUseCase: new Set([5, 6]),
+  IdempotentMultiItemOrderUseCase: new Set([6]),
 };
-/** 동의가 놓이는 자리(0-기준). 두 타입 모두 다섯 번째다. */
+/** 동의가 놓이는 자리(0-기준). 두 타입 모두, 어느 아리티에서도 다섯 번째다. */
 const CONSENT_INDEX = 4;
 
 /**
@@ -129,7 +139,7 @@ export function findOrderCreationCalls(sources) {
   for (const [file, raw] of sources) {
     if (PORT_DECLARATIONS.test(file)) continue;
     const content = blankLiterals(raw);
-    for (const [type, fullArity] of Object.entries(FULL_ARITY)) {
+    for (const [type, consentArities] of Object.entries(CONSENT_ARITIES)) {
       if (!content.includes(type)) continue;
       for (const receiver of receiverNames(content, type)) {
         const callPattern = new RegExp(`\\b${receiver}\\s*\\.\\s*create\\s*\\(`, 'g');
@@ -138,11 +148,14 @@ export function findOrderCreationCalls(sources) {
           const args = splitArguments(content, open);
           if (args === null) continue;
           const line = content.slice(0, m.index).split('\n').length;
-          const consentArg = args.length === fullArity ? args[CONSENT_INDEX] : null;
-          const withConsent = args.length === fullArity && consentArg !== 'null';
-          const why = args.length < fullArity
-            ? `인자 ${args.length}개 — 동의 자리를 뺀 오버로드`
-            : (withConsent ? '동의 전달' : '동의 자리에 리터럴 null');
+          // 동의를 싣는 아리티인가를 먼저 보고, 그 다음에 그 자리에 뭐가 들어갔는지를 본다.
+          // 아는 아리티가 아니면 — 짧은 오버로드든, 시그니처가 또 늘어난 것이든 — 통과시키지
+          // 않는다. 후자라면 이 게이트가 낡은 것이므로 여기서 시끄럽게 터지는 편이 낫다.
+          const carriesConsent = consentArities.has(args.length);
+          const withConsent = carriesConsent && args[CONSENT_INDEX] !== 'null';
+          const why = carriesConsent
+            ? (withConsent ? '동의 전달' : '동의 자리에 리터럴 null')
+            : `인자 ${args.length}개 — 동의를 싣지 않는 오버로드`;
           calls.push({ file, line, type, arity: args.length, withConsent, why });
         }
       }
@@ -214,6 +227,57 @@ describe('주문 동의 게이트 (동의를 받지 않는 주문 경로는 이�
     const calls = findOrderCreationCalls(fixture);
     assert.equal(calls.length, 1);
     assert.equal(calls[0].withConsent, true);
+  });
+
+  test('[자기검증] 배송지 묶음 id 까지 붙은 6개짜리도 동의를 실은 것으로 본다', () => {
+    // 여러 곳 배송이 쓰는 형태다. 세 번째의 null 은 **쿠폰**이지 동의가 아니다 — 이 경로는
+    // 쿠폰을 못 쓴다. 아리티 하나로만 재던 시절엔 이 호출이 "동의 자리에 리터럴 null" 로
+    // 잘못 잡혔다. 자리를 자리로 보게 됐는지를 여기서 고정한다.
+    const fixture = [['fake/MultiDest.java', [
+      'class MultiDest {',
+      '    private final CreateMultiItemOrderUseCase delegate;',
+      '    void go() {',
+      '        delegate.create(userId, lines, null, address, consent, groupId);',
+      '    }',
+      '}',
+    ].join('\n')]];
+
+    const calls = findOrderCreationCalls(fixture);
+    assert.equal(calls[0].arity, 6);
+    assert.equal(calls[0].withConsent, true);
+  });
+
+  test('[자기검증] 6개짜리라도 동의 자리가 null 이면 잡는다 (묶음 id 뒤에 숨지 못한다)', () => {
+    const fixture = [['fake/MultiDest.java', [
+      'class MultiDest {',
+      '    private final CreateMultiItemOrderUseCase delegate;',
+      '    void go() {',
+      '        delegate.create(userId, lines, couponCode, address, null, groupId);',
+      '    }',
+      '}',
+    ].join('\n')]];
+
+    const calls = findOrderCreationCalls(fixture);
+    assert.equal(calls[0].arity, 6);
+    assert.equal(calls[0].withConsent, false);
+    assert.match(calls[0].why, /리터럴 null/);
+  });
+
+  test('[자기검증] 모르는 아리티는 통과시키지 않는다 (시그니처가 또 늘면 여기서 터진다)', () => {
+    // 이 게이트가 낡는 유일한 방법이 시그니처 확장이다. 실제로 한 번 늘었고, 그때 아는
+    // 아리티가 아니면 무조건 잡히도록 바꿨다. 조용히 통과하는 쪽이 훨씬 위험하다.
+    const fixture = [['fake/Future.java', [
+      'class Future {',
+      '    private final CreateMultiItemOrderUseCase delegate;',
+      '    void go() {',
+      '        delegate.create(userId, lines, coupon, address, consent, groupId, whateverComesNext);',
+      '    }',
+      '}',
+    ].join('\n')]];
+
+    const calls = findOrderCreationCalls(fixture);
+    assert.equal(calls[0].arity, 7);
+    assert.equal(calls[0].withConsent, false);
   });
 
   test('[자기검증] 정식 아리티라도 동의 자리가 리터럴 null 이면 잡는다', () => {

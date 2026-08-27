@@ -106,10 +106,12 @@ public class CreateMultiItemOrderService implements CreateMultiItemOrderUseCase 
 
     @Override
     public Order create(Long userId, List<Line> lines, String couponCode,
-                        ShippingAddressSnapshot shippingAddress, ConsentSubmission consent) {
-        log.info("다건 주문 생성: userId={}, lines={}, coupon={}, 배송지={}, 동의={}",
+                        ShippingAddressSnapshot shippingAddress, ConsentSubmission consent,
+                        String destinationGroupId) {
+        log.info("다건 주문 생성: userId={}, lines={}, coupon={}, 배송지={}, 동의={}, 묶음={}",
                 userId, lines.size(), couponCode, shippingAddress != null ? "있음" : "없음",
-                consent != null ? "수집" : "미수집경로");
+                consent != null ? "수집" : "미수집경로",
+                destinationGroupId != null ? destinationGroupId : "단일");
 
         String userEmail = loadUserPort.findEmailById(userId)
                 .orElseThrow(() -> new UserNotExistsException(userId));
@@ -194,6 +196,9 @@ public class CreateMultiItemOrderService implements CreateMultiItemOrderUseCase 
         Order order = Order.createMultiItem(userId, items, discount, shippingFee, discountBearingItems);
         // 배송지는 저장 전에 붙인다 — 주문서에 굳는 값이라 INSERT 와 같은 행에 들어가야 한다.
         order.attachShippingAddress(shippingAddress);
+        // 묶음 id 도 같은 이유로 저장 전이다. 나중에 UPDATE 로 채우면 그 사이에 주문 목록을 연
+        // 사용자에게는 형제 없는 낱개 주문 N 건으로 보이고, 그 UPDATE 가 실패하면 영영 그대로다.
+        order.attachDestinationGroup(destinationGroupId);
         Order saved = saveOrderPort.save(order);
 
         // 동의 이력도 같은 트랜잭션이다. 필수 동의가 빠졌으면 여기서 던져 주문·재고·쿠폰까지

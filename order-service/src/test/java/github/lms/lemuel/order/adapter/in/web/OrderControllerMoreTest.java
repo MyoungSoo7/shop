@@ -21,6 +21,8 @@ import org.springframework.test.web.servlet.MockMvc;
 import java.math.BigDecimal;
 import java.util.List;
 
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.tuple;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.eq;
@@ -50,6 +52,7 @@ class OrderControllerMoreTest {
     @MockitoBean JwtUtil jwtUtil;
     @MockitoBean CreateOrderUseCase createOrderUseCase;
     @MockitoBean IdempotentMultiItemOrderUseCase createMultiItemOrderUseCase;
+    @MockitoBean github.lms.lemuel.order.application.port.in.CreateMultiDestinationOrderUseCase createMultiDestinationOrderUseCase;
     @MockitoBean GetOrderUseCase getOrderUseCase;
     @MockitoBean ChangeOrderStatusUseCase changeOrderStatusUseCase;
     @MockitoBean github.lms.lemuel.order.application.port.in.CancelOrderItemsUseCase cancelOrderItemsUseCase;
@@ -397,5 +400,89 @@ class OrderControllerMoreTest {
                                 """))
                 .andExpect(status().isOk());
         verify(changeOrderStatusUseCase).changeShippingStatus(eq(7L), eq("IN_TRANSIT"), any(), any());
+    }
+
+    /**
+     * 여러 곳 배송 — 배송지가 자기 라인을 들고 온다.
+     *
+     * <p>원본(ssg-front)의 같은 화면은 라인 목록 한 벌과 배송지 수만 보냈고, 서버가 총액을 그 수만큼
+     * 곱해 더했다(재고는 한 벌만 뺐다). 여기서 확인하는 것은 그 형태가 애초에 표현될 수 없다는 것 —
+     * 서울에는 서울 라인만, 부산에는 부산 라인만 간다.
+     */
+    private static final String TWO_DESTINATIONS_JSON = """
+            {"userId":1,"destinations":[
+              {"shippingAddress":{"recipientName":"홍길동","phone":"010-1234-5678","postalCode":"06236",
+                                  "address1":"서울시 강남구 테헤란로 1","address2":"3층","deliveryMemo":null},
+               "lines":[{"productId":1,"variantId":null,"quantity":2}]},
+              {"shippingAddress":{"recipientName":"김영희","phone":"010-9999-8888","postalCode":"48058",
+                                  "address1":"부산시 해운대구 해운대해변로 2","address2":null,"deliveryMemo":null},
+               "lines":[{"productId":2,"variantId":null,"quantity":1}]}]}
+            """;
+
+    @Test
+    @DisplayName("POST /orders/multi-destination: 묶음 id 와 주문 2건, 총액은 주문들의 합")
+    void createMultiDestinationOrder() throws Exception {
+        login(1L, "USER");
+        Order seoul = multiItemOrder();
+        Order busan = Order.createMultiItem(1L, List.of(
+                github.lms.lemuel.order.domain.OrderItem.newItem(
+                        2L, null, "SKU-2", "바지", new BigDecimal("30000"), 1)));
+        busan.assignId(8L);
+        when(createMultiDestinationOrderUseCase.create(any()))
+                .thenReturn(new github.lms.lemuel.order.application.port.in
+                        .CreateMultiDestinationOrderUseCase.Result("group-1", List.of(seoul, busan)));
+
+        mockMvc.perform(post("/orders/multi-destination")
+                        .header("Idempotency-Key", "idem-md-1")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(TWO_DESTINATIONS_JSON))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.destinationGroupId").value("group-1"))
+                .andExpect(jsonPath("$.orders.length()").value(2))
+                .andExpect(jsonPath("$.orders[0].id").value(7))
+                .andExpect(jsonPath("$.orders[1].id").value(8))
+                // 서울 48,000(50,000 - 5,000 + 3,000) + 부산 30,000
+                .andExpect(jsonPath("$.totalAmount").value(78000));
+
+        ArgumentCaptor<github.lms.lemuel.order.application.port.in
+                .CreateMultiDestinationOrderUseCase.Command> command =
+                ArgumentCaptor.forClass(github.lms.lemuel.order.application.port.in
+                        .CreateMultiDestinationOrderUseCase.Command.class);
+        verify(createMultiDestinationOrderUseCase).create(command.capture());
+        assertThat(command.getValue().idempotencyKey()).isEqualTo("idem-md-1");
+        assertThat(command.getValue().destinations())
+                .extracting(d -> d.shippingAddress().recipientName(),
+                        d -> d.lines().get(0).productId(),
+                        d -> d.lines().get(0).quantity())
+                .containsExactly(tuple("홍길동", 1L, 2), tuple("김영희", 2L, 1));
+    }
+
+    @Test
+    @DisplayName("POST /orders/multi-destination: 배송지가 한 곳이면 400 — 그 요청은 그냥 주문이다")
+    void createMultiDestinationOrder_rejectsSingleDestination() throws Exception {
+        login(1L, "USER");
+
+        mockMvc.perform(post("/orders/multi-destination")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"userId":1,"destinations":[
+                                  {"shippingAddress":{"recipientName":"홍길동","phone":"010-1234-5678",
+                                                      "postalCode":"06236","address1":"서울시 강남구 테헤란로 1"},
+                                   "lines":[{"productId":1,"variantId":null,"quantity":2}]}]}
+                                """))
+                .andExpect(status().isBadRequest());
+        verify(createMultiDestinationOrderUseCase, org.mockito.Mockito.never()).create(any());
+    }
+
+    @Test
+    @DisplayName("POST /orders/multi-destination: 남의 userId 로는 만들 수 없다 (IDOR)")
+    void createMultiDestinationOrder_rejectsOtherUser() throws Exception {
+        login(2L, "USER");
+
+        mockMvc.perform(post("/orders/multi-destination")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(TWO_DESTINATIONS_JSON))
+                .andExpect(status().isForbidden());
+        verify(createMultiDestinationOrderUseCase, org.mockito.Mockito.never()).create(any());
     }
 }

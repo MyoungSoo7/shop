@@ -1,12 +1,19 @@
 import api from './axios';
 import { ConsentAcceptance } from './privacyConsent';
 import {
+  MultiDestinationOrderResponse,
   MultiItemOrderResponse,
   OrderCreateRequest,
   OrderLineRequest,
   OrderResponse,
   ShippingAddressRequest,
 } from '@/types';
+
+/** 여러 곳 배송의 한 배송지 — 주소와 그 주소로 갈 라인. 서버에서는 주문 한 건이 된다. */
+export interface MultiDestinationRequest {
+  shippingAddress: ShippingAddressRequest;
+  lines: OrderLineRequest[];
+}
 
 export const orderApi = {
   /**
@@ -50,6 +57,34 @@ export const orderApi = {
     const response = await api.post<MultiItemOrderResponse>(
       '/orders/multi',
       { userId, lines, couponCode: couponCode ?? null, shippingAddress, consents },
+      idempotencyKey ? { headers: { 'Idempotency-Key': idempotencyKey } } : undefined,
+    );
+    return response.data;
+  },
+
+  /**
+   * 여러 곳 배송
+   * POST /orders/multi-destination
+   *
+   * 배송지마다 <b>그 배송지로 갈 라인만</b> 실어 보낸다. 서버는 배송지 수만큼 평범한 주문을
+   * 만들고 하나의 묶음 id 로 묶는다 — 주문 하나에 배송지 여러 개가 아니다. 그래서 배송비도
+   * 금액도 각 주문이 자기 라인으로 계산하고, 응답의 `totalAmount` 는 그 합이다.
+   *
+   * 쿠폰 인자가 없는 것은 빠뜨린 것이 아니다. 쿠폰의 최소 주문금액과 1 인 한도는 주문 <b>한
+   * 건</b>에 걸리는 조건이라, 한 장을 N 건에 어떻게 나눌지의 규칙이 먼저 있어야 한다. 서버도
+   * 이 경로에서는 쿠폰을 받지 않는다.
+   *
+   * @param idempotencyKey 같은 키의 재요청은 주문을 다시 만들지 않고 그 묶음을 그대로 돌려준다.
+   */
+  createMultiDestinationOrder: async (
+    userId: number,
+    destinations: MultiDestinationRequest[],
+    consents: ConsentAcceptance[],
+    idempotencyKey?: string,
+  ): Promise<MultiDestinationOrderResponse> => {
+    const response = await api.post<MultiDestinationOrderResponse>(
+      '/orders/multi-destination',
+      { userId, destinations, consents },
       idempotencyKey ? { headers: { 'Idempotency-Key': idempotencyKey } } : undefined,
     );
     return response.data;

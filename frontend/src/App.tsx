@@ -28,6 +28,7 @@ const InquiryPage = lazy(() => import('./pages/InquiryPage'));
 const NotificationsPage = lazy(() => import('./pages/NotificationsPage'));
 const BulkOrderPage = lazy(() => import('./pages/BulkOrderPage'));
 const TenderCheckoutPage = lazy(() => import('./pages/TenderCheckoutPage'));
+const MultiDestinationOrderPage = lazy(() => import('./pages/MultiDestinationOrderPage'));
 const TossPaymentSuccess = lazy(() => import('./pages/TossPaymentSuccess'));
 const RefundAdminPage = lazy(() => import('./pages/RefundAdminPage'));
 const EducationCourseAdminPage = lazy(() => import('./pages/system/EducationCourseAdminPage'));
@@ -150,6 +151,10 @@ function App() {
             {/* 대량주문 — 올리는 것과 주문이 나가는 것이 다른 버튼이다(검증/확정 분리). */}
             <Route path="/order/bulk"   element={<ProtectedRoute><BulkOrderPage /></ProtectedRoute>} />
             <Route path="/order/pay"    element={<ProtectedRoute><TenderCheckoutPage /></ProtectedRoute>} />
+            {/* 여러 곳 배송 — 경로가 /orders/… 가 아니라 /order/… 인 이유: nginx 두 벌이 orders
+                세그먼트를 게이트웨이로 프록시한다. 같으면 새로고침에서 주문 JSON 이 렌더된다. */}
+            <Route path="/order/multi-destination"
+                   element={<ProtectedRoute><MultiDestinationOrderPage /></ProtectedRoute>} />
             <Route path="/order/toss/success" element={<ProtectedRoute><TossPaymentSuccess /></ProtectedRoute>} />
 
             {/* ── 관리자·매니저 공용 ── */}
