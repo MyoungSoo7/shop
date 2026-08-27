@@ -49,6 +49,34 @@ describe('shippingApi', () => {
     expect(result.trackingNumber).toBe('1234567890');
   });
 
+  it('배송 추적은 껍데기 없이 그대로 온다 — get 과 규약이 다르다', async () => {
+    vi.mocked(api.get).mockResolvedValue({
+      data: {
+        orderId: 42,
+        status: 'SHIPPED',
+        carrier: 'CJ대한통운',
+        trackingNumber: '1234567890',
+        events: [
+          {
+            status: 'SHIPPED',
+            source: 'INTERNAL',
+            description: 'CJ대한통운에 상품을 인계했습니다.',
+            location: null,
+            occurredAt: '2026-08-20T09:00:00',
+          },
+        ],
+        carrierNote: null,
+      },
+    });
+
+    const result = await shippingApi.tracking(42);
+
+    expect(api.get).toHaveBeenCalledWith('/orders/42/shipment/tracking');
+    expect(result.events).toHaveLength(1);
+    expect(result.events[0].source).toBe('INTERNAL');
+    expect(result.carrierNote).toBeNull();
+  });
+
   it('배송 생성은 주소를 그대로 본문에 싣는다', async () => {
     vi.mocked(api.post).mockResolvedValue(envelope);
 

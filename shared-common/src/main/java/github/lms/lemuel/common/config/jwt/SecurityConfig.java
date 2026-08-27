@@ -166,6 +166,10 @@ public class SecurityConfig {
                         // 매처가 없던 시절엔 anyRequest().authenticated() 로 떨어져 아무 로그인 사용자나
                         // 남의 수취인 이름·연락처·주소를 읽고 배송지를 바꿀 수 있었다.
                         .requestMatchers(HttpMethod.GET, "/orders/*/shipment").authenticated()
+                        // 추적 타임라인도 같은 성격이다 — 수취인·배송 이력이 나가므로 소유자 대조가
+                        // 필요하다. GET 하위 경로는 위 두 줄이 덮지 않아 여기 없으면
+                        // anyRequest().authenticated() 로 떨어진다.
+                        .requestMatchers(HttpMethod.GET, "/orders/*/shipment/tracking").authenticated()
                         .requestMatchers(HttpMethod.PATCH, "/orders/*/shipment/address").authenticated()
                         // 관리자 전용 카테고리 API
                         .requestMatchers("/admin/categories/**").hasRole("ADMIN")

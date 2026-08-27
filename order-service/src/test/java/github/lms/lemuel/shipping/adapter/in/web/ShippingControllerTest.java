@@ -42,6 +42,7 @@ class ShippingControllerTest {
     @MockitoBean LoadShipmentPort loadPort;
     @MockitoBean LoadOrderOwnerPort loadOrderOwnerPort;
     @MockitoBean github.lms.lemuel.shipping.application.port.in.SafetyNumberUseCase safetyNumberUseCase;
+    @MockitoBean github.lms.lemuel.shipping.application.port.in.GetShipmentTrackingUseCase trackingUseCase;
 
     /** JWT 주체를 SecurityContext 에 직접 세팅(addFilters=false 슬라이스 대응). */
     private static void login(long uid, String role) {
@@ -202,5 +203,79 @@ class ShippingControllerTest {
         mockMvc.perform(post("/orders/500/shipment/returned"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.shipment.status").value("RETURNED"));
+    }
+
+    private github.lms.lemuel.shipping.domain.ShipmentTimeline timeline(String carrierNote) {
+        LocalDateTime at = LocalDateTime.of(2026, 8, 20, 9, 0);
+        return github.lms.lemuel.shipping.domain.ShipmentTimeline.of(
+                shipment(ShippingStatus.SHIPPED),
+                java.util.List.of(github.lms.lemuel.shipping.domain.ShipmentTrackingEvent.rehydrate(
+                        1L, 500L, ShippingStatus.SHIPPED,
+                        github.lms.lemuel.shipping.domain.TrackingEventSource.INTERNAL,
+                        "CJ에 상품을 인계했습니다.", null, at)),
+                java.util.List.of(github.lms.lemuel.shipping.domain.ShipmentTrackingEvent.carrier(
+                        500L, ShippingStatus.IN_TRANSIT, "간선상차", "동서울허브", at.plusHours(2))),
+                carrierNote);
+    }
+
+    @Test
+    @DisplayName("GET /orders/{id}/shipment/tracking: 내부 이력과 택배사 스캔을 출처와 함께 돌려준다")
+    void tracking() throws Exception {
+        login(9L, "USER");
+        when(loadOrderOwnerPort.findOwnerUserId(500L)).thenReturn(9L);
+        when(trackingUseCase.getTimeline(500L)).thenReturn(Optional.of(timeline(null)));
+
+        mockMvc.perform(get("/orders/500/shipment/tracking"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.orderId").value(500))
+                .andExpect(jsonPath("$.status").value("SHIPPED"))
+                .andExpect(jsonPath("$.events.length()").value(2))
+                .andExpect(jsonPath("$.events[0].source").value("INTERNAL"))
+                .andExpect(jsonPath("$.events[1].source").value("CARRIER"))
+                .andExpect(jsonPath("$.events[1].location").value("동서울허브"))
+                .andExpect(jsonPath("$.carrierNote").isEmpty());
+    }
+
+    @Test
+    @DisplayName("GET /orders/{id}/shipment/tracking: 택배사 조회가 실패해도 내부 이력은 그대로 나간다")
+    void tracking_carrierFailureKeepsEvents() throws Exception {
+        login(9L, "USER");
+        when(loadOrderOwnerPort.findOwnerUserId(500L)).thenReturn(9L);
+        when(trackingUseCase.getTimeline(500L))
+                .thenReturn(Optional.of(timeline("택배사 배송 정보를 불러오지 못했습니다.")));
+
+        mockMvc.perform(get("/orders/500/shipment/tracking"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.events.length()").value(2))
+                .andExpect(jsonPath("$.carrierNote").value("택배사 배송 정보를 불러오지 못했습니다."));
+    }
+
+    @Test
+    @DisplayName("GET /orders/{id}/shipment/tracking: 배송이 없으면 404")
+    void tracking_notFound() throws Exception {
+        login(9L, "USER");
+        when(loadOrderOwnerPort.findOwnerUserId(500L)).thenReturn(9L);
+        when(trackingUseCase.getTimeline(500L)).thenReturn(Optional.empty());
+
+        mockMvc.perform(get("/orders/500/shipment/tracking")).andExpect(status().isNotFound());
+    }
+
+    @Test
+    @DisplayName("GET /orders/{id}/shipment/tracking: 남의 주문 이력은 읽을 수 없다")
+    void tracking_otherUsersOrderForbidden() throws Exception {
+        login(9L, "USER");
+        when(loadOrderOwnerPort.findOwnerUserId(500L)).thenReturn(77L);
+
+        mockMvc.perform(get("/orders/500/shipment/tracking")).andExpect(status().isForbidden());
+        verify(trackingUseCase, org.mockito.Mockito.never()).getTimeline(500L);
+    }
+
+    @Test
+    @DisplayName("GET /orders/{id}/shipment/tracking: 운영자는 소유권 대조를 우회한다 (CS 지원)")
+    void tracking_adminBypassesOwnership() throws Exception {
+        login(1L, "ADMIN");
+        when(trackingUseCase.getTimeline(500L)).thenReturn(Optional.of(timeline(null)));
+
+        mockMvc.perform(get("/orders/500/shipment/tracking")).andExpect(status().isOk());
     }
 }

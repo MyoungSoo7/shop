@@ -1,9 +1,12 @@
 package github.lms.lemuel.shipping.adapter.in.web;
 
+import github.lms.lemuel.shipping.application.port.in.GetShipmentTrackingUseCase;
 import github.lms.lemuel.shipping.application.port.in.ShippingUseCase;
 import github.lms.lemuel.shipping.application.port.out.LoadOrderOwnerPort;
 import github.lms.lemuel.shipping.application.port.out.LoadShipmentPort;
 import github.lms.lemuel.shipping.domain.Shipment;
+import github.lms.lemuel.shipping.domain.ShipmentTimeline;
+import github.lms.lemuel.shipping.domain.ShipmentTrackingEvent;
 import github.lms.lemuel.shipping.domain.ShippingAddress;
 import github.lms.lemuel.web.security.ResourceOwnership;
 import io.swagger.v3.oas.annotations.Operation;
@@ -13,7 +16,9 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.AccessDeniedException;
 import org.springframework.web.bind.annotation.*;
 
+import java.time.LocalDateTime;
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
 
 /**
@@ -37,14 +42,17 @@ public class ShippingController {
     private final LoadShipmentPort loadPort;
     private final LoadOrderOwnerPort loadOrderOwnerPort;
     private final github.lms.lemuel.shipping.application.port.in.SafetyNumberUseCase safetyNumberUseCase;
+    private final GetShipmentTrackingUseCase trackingUseCase;
 
     public ShippingController(ShippingUseCase useCase, LoadShipmentPort loadPort,
                               LoadOrderOwnerPort loadOrderOwnerPort,
-                              github.lms.lemuel.shipping.application.port.in.SafetyNumberUseCase safetyNumberUseCase) {
+                              github.lms.lemuel.shipping.application.port.in.SafetyNumberUseCase safetyNumberUseCase,
+                              GetShipmentTrackingUseCase trackingUseCase) {
         this.useCase = useCase;
         this.loadPort = loadPort;
         this.loadOrderOwnerPort = loadOrderOwnerPort;
         this.safetyNumberUseCase = safetyNumberUseCase;
+        this.trackingUseCase = trackingUseCase;
     }
 
     @Operation(summary = "주문에 대한 배송 생성 (PENDING) — 운영자 전용")
@@ -67,6 +75,19 @@ public class ShippingController {
                 .map(s -> ShipmentResponse.from(s, safetyNumber))
                 .map(ResponseEntity::ok)
                 .orElse(ResponseEntity.notFound().build());
+    }
+
+    @Operation(summary = "배송 추적 타임라인",
+            description = "내부 상태 전이 이력을 시간순으로 돌려준다. 택배사 연동이 켜져 있으면 "
+                    + "서버가 대신 조회해 스캔 기록을 합쳐 준다 — 택배사 API 키는 응답에 실리지 않는다. "
+                    + "조회에 실패해도 내부 이력은 그대로 나가고 carrierNote 로 사유만 덧붙는다.")
+    @GetMapping("/tracking")
+    public ResponseEntity<TrackingResponse> tracking(@PathVariable Long orderId) {
+        requireOrderOwnerOrAdmin(orderId);
+        return trackingUseCase.getTimeline(orderId)
+                .map(TrackingResponse::from)
+                .map(ResponseEntity::ok)
+                .orElseGet(() -> ResponseEntity.notFound().build());
     }
 
     @Operation(summary = "배송지 변경 (PENDING 만 가능)")
@@ -136,6 +157,49 @@ public class ShippingController {
     }
 
     public record ShipRequest(@NotBlank String carrier, @NotBlank String trackingNumber) {}
+
+    /**
+     * 배송 추적 응답.
+     *
+     * <p><b>택배사 API 키는 여기에 없다.</b> 레거시 커머스는 조회 화면 JS 가 키를 들고 택배사로
+     * 직접 POST 했고, 그 키는 페이지 소스에 평문으로 있었다. 여기서는 서버가 대신 부르고 정규화된
+     * 이력만 내려간다.
+     *
+     * @param carrierNote 택배사 조회 실패 사유. 성공했거나 연동이 꺼져 있으면 {@code null} —
+     *                    쓰지 않는 연동의 부재를 사용자에게 알릴 이유가 없다
+     */
+    public record TrackingResponse(
+            Long orderId,
+            String status,
+            String carrier,
+            String trackingNumber,
+            List<TrackingEventResponse> events,
+            String carrierNote) {
+
+        static TrackingResponse from(ShipmentTimeline timeline) {
+            return new TrackingResponse(
+                    timeline.orderId(),
+                    timeline.status().name(),
+                    timeline.carrier(),
+                    timeline.trackingNumber(),
+                    timeline.events().stream().map(TrackingEventResponse::from).toList(),
+                    timeline.carrierNote());
+        }
+    }
+
+    /** {@code source} 를 함께 내보낸다 — 우리가 찍은 사실과 택배사가 알려준 사실은 신뢰도가 다르다. */
+    public record TrackingEventResponse(
+            String status,
+            String source,
+            String description,
+            String location,
+            LocalDateTime occurredAt) {
+
+        static TrackingEventResponse from(ShipmentTrackingEvent event) {
+            return new TrackingEventResponse(event.status().name(), event.source().name(),
+                    event.description(), event.location(), event.occurredAt());
+        }
+    }
 
     public record ShipmentResponse(Map<String, Object> shipment) {
         /**

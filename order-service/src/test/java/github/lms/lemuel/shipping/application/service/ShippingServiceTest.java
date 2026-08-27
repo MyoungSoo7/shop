@@ -24,6 +24,8 @@ class ShippingServiceTest {
     @Mock LoadShipmentPort loadPort;
     @Mock SaveShipmentPort savePort;
     @Mock github.lms.lemuel.shipping.application.port.in.SafetyNumberUseCase safetyNumberUseCase;
+    // 전이가 남기는 추적 이력 적재 포트 — 이 테스트들은 전이 자체를 보므로 호출만 흡수한다.
+    @Mock github.lms.lemuel.shipping.application.port.out.SaveShipmentTrackingEventPort saveTrackingEventPort;
     @InjectMocks ShippingService service;
 
     private ShippingAddress addr() {

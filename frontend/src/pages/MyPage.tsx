@@ -13,6 +13,7 @@ import OrderRequestActions from '@/components/order/OrderRequestActions';
 import OrderShippingAddressPanel from '@/components/order/OrderShippingAddressPanel';
 import OrderGiftPanel from '@/components/order/OrderGiftPanel';
 import OrderPrivacyConsentPanel from '@/components/order/OrderPrivacyConsentPanel';
+import ShipmentTrackingPanel from '@/components/shipping/ShipmentTrackingPanel';
 import { ORDER_STATUS_LABEL, OrderStatusValue } from '@/api/orderWorkflow';
 
 const USER_ID = 1;
@@ -302,6 +303,11 @@ const MyPage: React.FC = () => {
                         늘 띄운다: 배송이 끝났다고 동의 기록을 확인할 이유가 사라지지 않는다.
                         동의 기능 이전의 주문에는 이력이 없고, 그 사실을 그대로 적는다. */}
                     <OrderPrivacyConsentPanel orderId={order.id} />
+
+                    {/* 배송 추적 — 상태 단어 하나로는 "언제부터"도 "왜 안 움직이나"도 답이 안 된다.
+                        배송이 끝난 뒤에도 남겨 둔다: 언제 도착했는지는 나중에 더 자주 확인한다.
+                        배송 생성 전 주문에서는 펼쳐도 "아직 배송 정보가 없습니다"만 뜬다. */}
+                    <ShipmentTrackingPanel orderId={order.id} />
 
                   </div>
                 );

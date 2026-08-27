@@ -89,6 +89,36 @@ export const nextShippingActions = (
   }
 };
 
+/** 이력 한 줄의 출처. 우리가 찍은 사실과 택배사가 알려준 사실은 신뢰도가 다르다. */
+export type TrackingEventSource = 'INTERNAL' | 'CARRIER';
+
+export interface ShipmentTrackingEvent {
+  status: ShippingStatus;
+  source: TrackingEventSource;
+  description: string;
+  /** 택배사 스캔 지점. 내부 이벤트에는 없다. */
+  location: string | null;
+  /** 실제 발생 시각(적재 시각이 아니다). */
+  occurredAt: string;
+}
+
+/**
+ * 배송 추적 타임라인.
+ *
+ * <p>{@code events} 는 <b>택배사 연동과 무관하게</b> 채워진다 — 내부 상태 전이만으로 성립한다.
+ *
+ * @property carrierNote 택배사 조회 실패 사유. 성공했거나 연동이 꺼져 있으면 {@code null}.
+ *                       "연동이 없음"과 "조회에 실패함"은 다른 사실이라, 전자는 아무 말도 하지 않는다.
+ */
+export interface ShipmentTracking {
+  orderId: number;
+  status: ShippingStatus;
+  carrier: string | null;
+  trackingNumber: string | null;
+  events: ShipmentTrackingEvent[];
+  carrierNote: string | null;
+}
+
 /** 송장 일괄 등록 행별 결과 — 실패는 사유를 담는다. */
 export interface BulkTrackingLine {
   orderId: number | null;
@@ -111,6 +141,16 @@ export const shippingApi = {
   get: async (orderId: number): Promise<Shipment> => {
     const response = await api.get<ShipmentEnvelope>(base(orderId));
     return response.data.shipment;
+  },
+
+  /**
+   * GET /tracking — 배송 추적 타임라인. 배송이 없으면 404 다.
+   *
+   * <p>응답이 껍데기 없이 그대로 오는 것은 서버 규약이다({@code ShipmentResponse} 와 다르다).
+   */
+  tracking: async (orderId: number): Promise<ShipmentTracking> => {
+    const response = await api.get<ShipmentTracking>(`${base(orderId)}/tracking`);
+    return response.data;
   },
 
   /** POST — 주문에 배송 생성(PENDING). */
