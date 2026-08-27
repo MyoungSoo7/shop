@@ -1,5 +1,6 @@
 package github.lms.lemuel.shipping.domain;
 
+import github.lms.lemuel.shipping.domain.exception.ShipmentInvariantViolationException;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
@@ -48,9 +49,9 @@ class ShipmentTrackingEventTest {
     @DisplayName("설명이 비면 거부한다 — 빈 줄은 '아무 일도 없었다'로 읽힌다")
     void blankDescriptionRejected() {
         assertThatThrownBy(() -> ShipmentTrackingEvent.internal(7L, ShippingStatus.PENDING, "  "))
-                .isInstanceOf(IllegalArgumentException.class);
+                .isInstanceOf(ShipmentInvariantViolationException.class);
         assertThatThrownBy(() -> ShipmentTrackingEvent.internal(7L, ShippingStatus.PENDING, null))
-                .isInstanceOf(IllegalArgumentException.class);
+                .isInstanceOf(ShipmentInvariantViolationException.class);
     }
 
     @Test

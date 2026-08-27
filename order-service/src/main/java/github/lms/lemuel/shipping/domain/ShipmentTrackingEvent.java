@@ -1,5 +1,7 @@
 package github.lms.lemuel.shipping.domain;
 
+import github.lms.lemuel.shipping.domain.exception.ShipmentInvariantViolationException;
+
 import java.time.LocalDateTime;
 import java.util.Objects;
 
@@ -41,7 +43,7 @@ public record ShipmentTrackingEvent(
         Objects.requireNonNull(occurredAt, "occurredAt");
         if (description == null || description.isBlank()) {
             // 설명 없는 줄은 화면에서 빈 칸으로 보인다 — 아무 일도 없었던 것과 구분이 안 된다.
-            throw new IllegalArgumentException("description 필수");
+            throw new ShipmentInvariantViolationException("description 필수");
         }
     }
 
