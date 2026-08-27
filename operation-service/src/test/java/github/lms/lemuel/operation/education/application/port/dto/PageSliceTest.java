@@ -1,4 +1,4 @@
-package github.lms.lemuel.operation.education.application.port.out.dto;
+package github.lms.lemuel.operation.education.application.port.dto;
 
 import org.junit.jupiter.api.Test;
 

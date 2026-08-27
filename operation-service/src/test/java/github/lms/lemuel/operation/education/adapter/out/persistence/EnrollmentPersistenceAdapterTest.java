@@ -1,8 +1,8 @@
 package github.lms.lemuel.operation.education.adapter.out.persistence;
 
 import github.lms.lemuel.OperationServiceApplication;
-import github.lms.lemuel.operation.education.application.port.out.dto.PageSlice;
-import github.lms.lemuel.operation.education.application.port.out.dto.PageSpec;
+import github.lms.lemuel.operation.education.application.port.dto.PageSlice;
+import github.lms.lemuel.operation.education.application.port.dto.PageSpec;
 import github.lms.lemuel.operation.education.domain.Course;
 import github.lms.lemuel.operation.education.domain.Enrollment;
 import github.lms.lemuel.operation.education.domain.EnrollmentStatus;

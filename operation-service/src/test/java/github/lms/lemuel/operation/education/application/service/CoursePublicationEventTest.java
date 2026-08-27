@@ -1,12 +1,14 @@
 package github.lms.lemuel.operation.education.application.service;
 
+import github.lms.lemuel.operation.education.application.port.dto.PageSlice;
+import github.lms.lemuel.operation.education.application.port.dto.PageSpec;
+import github.lms.lemuel.operation.education.application.port.in.ManageCourseUseCase;
 import github.lms.lemuel.operation.education.application.port.out.LoadCoursePort;
 import github.lms.lemuel.operation.education.application.port.out.PublishEducationEventPort;
 import github.lms.lemuel.operation.education.application.port.out.SaveCoursePort;
-import github.lms.lemuel.operation.education.application.port.out.dto.PageSlice;
-import github.lms.lemuel.operation.education.application.port.out.dto.PageSpec;
 import github.lms.lemuel.operation.education.domain.Course;
 import github.lms.lemuel.operation.education.domain.CourseStatus;
+import github.lms.lemuel.operation.education.domain.exception.CourseNotFoundException;
 import org.junit.jupiter.api.Test;
 
 import java.util.List;
@@ -65,8 +67,8 @@ class CoursePublicationEventTest {
         savePassesThrough();
         when(loadCourse.findById(course.id())).thenReturn(Optional.of(course));
 
-        service.create("새 교육", "설명", "admin");
-        service.update(course.id(), "수정 교육", "수정 설명", "admin");
+        service.create(new ManageCourseUseCase.SaveCommand("새 교육", "설명"), "admin");
+        service.update(course.id(), new ManageCourseUseCase.SaveCommand("수정 교육", "수정 설명"), "admin");
         service.transition(course.id(), CourseStatus.PUBLISHED, "admin");
         service.transition(course.id(), CourseStatus.HIDDEN, "admin");
         service.transition(course.id(), CourseStatus.CLOSED, "admin");
@@ -82,7 +84,7 @@ class CoursePublicationEventTest {
         when(loadCourse.findById(any())).thenReturn(Optional.empty());
 
         assertThatThrownBy(() -> service.get(UUID.randomUUID()))
-                .isInstanceOf(CourseAdminService.CourseNotFoundException.class);
+                .isInstanceOf(CourseNotFoundException.class);
     }
 
     @Test

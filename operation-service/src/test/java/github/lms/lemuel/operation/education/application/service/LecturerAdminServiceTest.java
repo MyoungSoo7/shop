@@ -1,5 +1,6 @@
 package github.lms.lemuel.operation.education.application.service;
 
+import github.lms.lemuel.operation.education.application.port.in.ManageLecturerUseCase;
 import github.lms.lemuel.operation.education.application.port.out.DeleteLecturerAssignmentPort;
 import github.lms.lemuel.operation.education.application.port.out.LoadCoursePort;
 import github.lms.lemuel.operation.education.application.port.out.LoadLecturerAssignmentPort;
@@ -10,8 +11,10 @@ import github.lms.lemuel.operation.education.domain.Course;
 import github.lms.lemuel.operation.education.domain.CourseStatus;
 import github.lms.lemuel.operation.education.domain.Lecturer;
 import github.lms.lemuel.operation.education.domain.LecturerAssignment;
+import github.lms.lemuel.operation.education.domain.exception.CourseNotFoundException;
 import github.lms.lemuel.operation.education.domain.exception.InvalidLecturerStateException;
 import github.lms.lemuel.operation.education.domain.exception.LecturerAlreadyAssignedException;
+import github.lms.lemuel.operation.education.domain.exception.LecturerNotFoundException;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
@@ -106,7 +109,7 @@ class LecturerAdminServiceTest {
         when(loadCourse.findById(courseId)).thenReturn(Optional.empty());
 
         assertThatThrownBy(() -> service.assign(lecturerId, courseId, "admin"))
-                .isInstanceOf(CourseAdminService.CourseNotFoundException.class);
+                .isInstanceOf(CourseNotFoundException.class);
     }
 
     @Test
@@ -115,7 +118,7 @@ class LecturerAdminServiceTest {
         when(loadLecturer.findById(lecturerId)).thenReturn(Optional.empty());
 
         assertThatThrownBy(() -> service.get(lecturerId))
-                .isInstanceOf(LecturerAdminService.LecturerNotFoundException.class);
+                .isInstanceOf(LecturerNotFoundException.class);
     }
 
     @Test
@@ -166,8 +169,8 @@ class LecturerAdminServiceTest {
     void registersActive() {
         when(saveLecturer.save(any())).thenAnswer(invocation -> invocation.getArgument(0));
 
-        Lecturer registered = service.register("김강사", null, null, "OO치과", null, null, null, null,
-                null, Set.of("보철"), Set.of(), "admin");
+        Lecturer registered = service.register(new ManageLecturerUseCase.SaveCommand("김강사", null, null,
+                "OO치과", null, null, null, null, null, Set.of("보철"), Set.of()), "admin");
 
         assertThat(registered.active()).isTrue();
         assertThat(registered.deleted()).isFalse();
@@ -177,7 +180,7 @@ class LecturerAdminServiceTest {
     @Test
     @DisplayName("keyword 가 null 이면 빈 문자열로 넘긴다 — 포트가 '전건'과 'null 검색'을 구분하지 않아도 되게")
     void nullKeywordBecomesEmpty() {
-        service.list(null, false, new github.lms.lemuel.operation.education.application.port.out.dto.PageSpec(0, 20));
+        service.list(null, false, new github.lms.lemuel.operation.education.application.port.dto.PageSpec(0, 20));
 
         verify(loadLecturer).search(org.mockito.ArgumentMatchers.eq(""),
                 org.mockito.ArgumentMatchers.eq(false), any());
@@ -189,7 +192,7 @@ class LecturerAdminServiceTest {
         when(loadLecturer.findById(lecturerId)).thenReturn(Optional.empty());
 
         assertThatThrownBy(() -> service.assignmentsOfLecturer(lecturerId))
-                .isInstanceOf(LecturerAdminService.LecturerNotFoundException.class);
+                .isInstanceOf(LecturerNotFoundException.class);
         verify(loadAssignment, never()).findByLecturer(any());
     }
 }

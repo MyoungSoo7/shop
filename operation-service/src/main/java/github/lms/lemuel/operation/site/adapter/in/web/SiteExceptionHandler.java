@@ -2,8 +2,8 @@ package github.lms.lemuel.operation.site.adapter.in.web;
 
 import github.lms.lemuel.common.exception.ErrorCode;
 import github.lms.lemuel.common.exception.ErrorResponse;
-import github.lms.lemuel.operation.site.application.service.PopupAdminService.PopupNotFoundException;
 import github.lms.lemuel.operation.site.domain.exception.InvalidPopupStateException;
+import github.lms.lemuel.operation.site.domain.exception.PopupNotFoundException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.http.ResponseEntity;

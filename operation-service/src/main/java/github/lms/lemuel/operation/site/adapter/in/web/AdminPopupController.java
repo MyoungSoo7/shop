@@ -1,6 +1,9 @@
 package github.lms.lemuel.operation.site.adapter.in.web;
 
-import github.lms.lemuel.operation.site.application.service.PopupAdminService;
+import github.lms.lemuel.operation.site.application.port.in.ManagePopupUseCase.SaveCommand;
+import github.lms.lemuel.operation.site.application.port.in.ManagePopupUseCase;
+import github.lms.lemuel.operation.site.application.port.in.PopupView;
+import github.lms.lemuel.operation.site.application.port.in.QueryPopupUseCase;
 import github.lms.lemuel.operation.site.domain.Popup;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotBlank;
@@ -33,15 +36,18 @@ import java.util.UUID;
 @RequestMapping("/api/ops/popups")
 public class AdminPopupController {
 
-    private final PopupAdminService service;
+    private final QueryPopupUseCase queryPopup;
+    private final ManagePopupUseCase managePopup;
 
-    public AdminPopupController(PopupAdminService service) { this.service = service; }
+    public AdminPopupController(QueryPopupUseCase queryPopup, ManagePopupUseCase managePopup) {
+        this.queryPopup = queryPopup;
+        this.managePopup = managePopup;
+    }
 
     /** 관리 목록 — 지운 것만 빼고 노출 순서대로 전부. 페이지네이션이 없는 이유는 포트 문서 참조. */
     @GetMapping
     public List<PopupResponse> list() {
-        Instant now = service.now();
-        return service.list().stream().map(popup -> PopupResponse.from(popup, now)).toList();
+        return queryPopup.list().stream().map(PopupResponse::from).toList();
     }
 
     /**
@@ -50,43 +56,37 @@ public class AdminPopupController {
      */
     @GetMapping("/visible")
     public List<PopupResponse> visible() {
-        Instant now = service.now();
-        return service.visibleNow().stream().map(popup -> PopupResponse.from(popup, now)).toList();
+        return queryPopup.visibleNow().stream().map(PopupResponse::from).toList();
     }
 
     @GetMapping("/{id}")
     public PopupResponse get(@PathVariable UUID id) {
-        return PopupResponse.from(service.get(id), service.now());
+        return PopupResponse.from(queryPopup.get(id));
     }
 
     @PostMapping
     @ResponseStatus(HttpStatus.CREATED)
     public PopupResponse register(@Valid @RequestBody SaveRequest request, Authentication auth) {
-        return PopupResponse.from(service.register(request.title(), request.imageUrl(), request.linkUrl(),
-                request.openInNewWindowOrDefault(), request.startsAt(), request.endsAt(),
-                request.sortOrderOrDefault(), auth.getName()), service.now());
+        return PopupResponse.from(managePopup.register(request.toCommand(), auth.getName()));
     }
 
     @PutMapping("/{id}")
     public PopupResponse update(@PathVariable UUID id, @Valid @RequestBody SaveRequest request,
                                 Authentication auth) {
-        return PopupResponse.from(service.update(id, request.title(), request.imageUrl(),
-                request.linkUrl(), request.openInNewWindowOrDefault(), request.startsAt(),
-                request.endsAt(), request.sortOrderOrDefault(), auth.getName()), service.now());
+        return PopupResponse.from(managePopup.update(id, request.toCommand(), auth.getName()));
     }
 
     @PutMapping("/{id}/activation")
     public PopupResponse changeActivation(@PathVariable UUID id,
                                           @Valid @RequestBody ActivationRequest request,
                                           Authentication auth) {
-        return PopupResponse.from(service.changeActivation(id, request.active(), auth.getName()),
-                service.now());
+        return PopupResponse.from(managePopup.changeActivation(id, request.active(), auth.getName()));
     }
 
     /** 치운다. 204 가 아니라 바뀐 팝업을 돌려준다 — 화면이 삭제 표시를 즉시 그릴 수 있어야 한다. */
     @DeleteMapping("/{id}")
     public PopupResponse delete(@PathVariable UUID id, Authentication auth) {
-        return PopupResponse.from(service.delete(id, auth.getName()), service.now());
+        return PopupResponse.from(managePopup.delete(id, auth.getName()));
     }
 
     /**
@@ -95,6 +95,8 @@ public class AdminPopupController {
      * <p>{@code openInNewWindow} 와 {@code sortOrder} 를 {@code Boolean}/{@code Integer} 로 받는 이유는
      * 원시 타입이면 필드를 빼먹은 요청이 조용히 {@code false}/{@code 0} 으로 저장되기 때문이다 —
      * 안 보낸 것과 "새 창을 끄겠다"가 구분되지 않는다. 여기서는 안 보낸 쪽을 기본값으로 명시한다.
+     *
+     * <p>그 보정은 여기서 끝난다. 유스케이스는 값이 <b>정해진</b> 커맨드만 받는다.
      */
     public record SaveRequest(@NotBlank String title, String imageUrl, String linkUrl,
                               Boolean openInNewWindow,
@@ -102,6 +104,11 @@ public class AdminPopupController {
                               Integer sortOrder) {
         boolean openInNewWindowOrDefault() { return openInNewWindow == null || openInNewWindow; }
         int sortOrderOrDefault() { return sortOrder == null ? 0 : sortOrder; }
+
+        SaveCommand toCommand() {
+            return new SaveCommand(title, imageUrl, linkUrl, openInNewWindowOrDefault(),
+                    startsAt, endsAt, sortOrderOrDefault());
+        }
     }
 
     public record ActivationRequest(@NotNull Boolean active) { }
@@ -116,10 +123,11 @@ public class AdminPopupController {
                                 int sortOrder, boolean active, boolean deleted, Instant deletedAt,
                                 boolean visible, boolean scheduled, boolean expired,
                                 String updatedBy, long version) {
-        static PopupResponse from(Popup p, Instant now) {
+        static PopupResponse from(PopupView view) {
+            Popup p = view.popup();
             return new PopupResponse(p.id(), p.title(), p.imageUrl(), p.linkUrl(), p.openInNewWindow(),
                     p.startsAt(), p.endsAt(), p.sortOrder(), p.active(), p.deleted(), p.deletedAt(),
-                    p.isVisibleAt(now), p.isScheduledAt(now), p.isExpiredAt(now),
+                    view.visible(), view.scheduled(), view.expired(),
                     p.updatedBy(), p.version());
         }
     }

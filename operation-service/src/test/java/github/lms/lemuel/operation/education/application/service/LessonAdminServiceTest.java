@@ -1,5 +1,6 @@
 package github.lms.lemuel.operation.education.application.service;
 
+import github.lms.lemuel.operation.education.application.port.in.ManageLessonUseCase;
 import github.lms.lemuel.operation.education.application.port.out.DeleteLessonPort;
 import github.lms.lemuel.operation.education.application.port.out.LoadLessonPort;
 import github.lms.lemuel.operation.education.application.port.out.SaveLessonPort;
@@ -44,8 +45,8 @@ class LessonAdminServiceTest {
         when(saveLesson.save(any())).thenAnswer(invocation -> invocation.getArgument(0));
 
         assertThat(service.list(courseId)).containsExactly(existing);
-        assertThat(service.create(courseId, "새 차시", "설명", 2, "DOCUMENT", "d1", true, "admin")).isNotNull();
-        Lesson updated = service.update(courseId, lessonId, "수정 차시", "설명", "EXTERNAL_LINK", "x1", false, "admin");
+        assertThat(service.create(courseId, 2, new ManageLessonUseCase.SaveCommand("새 차시", "설명", "DOCUMENT", "d1", true), "admin")).isNotNull();
+        Lesson updated = service.update(courseId, lessonId, new ManageLessonUseCase.SaveCommand("수정 차시", "설명", "EXTERNAL_LINK", "x1", false), "admin");
         service.delete(courseId, lessonId, "admin");
 
         assertThat(updated.title()).isEqualTo("수정 차시");
@@ -58,7 +59,7 @@ class LessonAdminServiceTest {
     void updatingMissingLessonIsReported() {
         when(loadLesson.findById(any())).thenReturn(Optional.empty());
 
-        assertThatThrownBy(() -> service.update(UUID.randomUUID(), UUID.randomUUID(), "제목", null, "VIDEO", "v1", true, "admin"))
+        assertThatThrownBy(() -> service.update(UUID.randomUUID(), UUID.randomUUID(), new ManageLessonUseCase.SaveCommand("제목", null, "VIDEO", "v1", true), "admin"))
                 .isInstanceOf(IllegalArgumentException.class);
         verify(saveLesson, never()).save(any());
     }
@@ -69,7 +70,7 @@ class LessonAdminServiceTest {
         when(loadLesson.findById(lessonId))
                 .thenReturn(Optional.of(lesson(lessonId, UUID.randomUUID(), "남의 과정 차시", 1)));
 
-        assertThatThrownBy(() -> service.update(UUID.randomUUID(), lessonId, "제목", null, "VIDEO", "v1", true, "admin"))
+        assertThatThrownBy(() -> service.update(UUID.randomUUID(), lessonId, new ManageLessonUseCase.SaveCommand("제목", null, "VIDEO", "v1", true), "admin"))
                 .isInstanceOf(LessonNotInCourseException.class);
         verify(saveLesson, never()).save(any());
     }

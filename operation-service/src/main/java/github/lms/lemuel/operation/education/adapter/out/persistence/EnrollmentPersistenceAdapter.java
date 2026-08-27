@@ -1,9 +1,9 @@
 package github.lms.lemuel.operation.education.adapter.out.persistence;
 
+import github.lms.lemuel.operation.education.application.port.dto.PageSlice;
+import github.lms.lemuel.operation.education.application.port.dto.PageSpec;
 import github.lms.lemuel.operation.education.application.port.out.LoadEnrollmentPort;
 import github.lms.lemuel.operation.education.application.port.out.SaveEnrollmentPort;
-import github.lms.lemuel.operation.education.application.port.out.dto.PageSlice;
-import github.lms.lemuel.operation.education.application.port.out.dto.PageSpec;
 import github.lms.lemuel.operation.education.domain.Enrollment;
 import github.lms.lemuel.operation.education.domain.EnrollmentStatus;
 import org.springframework.data.domain.Page;

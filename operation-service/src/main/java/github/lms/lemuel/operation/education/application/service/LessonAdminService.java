@@ -1,5 +1,7 @@
 package github.lms.lemuel.operation.education.application.service;
 
+import github.lms.lemuel.operation.education.application.port.in.ManageLessonUseCase;
+import github.lms.lemuel.operation.education.application.port.in.QueryLessonUseCase;
 import github.lms.lemuel.operation.education.application.port.out.DeleteLessonPort;
 import github.lms.lemuel.operation.education.application.port.out.EducationAuditPort;
 import github.lms.lemuel.operation.education.application.port.out.LoadLessonPort;
@@ -15,7 +17,7 @@ import java.util.Map;
 import java.util.UUID;
 
 @Service
-public class LessonAdminService {
+public class LessonAdminService implements QueryLessonUseCase, ManageLessonUseCase {
     private final LoadLessonPort loadLesson;
     private final SaveLessonPort saveLesson;
     private final DeleteLessonPort deleteLesson;
@@ -34,37 +36,41 @@ public class LessonAdminService {
         this.audit = audit;
     }
 
+    @Override
     @Transactional(readOnly = true)
     public List<Lesson> list(UUID courseId) { return loadLesson.findByCourseOrderedBySequence(courseId); }
 
+    @Override
     @Transactional
-    public Lesson create(UUID courseId, String title, String description, int sequence,
-                         String type, String ref, boolean required, String actor) {
-        Lesson lesson = saveLesson.save(
-                Lesson.create(UUID.randomUUID(), courseId, title, description, sequence, type, ref, required, actor));
+    public Lesson create(UUID courseId, int sequence, SaveCommand command, String actor) {
+        Lesson lesson = saveLesson.save(Lesson.create(UUID.randomUUID(), courseId, command.title(),
+                command.description(), sequence, command.contentType(), command.contentRef(),
+                command.required(), actor));
         audit.record("LESSON_CREATED", "Lesson", lesson.id(), actor, "lesson created");
         return lesson;
     }
 
+    @Override
     @Transactional
-    public Lesson update(UUID courseId, UUID id, String title, String description, String type, String ref,
-                         boolean required, String actor) {
-        Lesson lesson = loadLesson.findById(id)
-                .orElseThrow(() -> new IllegalArgumentException("lesson not found: " + id));
+    public Lesson update(UUID courseId, UUID lessonId, SaveCommand command, String actor) {
+        Lesson lesson = loadLesson.findById(lessonId)
+                .orElseThrow(() -> new IllegalArgumentException("lesson not found: " + lessonId));
         lesson.requireBelongsTo(courseId);
-        lesson.update(title, description, type, ref, required, actor);
+        lesson.update(command.title(), command.description(), command.contentType(),
+                command.contentRef(), command.required(), actor);
         Lesson saved = saveLesson.save(lesson);
-        audit.record("LESSON_UPDATED", "Lesson", id, actor, "lesson updated");
+        audit.record("LESSON_UPDATED", "Lesson", lessonId, actor, "lesson updated");
         return saved;
     }
 
+    @Override
     @Transactional
-    public void delete(UUID courseId, UUID id, String actor) {
+    public void delete(UUID courseId, UUID lessonId, String actor) {
         // 없는 차시의 삭제는 이전처럼 조용히 통과시킨다(삭제는 멱등). 존재하는데 다른 과정 소속이면
         // 거부한다 — 지우고 나서야 "그 과정이 아니었다"는 사실을 알게 되면 되돌릴 방법이 없다.
-        loadLesson.findById(id).ifPresent(lesson -> lesson.requireBelongsTo(courseId));
-        deleteLesson.deleteById(id);
-        audit.record("LESSON_DELETED", "Lesson", id, actor, "lesson deleted");
+        loadLesson.findById(lessonId).ifPresent(lesson -> lesson.requireBelongsTo(courseId));
+        deleteLesson.deleteById(lessonId);
+        audit.record("LESSON_DELETED", "Lesson", lessonId, actor, "lesson deleted");
     }
 
     /**
@@ -74,21 +80,22 @@ public class LessonAdminService {
      * 제약이 있어서, 두 차시의 순서를 맞바꾸면 중간 상태에서 같은 값이 잠깐 겹친다. 그래서 먼저
      * 음수 구간으로 전부 밀어 두고(충돌 불가), 그 다음 목표 순서를 쓴다.
      */
+    @Override
     @Transactional
-    public void reorder(UUID courseId, List<UUID> requestedIds, String actor) {
+    public void reorder(UUID courseId, List<UUID> lessonIdsInOrder, String actor) {
         List<Lesson> current = loadLesson.findByCourseOrderedBySequence(courseId);
-        Lesson.validateReorder(current.stream().map(Lesson::id).toList(), requestedIds);
+        Lesson.validateReorder(current.stream().map(Lesson::id).toList(), lessonIdsInOrder);
 
         Map<UUID, Lesson> byId = new HashMap<>();
         for (Lesson lesson : current) byId.put(lesson.id(), lesson);
 
-        for (int i = 0; i < requestedIds.size(); i++) {
-            Lesson lesson = byId.get(requestedIds.get(i));
+        for (int i = 0; i < lessonIdsInOrder.size(); i++) {
+            Lesson lesson = byId.get(lessonIdsInOrder.get(i));
             lesson.changeSequence(-(i + 1), actor);
             saveLesson.save(lesson);
         }
-        for (int i = 0; i < requestedIds.size(); i++) {
-            Lesson lesson = byId.get(requestedIds.get(i));
+        for (int i = 0; i < lessonIdsInOrder.size(); i++) {
+            Lesson lesson = byId.get(lessonIdsInOrder.get(i));
             lesson.changeSequence(i + 1, actor);
             saveLesson.save(lesson);
         }

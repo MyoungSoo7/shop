@@ -1,16 +1,21 @@
 package github.lms.lemuel.operation.education.application.service;
 
+import github.lms.lemuel.operation.education.application.port.dto.PageSlice;
+import github.lms.lemuel.operation.education.application.port.dto.PageSpec;
+import github.lms.lemuel.operation.education.application.port.in.CapacitySummary;
+import github.lms.lemuel.operation.education.application.port.in.ManageEnrollmentUseCase;
+import github.lms.lemuel.operation.education.application.port.in.QueryEnrollmentUseCase;
 import github.lms.lemuel.operation.education.application.port.out.EducationAuditPort;
 import github.lms.lemuel.operation.education.application.port.out.LoadCoursePort;
 import github.lms.lemuel.operation.education.application.port.out.LoadEnrollmentPort;
 import github.lms.lemuel.operation.education.application.port.out.SaveCoursePort;
 import github.lms.lemuel.operation.education.application.port.out.SaveEnrollmentPort;
-import github.lms.lemuel.operation.education.application.port.out.dto.PageSlice;
-import github.lms.lemuel.operation.education.application.port.out.dto.PageSpec;
 import github.lms.lemuel.operation.education.domain.Course;
 import github.lms.lemuel.operation.education.domain.CourseStatus;
 import github.lms.lemuel.operation.education.domain.Enrollment;
 import github.lms.lemuel.operation.education.domain.EnrollmentStatus;
+import github.lms.lemuel.operation.education.domain.exception.CourseNotFoundException;
+import github.lms.lemuel.operation.education.domain.exception.EnrollmentNotFoundException;
 import github.lms.lemuel.operation.education.domain.exception.InvalidCourseStateException;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
@@ -25,7 +30,7 @@ import java.util.UUID;
  * <b>거두고</b>, 얼마나 남았는지 <b>센다</b>.
  */
 @Service
-public class EnrollmentAdminService {
+public class EnrollmentAdminService implements QueryEnrollmentUseCase, ManageEnrollmentUseCase {
 
     private final LoadEnrollmentPort loadEnrollment;
     private final SaveEnrollmentPort saveEnrollment;
@@ -48,6 +53,7 @@ public class EnrollmentAdminService {
         this.audit = audit;
     }
 
+    @Override
     @Transactional(readOnly = true)
     public PageSlice<Enrollment> list(UUID courseId, EnrollmentStatus status, String keyword, PageSpec page) {
         return loadEnrollment.search(courseId, status, keyword == null ? "" : keyword, page);
@@ -57,6 +63,7 @@ public class EnrollmentAdminService {
      * 그 과정의 자리 현황. 화면이 "정원 30 / 확정 28 / 대기 5" 를 한 줄로 보여 주려면 세 수가
      * 같은 시각에 읽혀야 한다 — 화면이 세 번 호출해 조립하면 그 사이 확정이 들어와도 모른다.
      */
+    @Override
     @Transactional(readOnly = true)
     public CapacitySummary summary(UUID courseId) {
         Course course = courseOrThrow(courseId);
@@ -73,24 +80,27 @@ public class EnrollmentAdminService {
      * <p>끝난 과정에는 받지 않는다. CLOSED 는 "더는 이 과정으로 사람을 받지 않는다"는 선언이라,
      * 여기에 신청을 꽂으면 아무도 확정해 주지 않을 대기표를 발급하는 셈이 된다.
      */
+    @Override
     @Transactional
-    public Enrollment register(UUID courseId, String applicantId, String applicantName,
-                               String applicantOrganization, String actor) {
-        Course course = courseOrThrow(courseId);
+    public Enrollment register(RegisterCommand command, String actor) {
+        Course course = courseOrThrow(command.courseId());
         if (course.status() == CourseStatus.CLOSED) {
             throw new InvalidCourseStateException("closed course does not accept enrollments");
         }
         Enrollment enrollment = saveEnrollment.save(Enrollment.apply(
-                UUID.randomUUID(), courseId, applicantId, applicantName, applicantOrganization, actor));
+                UUID.randomUUID(), command.courseId(), command.applicantId(), command.applicantName(),
+                command.applicantOrganization(), actor));
         audit.record("ENROLLMENT_REGISTERED", "Enrollment", enrollment.id(), actor,
-                "enrollment registered for course " + courseId);
+                "enrollment registered for course " + command.courseId());
         return enrollment;
     }
 
+    @Override
     @Transactional(readOnly = true)
     public Enrollment get(UUID id) { return enrollmentOrThrow(id); }
 
     /** 자리를 확정한다. 정원이 찼으면 거절한다 — 초과 확정은 되돌릴 때 누군가를 골라 내쫓는 일이 된다. */
+    @Override
     @Transactional
     public Enrollment confirm(UUID id, String actor) {
         Enrollment enrollment = enrollmentOrThrow(id);
@@ -102,6 +112,7 @@ public class EnrollmentAdminService {
         return saved;
     }
 
+    @Override
     @Transactional
     public Enrollment cancel(UUID id, String reason, String actor) {
         Enrollment enrollment = enrollmentOrThrow(id);
@@ -111,6 +122,7 @@ public class EnrollmentAdminService {
         return saved;
     }
 
+    @Override
     @Transactional
     public Enrollment correct(UUID id, String applicantName, String applicantOrganization, String actor) {
         Enrollment enrollment = enrollmentOrThrow(id);
@@ -120,6 +132,7 @@ public class EnrollmentAdminService {
         return saved;
     }
 
+    @Override
     @Transactional
     public Enrollment memo(UUID id, String memo, String actor) {
         Enrollment enrollment = enrollmentOrThrow(id);
@@ -130,6 +143,7 @@ public class EnrollmentAdminService {
     }
 
     /** 정원을 바꾼다. 확정 인원보다 작게 줄이는 요청은 도메인이 거절한다. */
+    @Override
     @Transactional
     public CapacitySummary changeCapacity(UUID courseId, Integer capacity, String actor) {
         Course course = courseOrThrow(courseId);
@@ -149,22 +163,6 @@ public class EnrollmentAdminService {
     }
 
     private Course courseOrThrow(UUID courseId) {
-        return loadCourse.findById(courseId)
-                .orElseThrow(() -> new CourseAdminService.CourseNotFoundException(courseId));
-    }
-
-    /**
-     * 자리 현황. {@code capacity} 가 null 이면 정원 없음이고, 그때 {@code remaining} 도 null 이다 —
-     * 0 으로 내려보내면 화면이 "마감"으로 읽는다.
-     */
-    public record CapacitySummary(UUID courseId, String courseTitle, Integer capacity,
-                                  long confirmed, long waiting, long cancelled) {
-        public Integer remaining() {
-            return capacity == null ? null : (int) Math.max(0, capacity - confirmed);
-        }
-    }
-
-    public static class EnrollmentNotFoundException extends RuntimeException {
-        public EnrollmentNotFoundException(UUID id) { super("enrollment not found: " + id); }
+        return loadCourse.findById(courseId).orElseThrow(() -> new CourseNotFoundException(courseId));
     }
 }

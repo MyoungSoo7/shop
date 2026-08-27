@@ -1,7 +1,7 @@
 package github.lms.lemuel.operation.education.adapter.in.web;
 
 import github.lms.lemuel.common.exception.ErrorResponse;
-import github.lms.lemuel.operation.education.application.service.CourseAdminService.CourseNotFoundException;
+import github.lms.lemuel.operation.education.domain.exception.CourseNotFoundException;
 import github.lms.lemuel.operation.education.domain.exception.InvalidCourseStateException;
 import github.lms.lemuel.operation.education.domain.exception.LessonNotInCourseException;
 import github.lms.lemuel.operation.education.domain.exception.LessonOrderViolationException;

@@ -1,13 +1,16 @@
 package github.lms.lemuel.operation.education.application.service;
 
+import github.lms.lemuel.operation.education.application.port.dto.PageSlice;
+import github.lms.lemuel.operation.education.application.port.dto.PageSpec;
+import github.lms.lemuel.operation.education.application.port.in.ManageCourseUseCase;
+import github.lms.lemuel.operation.education.application.port.in.QueryCourseUseCase;
 import github.lms.lemuel.operation.education.application.port.out.EducationAuditPort;
 import github.lms.lemuel.operation.education.application.port.out.LoadCoursePort;
 import github.lms.lemuel.operation.education.application.port.out.PublishEducationEventPort;
 import github.lms.lemuel.operation.education.application.port.out.SaveCoursePort;
-import github.lms.lemuel.operation.education.application.port.out.dto.PageSlice;
-import github.lms.lemuel.operation.education.application.port.out.dto.PageSpec;
 import github.lms.lemuel.operation.education.domain.Course;
 import github.lms.lemuel.operation.education.domain.CourseStatus;
+import github.lms.lemuel.operation.education.domain.exception.CourseNotFoundException;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -15,7 +18,7 @@ import org.springframework.transaction.annotation.Transactional;
 import java.util.UUID;
 
 @Service
-public class CourseAdminService {
+public class CourseAdminService implements QueryCourseUseCase, ManageCourseUseCase {
     private final LoadCoursePort loadCourse;
     private final SaveCoursePort saveCourse;
     private final PublishEducationEventPort events;
@@ -34,18 +37,22 @@ public class CourseAdminService {
         this.audit = audit;
     }
 
+    @Override
     @Transactional(readOnly = true)
     public PageSlice<Course> list(CourseStatus status, String query, PageSpec page) {
         return loadCourse.search(status, query == null ? "" : query, page);
     }
 
+    @Override
     @Transactional
-    public Course create(String title, String description, String actor) {
-        Course course = saveCourse.save(Course.draft(UUID.randomUUID(), title, description, actor));
+    public Course create(SaveCommand command, String actor) {
+        Course course = saveCourse.save(
+                Course.draft(UUID.randomUUID(), command.title(), command.description(), actor));
         audit.record("COURSE_CREATED", "Course", course.id(), actor, "course created");
         return course;
     }
 
+    @Override
     @Transactional(readOnly = true)
     public Course get(UUID id) { return findOrThrow(id); }
 
@@ -54,15 +61,17 @@ public class CourseAdminService {
         return loadCourse.findById(id).orElseThrow(() -> new CourseNotFoundException(id));
     }
 
+    @Override
     @Transactional
-    public Course update(UUID id, String title, String description, String actor) {
+    public Course update(UUID id, SaveCommand command, String actor) {
         Course course = findOrThrow(id);
-        course.update(title, description, actor);
+        course.update(command.title(), command.description(), actor);
         Course saved = saveCourse.save(course);
         audit.record("COURSE_UPDATED", "Course", id, actor, "course updated");
         return saved;
     }
 
+    @Override
     @Transactional
     public Course transition(UUID id, CourseStatus target, String actor) {
         Course course = findOrThrow(id);
@@ -76,9 +85,5 @@ public class CourseAdminService {
         if (target == CourseStatus.PUBLISHED) events.coursePublished(saved, actor);
         audit.record("COURSE_" + target.name(), "Course", id, actor, "course state transition");
         return saved;
-    }
-
-    public static class CourseNotFoundException extends RuntimeException {
-        public CourseNotFoundException(UUID id) { super("course not found: " + id); }
     }
 }

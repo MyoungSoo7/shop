@@ -1,15 +1,18 @@
 package github.lms.lemuel.operation.education.application.service;
 
+import github.lms.lemuel.operation.education.application.port.in.CapacitySummary;
+import github.lms.lemuel.operation.education.application.port.in.ManageEnrollmentUseCase;
 import github.lms.lemuel.operation.education.application.port.out.LoadCoursePort;
 import github.lms.lemuel.operation.education.application.port.out.LoadEnrollmentPort;
 import github.lms.lemuel.operation.education.application.port.out.SaveCoursePort;
 import github.lms.lemuel.operation.education.application.port.out.SaveEnrollmentPort;
-import github.lms.lemuel.operation.education.application.service.EnrollmentAdminService.CapacitySummary;
 import github.lms.lemuel.operation.education.domain.Course;
 import github.lms.lemuel.operation.education.domain.CourseStatus;
 import github.lms.lemuel.operation.education.domain.Enrollment;
 import github.lms.lemuel.operation.education.domain.EnrollmentStatus;
 import github.lms.lemuel.operation.education.domain.exception.CourseCapacityExceededException;
+import github.lms.lemuel.operation.education.domain.exception.CourseNotFoundException;
+import github.lms.lemuel.operation.education.domain.exception.EnrollmentNotFoundException;
 import github.lms.lemuel.operation.education.domain.exception.InvalidCourseStateException;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -100,7 +103,7 @@ class EnrollmentAdminServiceTest {
     void closedCourseRejectsRegistration() {
         when(loadCourse.findById(courseId)).thenReturn(Optional.of(course(10, CourseStatus.CLOSED)));
 
-        assertThatThrownBy(() -> service.register(courseId, "u-9", "김신청", null, "admin"))
+        assertThatThrownBy(() -> service.register(new ManageEnrollmentUseCase.RegisterCommand(courseId, "u-9", "김신청", null), "admin"))
                 .isInstanceOf(InvalidCourseStateException.class);
         verify(saveEnrollment, never()).save(any());
     }
@@ -110,8 +113,8 @@ class EnrollmentAdminServiceTest {
     void missingCourseIsReported() {
         when(loadCourse.findById(courseId)).thenReturn(Optional.empty());
 
-        assertThatThrownBy(() -> service.register(courseId, "u-9", "김신청", null, "admin"))
-                .isInstanceOf(CourseAdminService.CourseNotFoundException.class);
+        assertThatThrownBy(() -> service.register(new ManageEnrollmentUseCase.RegisterCommand(courseId, "u-9", "김신청", null), "admin"))
+                .isInstanceOf(CourseNotFoundException.class);
     }
 
     @Test
@@ -120,7 +123,7 @@ class EnrollmentAdminServiceTest {
         when(loadEnrollment.findById(any())).thenReturn(Optional.empty());
 
         assertThatThrownBy(() -> service.confirm(UUID.randomUUID(), "admin"))
-                .isInstanceOf(EnrollmentAdminService.EnrollmentNotFoundException.class);
+                .isInstanceOf(EnrollmentNotFoundException.class);
     }
 
     @Test
@@ -192,7 +195,7 @@ class EnrollmentAdminServiceTest {
         when(loadCourse.findById(courseId)).thenReturn(Optional.of(course(10, CourseStatus.PUBLISHED)));
         when(saveEnrollment.save(any())).thenAnswer(invocation -> invocation.getArgument(0));
 
-        Enrollment registered = service.register(courseId, "u-9", "김신청", "OO치과", "admin");
+        Enrollment registered = service.register(new ManageEnrollmentUseCase.RegisterCommand(courseId, "u-9", "김신청", "OO치과"), "admin");
 
         assertThat(registered.status()).isEqualTo(EnrollmentStatus.WAITING);
         assertThat(registered.courseId()).isEqualTo(courseId);

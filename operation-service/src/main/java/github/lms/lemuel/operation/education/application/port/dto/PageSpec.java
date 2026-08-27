@@ -1,4 +1,4 @@
-package github.lms.lemuel.operation.education.application.port.out.dto;
+package github.lms.lemuel.operation.education.application.port.dto;
 
 /**
  * 페이지 요청 — {@code org.springframework.data.domain.Pageable} 을 애플리케이션 경계 밖에 두기 위한 대체 타입.

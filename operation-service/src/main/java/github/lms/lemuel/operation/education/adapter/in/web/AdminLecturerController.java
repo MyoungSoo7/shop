@@ -1,10 +1,12 @@
 package github.lms.lemuel.operation.education.adapter.in.web;
 
-import github.lms.lemuel.operation.education.application.port.out.dto.PageSlice;
-import github.lms.lemuel.operation.education.application.port.out.dto.PageSpec;
-import github.lms.lemuel.operation.education.application.service.LecturerAdminService;
+import github.lms.lemuel.operation.education.application.port.dto.PageSlice;
+import github.lms.lemuel.operation.education.application.port.dto.PageSpec;
+import github.lms.lemuel.operation.education.application.port.in.ManageLecturerUseCase;
+import github.lms.lemuel.operation.education.application.port.in.QueryLecturerUseCase;
 import github.lms.lemuel.operation.education.domain.Lecturer;
 import github.lms.lemuel.operation.education.domain.LecturerAssignment;
+import github.lms.lemuel.operation.education.domain.exception.AssignmentNotFoundException;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
@@ -31,15 +33,19 @@ import java.util.UUID;
 @RequestMapping("/admin/education/lecturers")
 public class AdminLecturerController {
 
-    private final LecturerAdminService service;
+    private final QueryLecturerUseCase queryLecturer;
+    private final ManageLecturerUseCase manageLecturer;
 
-    public AdminLecturerController(LecturerAdminService service) { this.service = service; }
+    public AdminLecturerController(QueryLecturerUseCase queryLecturer, ManageLecturerUseCase manageLecturer) {
+        this.queryLecturer = queryLecturer;
+        this.manageLecturer = manageLecturer;
+    }
 
     @GetMapping
     public Page<LecturerResponse> list(@RequestParam(defaultValue = "") String keyword,
                                        @RequestParam(defaultValue = "false") boolean activeOnly,
                                        Pageable pageable) {
-        PageSlice<Lecturer> slice = service.list(keyword, activeOnly,
+        PageSlice<Lecturer> slice = queryLecturer.list(keyword, activeOnly,
                 new PageSpec(pageable.getPageNumber(), pageable.getPageSize()));
         // 응답 JSON 모양(content/totalElements/totalPages/number/size)을 유지하려고 여기서만 Page 로 되싼다.
         return new PageImpl<>(slice.content().stream().map(LecturerResponse::from).toList(),
@@ -49,47 +55,41 @@ public class AdminLecturerController {
     @PostMapping
     @ResponseStatus(HttpStatus.CREATED)
     public LecturerResponse register(@Valid @RequestBody SaveRequest request, Authentication auth) {
-        return LecturerResponse.from(service.register(request.name(), request.englishName(),
-                request.graduateSchool(), request.officeName(), request.career(), request.lecturerType(),
-                request.historyKo(), request.historyEn(), request.etcMemo(),
-                request.majorSet(), request.lectureFieldSet(), auth.getName()));
+        return LecturerResponse.from(manageLecturer.register(request.toCommand(), auth.getName()));
     }
 
     @GetMapping("/{id}")
-    public LecturerResponse get(@PathVariable UUID id) { return LecturerResponse.from(service.get(id)); }
+    public LecturerResponse get(@PathVariable UUID id) { return LecturerResponse.from(queryLecturer.get(id)); }
 
     @PutMapping("/{id}")
     public LecturerResponse update(@PathVariable UUID id, @Valid @RequestBody SaveRequest request,
                                    Authentication auth) {
-        return LecturerResponse.from(service.update(id, request.name(), request.englishName(),
-                request.graduateSchool(), request.officeName(), request.career(), request.lecturerType(),
-                request.historyKo(), request.historyEn(), request.etcMemo(),
-                request.majorSet(), request.lectureFieldSet(), auth.getName()));
+        return LecturerResponse.from(manageLecturer.update(id, request.toCommand(), auth.getName()));
     }
 
     @PutMapping("/{id}/activation")
     public LecturerResponse changeActivation(@PathVariable UUID id,
                                              @Valid @RequestBody ActivationRequest request,
                                              Authentication auth) {
-        return LecturerResponse.from(service.changeActivation(id, request.active(), auth.getName()));
+        return LecturerResponse.from(manageLecturer.changeActivation(id, request.active(), auth.getName()));
     }
 
     /** 명부에서 뺀다. 204 가 아니라 바뀐 강사를 돌려준다 — 화면이 삭제 표시를 즉시 그릴 수 있어야 한다. */
     @DeleteMapping("/{id}")
     public LecturerResponse delete(@PathVariable UUID id, Authentication auth) {
-        return LecturerResponse.from(service.delete(id, auth.getName()));
+        return LecturerResponse.from(manageLecturer.delete(id, auth.getName()));
     }
 
     @GetMapping("/{id}/courses")
     public List<AssignmentResponse> assignments(@PathVariable UUID id) {
-        return service.assignmentsOfLecturer(id).stream().map(AssignmentResponse::from).toList();
+        return queryLecturer.assignmentsOfLecturer(id).stream().map(AssignmentResponse::from).toList();
     }
 
     @PostMapping("/{id}/courses")
     @ResponseStatus(HttpStatus.CREATED)
     public AssignmentResponse assign(@PathVariable UUID id, @Valid @RequestBody AssignRequest request,
                                      Authentication auth) {
-        return AssignmentResponse.from(service.assign(id, request.courseId(), auth.getName()));
+        return AssignmentResponse.from(manageLecturer.assign(id, request.courseId(), auth.getName()));
     }
 
     /**
@@ -99,15 +99,15 @@ public class AdminLecturerController {
     @DeleteMapping("/{id}/courses/{courseId}")
     @ResponseStatus(HttpStatus.NO_CONTENT)
     public void unassign(@PathVariable UUID id, @PathVariable UUID courseId, Authentication auth) {
-        if (!service.unassign(id, courseId, auth.getName())) {
-            throw new LecturerAdminService.AssignmentNotFoundException(courseId, id);
+        if (!manageLecturer.unassign(id, courseId, auth.getName())) {
+            throw new AssignmentNotFoundException(courseId, id);
         }
     }
 
     /** 그 과정에 배정된 강사들 — 과정 화면이 "누가 가르치나"를 물을 때. */
     @GetMapping("/by-course/{courseId}")
     public List<AssignmentResponse> byCourse(@PathVariable UUID courseId) {
-        return service.assignmentsOfCourse(courseId).stream().map(AssignmentResponse::from).toList();
+        return queryLecturer.assignmentsOfCourse(courseId).stream().map(AssignmentResponse::from).toList();
     }
 
     /**
@@ -123,6 +123,10 @@ public class AdminLecturerController {
         Set<String> majorSet() { return majors == null ? Set.of() : new java.util.LinkedHashSet<>(majors); }
         Set<String> lectureFieldSet() {
             return lectureFields == null ? Set.of() : new java.util.LinkedHashSet<>(lectureFields);
+        }
+        ManageLecturerUseCase.SaveCommand toCommand() {
+            return new ManageLecturerUseCase.SaveCommand(name, englishName, graduateSchool, officeName,
+                    career, lecturerType, historyKo, historyEn, etcMemo, majorSet(), lectureFieldSet());
         }
     }
 
