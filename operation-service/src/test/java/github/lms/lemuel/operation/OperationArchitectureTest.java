@@ -97,12 +97,16 @@ class OperationArchitectureTest {
      * 그대로 노출한다. 포트가 남의 도메인 타입으로 말하면 포트를 둔 의미가 없다.
      * 처방은 둘 중 하나다 — signal 의 아웃바운드 포트를 경유하거나,
      * {@code MetricBucket} 을 공용 계측 개념으로 승격해 소유를 명확히 하거나.
+     *
+     * <p><b>2026-08-27 비었다.</b> (a) 는 {@code AnomalyIncidentApplier} 를 통째로 incident 로 되돌리고
+     * (다루던 게 전부 incident 의 것이었다) 인바운드 포트 {@code RaiseAnomalyIncidentUseCase} 만 남겼다.
+     * (b) 는 signal 이 인바운드 포트 {@code QueryMetricSeriesUseCase} 를 공개하고 anomaly 는
+     * 자기 읽기 모델 {@code MetricPoint} 로 번역해 받는다. 다시 채우지 마라.
+     *
+     * <p>남은 방향 의존은 <b>기능의 {@code application.port.in} 뿐</b>이다 — 그건 그 기능이
+     * 공개하기로 한 창구이므로 이 규칙이 막지 않는다. 막는 것은 {@code domain}·{@code adapter} 다.
      */
-    private static final Set<String> CROSS_FEATURE_ALLOWLIST = Set.of(
-            OPERATION_ROOT + "anomaly.application.service.AnomalyDetectionService",
-            OPERATION_ROOT + "anomaly.application.service.AnomalyIncidentApplier",
-            OPERATION_ROOT + "anomaly.application.port.out.LoadMetricSeriesPort",
-            OPERATION_ROOT + "anomaly.adapter.out.persistence.MetricSeriesQueryAdapter");
+    private static final Set<String> CROSS_FEATURE_ALLOWLIST = Set.<String>of();
 
     /**
      * G4 — {@code operation.config} 는 합성 루트(composition root)다. 도메인 전략 빈

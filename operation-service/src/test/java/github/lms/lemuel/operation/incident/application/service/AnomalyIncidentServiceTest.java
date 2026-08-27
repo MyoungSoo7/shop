@@ -1,8 +1,8 @@
-package github.lms.lemuel.operation.anomaly.application.service;
+package github.lms.lemuel.operation.incident.application.service;
 
-import github.lms.lemuel.operation.anomaly.domain.AnomalyDecision;
-import github.lms.lemuel.operation.anomaly.domain.AnomalyVerdict;
 import github.lms.lemuel.operation.config.OpsProperties;
+import github.lms.lemuel.operation.incident.application.port.in.RaiseAnomalyIncidentUseCase.Command;
+import github.lms.lemuel.operation.incident.application.port.in.RaiseAnomalyIncidentUseCase.Result;
 import github.lms.lemuel.operation.incident.application.port.out.LoadIncidentPort;
 import github.lms.lemuel.operation.incident.application.port.out.RecordTimelinePort;
 import github.lms.lemuel.operation.incident.application.port.out.SaveIncidentPort;
@@ -41,12 +41,16 @@ import static org.mockito.Mockito.when;
  *
  * <p>Alertmanager 경로와 키 공간이 분리되어 있다는 것도 함께 고정한다 —
  * {@code source=ANOMALY} 로 조회하지 않으면 웹훅이 연 인시던트를 이상 탐지가 갱신해 버린다.
+ *
+ * <p>원래 {@code anomaly} 패키지에 있던 테스트다. 대상 클래스와 함께 소유 기능으로 옮겼다.
  */
 @ExtendWith(MockitoExtension.class)
-class AnomalyIncidentApplierTest {
+class AnomalyIncidentServiceTest {
 
     private static final Instant NOW = Instant.parse("2026-08-22T06:00:00Z");
     private static final String METRIC = "settlement";
+    private static final String CATEGORY = SignalCategory.SETTLEMENT_FAILURE.name();
+    private static final String ANOMALY_REASON = "z=4.20 (평균 0.010, 표준편차 0.005)";
 
     @Mock
     LoadIncidentPort loadIncidentPort;
@@ -55,24 +59,26 @@ class AnomalyIncidentApplierTest {
     @Mock
     RecordTimelinePort recordTimelinePort;
 
-    private AnomalyIncidentApplier applier;
+    private AnomalyIncidentService service;
 
     @BeforeEach
     void setUp() {
         OpsProperties properties = new OpsProperties();
         properties.setRefireTimelineSuppression(Duration.ofMinutes(10));
-        applier = new AnomalyIncidentApplier(loadIncidentPort, saveIncidentPort,
+        service = new AnomalyIncidentService(loadIncidentPort, saveIncidentPort,
                 recordTimelinePort, properties);
     }
 
-    private static AnomalyDecision anomaly(boolean critical) {
-        return new AnomalyDecision(AnomalyVerdict.ANOMALY, 4.2, 0.01, 0.005,
-                0.12, 500L, critical, "z=4.20 (평균 0.010, 표준편차 0.005)");
+    private static Command anomalyAt(boolean critical, Instant at) {
+        return new Command(METRIC, CATEGORY, true, critical, ANOMALY_REASON, 4.2, false, at);
     }
 
-    private static AnomalyDecision normal() {
-        return new AnomalyDecision(AnomalyVerdict.NORMAL, 0.3, 0.01, 0.005,
-                0.011, 500L, false, "정상 범위");
+    private static Command anomaly(boolean critical) {
+        return anomalyAt(critical, NOW);
+    }
+
+    private static Command normal(boolean resolveEligible) {
+        return new Command(METRIC, CATEGORY, false, false, "정상 범위", 0.3, resolveEligible, NOW);
     }
 
     private static Incident activeIncident(IncidentSeverity severity) {
@@ -90,10 +96,9 @@ class AnomalyIncidentApplierTest {
         when(loadIncidentPort.findActive(IncidentSource.ANOMALY, METRIC)).thenReturn(Optional.empty());
         stubSaveReturnsArgument();
 
-        AnomalyIncidentApplier.Outcome outcome =
-                applier.apply(METRIC, SignalCategory.SETTLEMENT_FAILURE, anomaly(false), false, NOW);
+        Result result = service.apply(anomaly(false));
 
-        assertThat(outcome).isEqualTo(AnomalyIncidentApplier.Outcome.OPENED);
+        assertThat(result).isEqualTo(Result.OPENED);
 
         ArgumentCaptor<Incident> saved = ArgumentCaptor.forClass(Incident.class);
         verify(saveIncidentPort).save(saved.capture());
@@ -101,6 +106,7 @@ class AnomalyIncidentApplierTest {
         assertThat(saved.getValue().getCorrelationKey()).isEqualTo(METRIC);
         assertThat(saved.getValue().getStatus()).isEqualTo(IncidentStatus.OPEN);
         assertThat(saved.getValue().getSeverity()).isEqualTo(IncidentSeverity.WARNING);
+        assertThat(saved.getValue().getCategory()).isEqualTo(SignalCategory.SETTLEMENT_FAILURE);
 
         ArgumentCaptor<IncidentTimelineEntry> timeline = ArgumentCaptor.forClass(IncidentTimelineEntry.class);
         verify(recordTimelinePort).record(timeline.capture());
@@ -115,11 +121,26 @@ class AnomalyIncidentApplierTest {
         when(loadIncidentPort.findActive(IncidentSource.ANOMALY, METRIC)).thenReturn(Optional.empty());
         stubSaveReturnsArgument();
 
-        applier.apply(METRIC, SignalCategory.SETTLEMENT_FAILURE, anomaly(true), false, NOW);
+        service.apply(anomaly(true));
 
         ArgumentCaptor<Incident> saved = ArgumentCaptor.forClass(Incident.class);
         verify(saveIncidentPort).save(saved.capture());
         assertThat(saved.getValue().getSeverity()).isEqualTo(IncidentSeverity.CRITICAL);
+    }
+
+    @Test
+    @DisplayName("알 수 없는 분류 이름은 UNKNOWN 으로 떨어뜨린다 — 오타 하나로 탐지가 멈추면 안 된다")
+    void unknownCategoryFallsBackInsteadOfFailing() {
+        when(loadIncidentPort.findActive(IncidentSource.ANOMALY, METRIC)).thenReturn(Optional.empty());
+        stubSaveReturnsArgument();
+
+        Result result = service.apply(
+                new Command(METRIC, "오타난_분류", true, false, ANOMALY_REASON, 4.2, false, NOW));
+
+        assertThat(result).isEqualTo(Result.OPENED);
+        ArgumentCaptor<Incident> saved = ArgumentCaptor.forClass(Incident.class);
+        verify(saveIncidentPort).save(saved.capture());
+        assertThat(saved.getValue().getCategory()).isEqualTo(SignalCategory.UNKNOWN);
     }
 
     @Test
@@ -129,10 +150,9 @@ class AnomalyIncidentApplierTest {
         when(loadIncidentPort.findActive(IncidentSource.ANOMALY, METRIC)).thenReturn(Optional.of(active));
         stubSaveReturnsArgument();
 
-        AnomalyIncidentApplier.Outcome outcome =
-                applier.apply(METRIC, SignalCategory.SETTLEMENT_FAILURE, anomaly(false), false, NOW);
+        Result result = service.apply(anomaly(false));
 
-        assertThat(outcome).isEqualTo(AnomalyIncidentApplier.Outcome.REFIRED);
+        assertThat(result).isEqualTo(Result.REFIRED);
         assertThat(active.getOccurrenceCount()).isEqualTo(2);
         assertThat(active.getStatus()).isEqualTo(IncidentStatus.OPEN);
     }
@@ -144,7 +164,7 @@ class AnomalyIncidentApplierTest {
         when(loadIncidentPort.findActive(IncidentSource.ANOMALY, METRIC)).thenReturn(Optional.of(active));
         stubSaveReturnsArgument();
 
-        applier.apply(METRIC, SignalCategory.SETTLEMENT_FAILURE, anomaly(true), false, NOW);
+        service.apply(anomaly(true));
 
         ArgumentCaptor<IncidentTimelineEntry> timeline = ArgumentCaptor.forClass(IncidentTimelineEntry.class);
         verify(recordTimelinePort).record(timeline.capture());
@@ -161,8 +181,8 @@ class AnomalyIncidentApplierTest {
         stubSaveReturnsArgument();
 
         // 1회차: 타임라인 기록, 2회차: 10분 억제 창 안이라 기록하지 않는다.
-        applier.apply(METRIC, SignalCategory.SETTLEMENT_FAILURE, anomaly(false), false, NOW);
-        applier.apply(METRIC, SignalCategory.SETTLEMENT_FAILURE, anomaly(false), false, NOW.plusSeconds(60));
+        service.apply(anomalyAt(false, NOW));
+        service.apply(anomalyAt(false, NOW.plusSeconds(60)));
 
         verify(recordTimelinePort).record(any());
         assertThat(active.getOccurrenceCount()).isEqualTo(3);
@@ -175,10 +195,9 @@ class AnomalyIncidentApplierTest {
         when(loadIncidentPort.findActive(IncidentSource.ANOMALY, METRIC)).thenReturn(Optional.of(active));
         stubSaveReturnsArgument();
 
-        AnomalyIncidentApplier.Outcome outcome =
-                applier.apply(METRIC, SignalCategory.SETTLEMENT_FAILURE, normal(), true, NOW);
+        Result result = service.apply(normal(true));
 
-        assertThat(outcome).isEqualTo(AnomalyIncidentApplier.Outcome.AUTO_RESOLVED);
+        assertThat(result).isEqualTo(Result.AUTO_RESOLVED);
         assertThat(active.getStatus()).isEqualTo(IncidentStatus.RESOLVED);
         assertThat(active.getResolvedBy()).isEqualTo(Incident.ANOMALY_ACTOR);
 
@@ -193,11 +212,10 @@ class AnomalyIncidentApplierTest {
         Incident active = activeIncident(IncidentSeverity.WARNING);
         when(loadIncidentPort.findActive(IncidentSource.ANOMALY, METRIC)).thenReturn(Optional.of(active));
 
-        AnomalyIncidentApplier.Outcome outcome =
-                applier.apply(METRIC, SignalCategory.SETTLEMENT_FAILURE, normal(), false, NOW);
+        Result result = service.apply(normal(false));
 
         // 한 번 튄 정상값으로 닫으면 장애가 열린 채 조용해진다.
-        assertThat(outcome).isEqualTo(AnomalyIncidentApplier.Outcome.NONE);
+        assertThat(result).isEqualTo(Result.NONE);
         assertThat(active.getStatus()).isEqualTo(IncidentStatus.OPEN);
         verify(saveIncidentPort, never()).save(any());
         verifyNoInteractions(recordTimelinePort);
@@ -208,10 +226,9 @@ class AnomalyIncidentApplierTest {
     void doesNothingWhenNothingIsWrong() {
         when(loadIncidentPort.findActive(IncidentSource.ANOMALY, METRIC)).thenReturn(Optional.empty());
 
-        AnomalyIncidentApplier.Outcome outcome =
-                applier.apply(METRIC, SignalCategory.SETTLEMENT_FAILURE, normal(), true, NOW);
+        Result result = service.apply(normal(true));
 
-        assertThat(outcome).isEqualTo(AnomalyIncidentApplier.Outcome.NONE);
+        assertThat(result).isEqualTo(Result.NONE);
         verify(saveIncidentPort, never()).save(any());
         verifyNoInteractions(recordTimelinePort);
     }
