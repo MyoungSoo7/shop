@@ -16,6 +16,7 @@ import org.springframework.data.jpa.repository.config.EnableJpaRepositories;
  */
 @Configuration
 @EntityScan(basePackages = {
+    "github.lms.lemuel.addressbook",
     "github.lms.lemuel.bulkorder",
     "github.lms.lemuel.cart",
     "github.lms.lemuel.category",
@@ -42,6 +43,7 @@ import org.springframework.data.jpa.repository.config.EnableJpaRepositories;
     "github.lms.lemuel.wishlist",
 })
 @EnableJpaRepositories(basePackages = {
+    "github.lms.lemuel.addressbook",
     "github.lms.lemuel.bulkorder",
     "github.lms.lemuel.cart",
     "github.lms.lemuel.category",

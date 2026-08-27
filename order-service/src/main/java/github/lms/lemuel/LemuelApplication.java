@@ -48,6 +48,9 @@ import org.springframework.scheduling.annotation.EnableScheduling;
         // 조용히 404 가 된다. 여기 더하는 것만으로는 부족하다 — PersistenceConfig 의 @EntityScan·
         // @EnableJpaRepositories 도 열거식이라 그쪽을 빠뜨리면 테스트는 통과하고 기동만 깨진다.
         "github.lms.lemuel.inquiry",
+        // 배송지 주소록 — 위 둘과 같은 이유로 빠지면 /users/*/shipping-addresses 가 조용히 404 가
+        // 된다. 아래 PersistenceConfig 의 @EntityScan·@EnableJpaRepositories 도 함께 고쳐야 한다.
+        "github.lms.lemuel.addressbook",
         "github.lms.lemuel.common",
         // ADR 0020 Phase 5.5 — settlement 분리 완료. settlement/ledger/payout/chargeback/
         // pgreconciliation 코드는 settlement-service 로 이전돼 order 소스에 존재하지 않으므로

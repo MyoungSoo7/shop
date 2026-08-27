@@ -158,6 +158,13 @@ export const FALLBACK_MENUS: FallbackMenuNode[] = [
     description: '한 번에 담고 여러 주소로 나눠 보내기',
     area: 'SHOP', type: 'ITEM', roles: ['USER'],
   },
+  {
+    // 배송지 주소록 — 화면은 /my/addresses 이고 API 는 /users/{id}/shipping-addresses 다.
+    // 위 둘과 같은 이유로 화면 경로를 API 세그먼트와 겹치지 않게 둔다.
+    id: -16, name: '배송지 주소록', path: '/my/addresses', icon: '📒',
+    description: '자주 쓰는 배송지 저장 · 기본 배송지 지정',
+    area: 'SHOP', type: 'ITEM', roles: ['USER'],
+  },
 ];
 
 const accessible = (node: FallbackMenuNode, role: string | null): boolean =>

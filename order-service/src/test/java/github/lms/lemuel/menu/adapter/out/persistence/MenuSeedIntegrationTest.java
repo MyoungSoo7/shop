@@ -79,13 +79,13 @@ class MenuSeedIntegrationTest {
     }
 
     @Test
-    @DisplayName("시드 총 44행 — 커머스 + 운영 범위")
-    void seedsExactlyFortyFour() {
-        assertThat(adapter.findAll()).hasSize(44);
+    @DisplayName("시드 총 45행 — 커머스 + 운영 범위")
+    void seedsExactlyFortyFive() {
+        assertThat(adapter.findAll()).hasSize(45);
     }
 
     @Test
-    @DisplayName("최상위 15개가 상단 네비 순서대로 들어간다")
+    @DisplayName("최상위 16개가 상단 네비 순서대로 들어간다")
     void rootsInOrder() {
         List<Menu> roots = adapter.findAll().stream()
                 .filter(m -> m.getParentId() == null)
@@ -112,8 +112,11 @@ class MenuSeedIntegrationTest {
                 // SPA 라우트를 두면 새로고침에서 목록 JSON 이 그대로 렌더된다.
                 // 여러 곳 배송(45)은 맨 뒤다. 앞의 셋과 달리 뒤를 밀지 않는 이유는 끼어들 자리가
                 // 없기 때문이다 — SHOP 최상위는 7·8·20·25·30·35·40 으로 차 있고 이 항목은 그 뒤다.
+                // 배송지 주소록(50)도 같은 이유로 그 뒤에 붙는다. 경로가 /addresses 가 아니라
+                // /my/addresses 인 것은 내 문의와 같은 이유다 — 세그먼트가 게이트웨이로 프록시되는
+                // 이름과 겹치면 새로고침에서 JSON 이 그대로 뜬다.
                 "주문하기", "추천받기", "대량주문", "나눠 결제", "내 포인트·상품권", "내 알림", "내 문의",
-                "여러 곳 배송");
+                "여러 곳 배송", "배송지 주소록");
     }
 
     @Test
@@ -253,7 +256,7 @@ class MenuSeedIntegrationTest {
     }
 
     @Test
-    @DisplayName("구매자 메뉴 8개는 USER 에게만 보인다 — 관리자 네비에는 주문/추천/대량주문/결제/잔액/알림/문의/여러곳배송이 없었다")
+    @DisplayName("구매자 메뉴 9개는 USER 에게만 보인다 — 관리자 네비에는 주문/추천/대량주문/결제/잔액/알림/문의/여러곳배송/주소록이 없었다")
     void shopMenusAreUserOnly() {
         Set<String> shopNames = adapter.findAll().stream()
                 .filter(m -> m.getArea() == MenuArea.SHOP)
@@ -263,7 +266,7 @@ class MenuSeedIntegrationTest {
         assertThat(shopNames)
                 .containsExactlyInAnyOrder(
                         "주문하기", "추천받기", "대량주문", "나눠 결제", "내 포인트·상품권", "내 알림", "내 문의",
-                        "여러 곳 배송");
+                        "여러 곳 배송", "배송지 주소록");
         assertThat(adapter.findAll()).filteredOn(m -> m.getArea() == MenuArea.SHOP)
                 .allSatisfy(m -> assertThat(m.allowedRoles()).containsExactly("USER"));
     }
