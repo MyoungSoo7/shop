@@ -178,6 +178,11 @@ public enum ErrorCode {
     POINT_INVALID_STATE(HttpStatus.BAD_REQUEST, "현재 상태에서는 포인트를 처리할 수 없습니다."),
     // 요청 자체는 옳은데 기존 정책과 기간이 겹치는 상태다 — 먼저 현재 정책을 종료해야 자리가 난다(ADR 0032).
     POINT_POLICY_PERIOD_OVERLAP(HttpStatus.CONFLICT, "같은 범위에 기간이 겹치는 적립률 정책이 이미 있습니다."),
+    // 포인트 선물의 받는 이 확인 실패. GIFT_CARD_INVALID_STATE 와 같은 이유로 사유를 구분하지 않는다 —
+    // "그런 이메일 없음"과 "이름이 다름"을 갈라 주면 응답만으로 남의 계정 존재를 확인할 수 있다.
+    POINT_TRANSFER_RECIPIENT_UNKNOWN(HttpStatus.BAD_REQUEST, "받는 분을 확인할 수 없습니다."),
+    // 자기 자신에게 보내기. 위와 달리 숨길 것이 없다 — 보내는 이는 자기 이메일을 안다.
+    POINT_TRANSFER_SELF(HttpStatus.BAD_REQUEST, "자기 자신에게는 포인트를 선물할 수 없습니다."),
     GIFT_CARD_INSUFFICIENT(HttpStatus.UNPROCESSABLE_ENTITY, "기프트카드 잔액이 부족합니다."),
     GIFT_CARD_INVALID_AMOUNT(HttpStatus.BAD_REQUEST, "기프트카드 금액이 올바르지 않습니다."),
     // 코드 등록 실패는 사유를 구분하지 않는다 — 구분하면 유효한 코드의 존재가 새어 나간다.

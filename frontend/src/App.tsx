@@ -25,6 +25,7 @@ const MyPage = lazy(() => import('./pages/MyPage'));
 const MyBalancesPage = lazy(() => import('./pages/MyBalancesPage'));
 const WishlistPage = lazy(() => import('./pages/WishlistPage'));
 const AddressBookPage = lazy(() => import('./pages/AddressBookPage'));
+const PointTransferPage = lazy(() => import('./pages/PointTransferPage'));
 const InquiryPage = lazy(() => import('./pages/InquiryPage'));
 const NotificationsPage = lazy(() => import('./pages/NotificationsPage'));
 const BulkOrderPage = lazy(() => import('./pages/BulkOrderPage'));
@@ -148,6 +149,9 @@ function App() {
             {/* 배송지 주소록 — API 는 /users/{id}/shipping-addresses 다. 화면 경로를 그와 겹치지
                 않게 두는 이유는 위 '내 문의'와 같다. */}
             <Route path="/my/addresses" element={<ProtectedRoute><AddressBookPage /></ProtectedRoute>} />
+            {/* 포인트 선물 — API 는 /api/points/transfers 다. 화면에 담을 식별자가 없는 것은
+                보내는 이를 경로가 아니라 토큰에서 읽기 때문이다. */}
+            <Route path="/my/point-transfer" element={<ProtectedRoute><PointTransferPage /></ProtectedRoute>} />
             {/* 찜 — 장바구니와 다른 목록이다("지금 살 것" 대 "언젠가 살 것"). 경로도 섞지 않는다. */}
             <Route path="/wishlist"    element={<ProtectedRoute><WishlistPage /></ProtectedRoute>} />
             {/* 알림 푸시 SSE 구독 — 수신함이 아니라 스트림이다(서버가 알림을 저장하지 않는다). */}

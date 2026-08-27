@@ -17,7 +17,15 @@ public enum PointLotOrigin {
     /** 관리자 수기 지급. */
     MANUAL_GRANT(true),
     /** 환불로 되돌려 준 포인트인데 원 로트가 이미 소멸·소진되어 새로 발급한 경우. */
-    REFUND_RESTORE(false);
+    REFUND_RESTORE(false),
+    /**
+     * 회원 간 선물로 <b>받은</b> 포인트.
+     *
+     * <p>판촉성이 아니다. 회사가 새로 얹어 준 몫이 아니라 이미 인식된 부채가 주인만 바꾼 것이라,
+     * 여기에 판촉비를 다시 잡으면 같은 포인트에 비용이 두 번 계상된다. 보낸 이 쪽의 USE 와
+     * 받는 이 쪽의 GRANT 는 한 트랜잭션에서 짝을 이루므로 부채 총액은 변하지 않는다.
+     */
+    TRANSFER_IN(false);
 
     private final boolean promotional;
 

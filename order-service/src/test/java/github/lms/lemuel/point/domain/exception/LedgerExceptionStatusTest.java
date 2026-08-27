@@ -62,6 +62,26 @@ class LedgerExceptionStatusTest {
     }
 
     @Test
+    @DisplayName("선물 거절은 전부 400 이고, 받는 이 조회 실패만 사유를 뭉갠다")
+    void transferRejectionMapsTo400() {
+        PointTransferRejectedException unknown = PointTransferRejectedException.recipientUnknown();
+        assertThat(unknown.getErrorCode()).isEqualTo(ErrorCode.POINT_TRANSFER_RECIPIENT_UNKNOWN);
+        assertThat(unknown.getErrorCode().status()).isEqualTo(HttpStatus.BAD_REQUEST);
+        // "이메일이 없다"와 "이름이 다르다"를 가르면 응답만 보고 가입 여부를 캐낼 수 있다.
+        assertThat(unknown.getMessage()).doesNotContain("이메일이 없", "이름이 다");
+
+        assertThat(PointTransferRejectedException.self().getErrorCode())
+                .isEqualTo(ErrorCode.POINT_TRANSFER_SELF);
+        assertThat(PointTransferRejectedException.self().getErrorCode().status())
+                .isEqualTo(HttpStatus.BAD_REQUEST);
+
+        assertThat(PointTransferRejectedException.malformed("메시지가 깁니다").getErrorCode())
+                .isEqualTo(ErrorCode.POINT_INVALID_STATE);
+        assertThat(PointTransferRejectedException.malformed("메시지가 깁니다").getErrorCode().status())
+                .isEqualTo(HttpStatus.BAD_REQUEST);
+    }
+
+    @Test
     @DisplayName("불변식 위반은 BusinessException 이 아니다 — 로직 버그라 500 이 옳다")
     void invariantViolationStaysUnmapped() {
         assertThat(new PointInvariantViolationException("깨짐")).isNotInstanceOf(BusinessException.class);

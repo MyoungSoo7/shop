@@ -165,6 +165,13 @@ export const FALLBACK_MENUS: FallbackMenuNode[] = [
     description: '자주 쓰는 배송지 저장 · 기본 배송지 지정',
     area: 'SHOP', type: 'ITEM', roles: ['USER'],
   },
+  {
+    // 포인트 선물 — 화면은 /my/point-transfer 이고 API 는 /api/points/transfers 다.
+    // 화면 경로에 담을 식별자가 없다(보내는 이를 토큰에서 읽으므로).
+    id: -17, name: '포인트 선물', path: '/my/point-transfer', icon: '🎁',
+    description: '내 포인트를 다른 회원에게 보내기',
+    area: 'SHOP', type: 'ITEM', roles: ['USER'],
+  },
 ];
 
 const accessible = (node: FallbackMenuNode, role: string | null): boolean =>

@@ -79,13 +79,13 @@ class MenuSeedIntegrationTest {
     }
 
     @Test
-    @DisplayName("시드 총 45행 — 커머스 + 운영 범위")
-    void seedsExactlyFortyFive() {
-        assertThat(adapter.findAll()).hasSize(45);
+    @DisplayName("시드 총 46행 — 커머스 + 운영 범위")
+    void seedsExactlyFortySix() {
+        assertThat(adapter.findAll()).hasSize(46);
     }
 
     @Test
-    @DisplayName("최상위 16개가 상단 네비 순서대로 들어간다")
+    @DisplayName("최상위 17개가 상단 네비 순서대로 들어간다")
     void rootsInOrder() {
         List<Menu> roots = adapter.findAll().stream()
                 .filter(m -> m.getParentId() == null)
@@ -115,8 +115,10 @@ class MenuSeedIntegrationTest {
                 // 배송지 주소록(50)도 같은 이유로 그 뒤에 붙는다. 경로가 /addresses 가 아니라
                 // /my/addresses 인 것은 내 문의와 같은 이유다 — 세그먼트가 게이트웨이로 프록시되는
                 // 이름과 겹치면 새로고침에서 JSON 이 그대로 뜬다.
+                // 포인트 선물(55)도 그 뒤다. '내 포인트·상품권'(30) 옆이 어울리지만, 그 자리에
+                // 끼우려면 뒤를 전부 밀어야 하고 그 UPDATE 는 이미 배포된 sort_order 를 건드린다.
                 "주문하기", "추천받기", "대량주문", "나눠 결제", "내 포인트·상품권", "내 알림", "내 문의",
-                "여러 곳 배송", "배송지 주소록");
+                "여러 곳 배송", "배송지 주소록", "포인트 선물");
     }
 
     @Test
@@ -256,7 +258,7 @@ class MenuSeedIntegrationTest {
     }
 
     @Test
-    @DisplayName("구매자 메뉴 9개는 USER 에게만 보인다 — 관리자 네비에는 주문/추천/대량주문/결제/잔액/알림/문의/여러곳배송/주소록이 없었다")
+    @DisplayName("구매자 메뉴 10개는 USER 에게만 보인다 — 관리자 네비에는 주문/추천/대량주문/결제/잔액/알림/문의/여러곳배송/주소록/포인트선물이 없었다")
     void shopMenusAreUserOnly() {
         Set<String> shopNames = adapter.findAll().stream()
                 .filter(m -> m.getArea() == MenuArea.SHOP)
@@ -266,7 +268,7 @@ class MenuSeedIntegrationTest {
         assertThat(shopNames)
                 .containsExactlyInAnyOrder(
                         "주문하기", "추천받기", "대량주문", "나눠 결제", "내 포인트·상품권", "내 알림", "내 문의",
-                        "여러 곳 배송", "배송지 주소록");
+                        "여러 곳 배송", "배송지 주소록", "포인트 선물");
         assertThat(adapter.findAll()).filteredOn(m -> m.getArea() == MenuArea.SHOP)
                 .allSatisfy(m -> assertThat(m.allowedRoles()).containsExactly("USER"));
     }
