@@ -71,7 +71,9 @@ describe('ImageUpload', () => {
         { headers: { 'Content-Type': 'multipart/form-data' } }
       );
     });
-    expect(screen.getByText('이미지가 업로드되었습니다.')).toBeInTheDocument();
+    // API 가 "불렸는지"와 그 결과가 그려졌는지 사이에는 상태 갱신 한 틱이 있다. getBy 로 집으면
+    // 붐비는 러너에서 그 틈이 벌어져 실패한다 — 전체 스위트로 돌릴 때만 터지던 자리다.
+    expect(await screen.findByText('이미지가 업로드되었습니다.')).toBeInTheDocument();
     expect(onImagesChange).toHaveBeenCalledTimes(1);
   });
 

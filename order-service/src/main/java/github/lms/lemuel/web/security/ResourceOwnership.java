@@ -32,6 +32,24 @@ public final class ResourceOwnership {
         throw new AccessDeniedException("인증 주체에서 사용자 식별자를 확인할 수 없습니다.");
     }
 
+    /**
+     * 현재 SecurityContext 의 인증 주체에서 사용자 식별자를 꺼낸다.
+     *
+     * <p>{@link #requireSelfOrAdmin(Long)} 와 같은 이유로 홀더에서 직접 읽는다 — 컨트롤러
+     * 파라미터로 받은 {@code Authentication} 은 {@code SecurityContextHolderAwareRequestFilter}
+     * 가 채워 주는 값이라, 필터를 끈 슬라이스 테스트에서는 <b>말없이 null</b> 이 되고 그러면
+     * 모든 요청이 403 이 된다. 진짜 인가는 필터 체인이 하고, 여기서 하는 일은 "누구인가"를
+     * 읽는 것뿐이다.
+     */
+    public static long callerUserId() {
+        return callerUserId(SecurityContextHolder.getContext().getAuthentication());
+    }
+
+    /** 현재 SecurityContext 기준 ADMIN·MANAGER 여부. */
+    public static boolean isAdminOrManager() {
+        return isAdminOrManager(SecurityContextHolder.getContext().getAuthentication());
+    }
+
     /** ADMIN 또는 MANAGER 권한 보유 여부. */
     public static boolean isAdminOrManager(Authentication authentication) {
         if (authentication == null) {

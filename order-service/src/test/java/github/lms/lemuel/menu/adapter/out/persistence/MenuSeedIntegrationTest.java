@@ -79,13 +79,13 @@ class MenuSeedIntegrationTest {
     }
 
     @Test
-    @DisplayName("시드 총 41행 — 커머스 + 운영 범위")
-    void seedsExactlyFortyOne() {
-        assertThat(adapter.findAll()).hasSize(41);
+    @DisplayName("시드 총 43행 — 커머스 + 운영 범위")
+    void seedsExactlyFortyThree() {
+        assertThat(adapter.findAll()).hasSize(43);
     }
 
     @Test
-    @DisplayName("최상위 12개가 상단 네비 순서대로 들어간다")
+    @DisplayName("최상위 14개가 상단 네비 순서대로 들어간다")
     void rootsInOrder() {
         List<Menu> roots = adapter.findAll().stream()
                 .filter(m -> m.getParentId() == null)
@@ -99,11 +99,18 @@ class MenuSeedIntegrationTest {
                 // 승인 큐가 링크가 아니게 된다. 맨 뒤(MAX+1)가 아닌 이유는 프론트 폴백
                 // (menuFallback.ts)이 같은 자리에 두기 때문이다 — 순서가 갈리면 서버가 죽어
                 // 폴백이 뜨는 순간에야 그 사실이 드러난다.
-                "대시보드", "상품관리", "배송", "승인", "반품·교환", "시스템 관리",
+                // '문의 응대'도 같은 이유로 '승인' 의 형제이고, 자리는 '반품·교환' 바로 뒤다.
+                // 시드가 뒤를 한 칸 밀 때 area 로 좁히지 않는 것이 중요하다 — '시스템 관리' 는
+                // area 가 SYSTEM 이라 BACKOFFICE 로 걸러 내면 밀리지 않고, 그러면 새 행과
+                // sort_order 가 겹쳐 둘의 순서가 정해지지 않는다.
+                "대시보드", "상품관리", "배송", "승인", "반품·교환", "문의 응대", "시스템 관리",
                 // 대량주문은 관리자 기능이 아니라 구매자가 자기 주문을 올리는 경로다 — SHOP 최상위.
                 // 나눠 결제는 주문(20)과 잔액 확인(30) 사이 — 주문에서 결제로 이어지는 순서다.
                 // 내 알림(35)은 내 포인트·상품권(30) 다음 — 둘 다 "내 것"을 보는 개인 화면이다.
-                "주문하기", "추천받기", "대량주문", "나눠 결제", "내 포인트·상품권", "내 알림");
+                // 내 문의(40)는 그 뒤. 경로가 /inquiries 가 아니라 /my/inquiries 인 것은 nginx
+                // 두 벌이 inquiries 세그먼트를 게이트웨이로 프록시하기 때문이다 — 같은 이름의
+                // SPA 라우트를 두면 새로고침에서 목록 JSON 이 그대로 렌더된다.
+                "주문하기", "추천받기", "대량주문", "나눠 결제", "내 포인트·상품권", "내 알림", "내 문의");
     }
 
     @Test
@@ -243,7 +250,7 @@ class MenuSeedIntegrationTest {
     }
 
     @Test
-    @DisplayName("구매자 메뉴 6개는 USER 에게만 보인다 — 관리자 네비에는 주문/추천/대량주문/결제/잔액/알림이 없었다")
+    @DisplayName("구매자 메뉴 7개는 USER 에게만 보인다 — 관리자 네비에는 주문/추천/대량주문/결제/잔액/알림/문의가 없었다")
     void shopMenusAreUserOnly() {
         Set<String> shopNames = adapter.findAll().stream()
                 .filter(m -> m.getArea() == MenuArea.SHOP)
@@ -251,7 +258,8 @@ class MenuSeedIntegrationTest {
                 .collect(Collectors.toSet());
 
         assertThat(shopNames)
-                .containsExactlyInAnyOrder("주문하기", "추천받기", "대량주문", "나눠 결제", "내 포인트·상품권", "내 알림");
+                .containsExactlyInAnyOrder(
+                        "주문하기", "추천받기", "대량주문", "나눠 결제", "내 포인트·상품권", "내 알림", "내 문의");
         assertThat(adapter.findAll()).filteredOn(m -> m.getArea() == MenuArea.SHOP)
                 .allSatisfy(m -> assertThat(m.allowedRoles()).containsExactly("USER"));
     }

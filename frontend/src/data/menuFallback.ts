@@ -71,6 +71,14 @@ export const FALLBACK_MENUS: FallbackMenuNode[] = [
     area: 'BACKOFFICE', type: 'ITEM', roles: ['ADMIN', 'MANAGER'],
   },
   {
+    // 반품·교환과 같은 이유로 '승인' 의 형제다. 문의 응대도 CS 업무라 서버가 MANAGER 까지
+    // 연다(/admin/inquiries/** 매처) — 메뉴도 같은 등급이어야 눌러도 되돌려보내는 죽은 링크가
+    // 생기지 않는다.
+    id: -6, name: '문의 응대', path: '/admin/approvals/inquiries', icon: '💬',
+    description: '상품 문의 · 주문 문의 · 1:1 문의 답변',
+    area: 'BACKOFFICE', type: 'ITEM', roles: ['ADMIN', 'MANAGER'],
+  },
+  {
     id: -7, name: '시스템 관리', shortName: '시스템', path: '/admin/system/menus', icon: '⚙️',
     description: 'System Administration', area: 'SYSTEM', type: 'GROUP', roles: ['ADMIN'],
     children: [
@@ -135,6 +143,12 @@ export const FALLBACK_MENUS: FallbackMenuNode[] = [
   },
   {
     id: -13, name: '내 알림', path: '/notifications', icon: '🔔', description: '주문·결제 실시간 알림',
+    area: 'SHOP', type: 'ITEM', roles: ['USER'],
+  },
+  {
+    // 화면 URL 이 /inquiries 가 아닌 이유: 그건 이 화면이 부르는 API 경로이고, nginx 두 벌이
+    // inquiries 세그먼트를 게이트웨이로 프록시한다. 같으면 새로고침에서 목록 JSON 이 렌더된다.
+    id: -14, name: '내 문의', path: '/my/inquiries', icon: '💬', description: '상품 문의 · 주문 문의 · 1:1 문의',
     area: 'SHOP', type: 'ITEM', roles: ['USER'],
   },
 ];

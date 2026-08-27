@@ -44,6 +44,10 @@ import org.springframework.scheduling.annotation.EnableScheduling;
         // 찜(위시리스트) — 이 스캔이 빠지면 /users/*/wishlist 가 조용히 404 가 된다. 컨트롤러가
         // 등록되지 않아도 기동은 성공하므로(정적 리소스 핸들러가 대신 받는다) 아무 신호도 없다.
         "github.lms.lemuel.wishlist",
+        // 문의(상품 문의·주문 문의·1:1) — 찜과 같은 이유로 빠지면 /inquiries 와 /admin/inquiries 가
+        // 조용히 404 가 된다. 여기 더하는 것만으로는 부족하다 — PersistenceConfig 의 @EntityScan·
+        // @EnableJpaRepositories 도 열거식이라 그쪽을 빠뜨리면 테스트는 통과하고 기동만 깨진다.
+        "github.lms.lemuel.inquiry",
         "github.lms.lemuel.common",
         // ADR 0020 Phase 5.5 — settlement 분리 완료. settlement/ledger/payout/chargeback/
         // pgreconciliation 코드는 settlement-service 로 이전돼 order 소스에 존재하지 않으므로

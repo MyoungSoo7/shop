@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import OptionFacetPanel from '@/components/product/OptionFacetPanel';
 import WishlistHeart from '@/components/product/WishlistHeart';
+import ProductInquiries from '@/components/product/ProductInquiries';
 import {
   facetApi, countSelected, toggleFacetValue,
   type Facet, type FacetSelection,
@@ -458,6 +459,10 @@ const OrderFormTab: React.FC = () => {
                 )}
               </div>
             )}
+
+            {/* 상품 문의 — 리뷰 바로 아래다. 리뷰는 산 사람이 쓰는 것이라, 사기 전에 묻고 싶은
+                사람이 갈 곳이 여기까지 없었다(고객센터 전화 아니면 남의 리뷰에 대댓글). */}
+            {selectedProduct && <ProductInquiries productId={selectedProduct.id} />}
 
             {/* 배송지 */}
             <ShippingAddressForm value={shippingAddress} onChange={setShippingAddress} />

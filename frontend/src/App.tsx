@@ -24,6 +24,7 @@ const CartPage = lazy(() => import('./pages/CartPage'));
 const MyPage = lazy(() => import('./pages/MyPage'));
 const MyBalancesPage = lazy(() => import('./pages/MyBalancesPage'));
 const WishlistPage = lazy(() => import('./pages/WishlistPage'));
+const InquiryPage = lazy(() => import('./pages/InquiryPage'));
 const NotificationsPage = lazy(() => import('./pages/NotificationsPage'));
 const BulkOrderPage = lazy(() => import('./pages/BulkOrderPage'));
 const TenderCheckoutPage = lazy(() => import('./pages/TenderCheckoutPage'));
@@ -58,6 +59,7 @@ const ShippingAdminPage = lazy(() => import('./pages/ShippingAdminPage'));
 const ShippingPolicyAdminPage = lazy(() => import('./pages/ShippingPolicyAdminPage'));
 const OrderApprovalPage = lazy(() => import('./pages/OrderApprovalPage'));
 const ReturnRequestAdminPage = lazy(() => import('./pages/ReturnRequestAdminPage'));
+const InquiryAdminPage = lazy(() => import('./pages/InquiryAdminPage'));
 const SellerTierAdminPage = lazy(() => import('./pages/SellerTierAdminPage'));
 
 // 운영 관제 (최고 관리자 전용) — operation-service 인시던트 콘솔
@@ -138,6 +140,9 @@ function App() {
             <Route path="/cart"         element={<ProtectedRoute><CartPage /></ProtectedRoute>} />
             <Route path="/mypage"       element={<ProtectedRoute><MyPage /></ProtectedRoute>} />
             <Route path="/my/balances" element={<ProtectedRoute><MyBalancesPage /></ProtectedRoute>} />
+            {/* 내 문의 — 경로가 /inquiries 가 아닌 이유: 그건 이 화면이 부르는 API 이고 nginx 두 벌이
+                inquiries 세그먼트를 게이트웨이로 프록시한다. 같으면 새로고침에서 목록 JSON 이 뜬다. */}
+            <Route path="/my/inquiries" element={<ProtectedRoute><InquiryPage /></ProtectedRoute>} />
             {/* 찜 — 장바구니와 다른 목록이다("지금 살 것" 대 "언젠가 살 것"). 경로도 섞지 않는다. */}
             <Route path="/wishlist"    element={<ProtectedRoute><WishlistPage /></ProtectedRoute>} />
             {/* 알림 푸시 SSE 구독 — 수신함이 아니라 스트림이다(서버가 알림을 저장하지 않는다). */}
@@ -169,6 +174,10 @@ function App() {
                 두면 nginx SPA 폴백(approvals 접두사)에 그대로 얹힌다. */}
             <Route path="/admin/approvals/returns"
               element={<AdminManagerRoute><ReturnRequestAdminPage /></AdminManagerRoute>} />
+            {/* 문의 응대 — 반품·교환과 같은 이유로 '승인' 의 형제이고, approvals 접두사 아래다
+                (nginx SPA 폴백이 /admin 하위에서 그 접두사들만 index.html 로 내려보낸다). */}
+            <Route path="/admin/approvals/inquiries"
+              element={<AdminManagerRoute><InquiryAdminPage /></AdminManagerRoute>} />
             <Route path="/tags"               element={<AdminManagerRoute><TagManagementPage /></AdminManagerRoute>} />
 
             {/* ── 최고 관리자 전용: 운영 관제 — 시스템 관리(운영관리)로 편입, 구 경로는 리다이렉트 ── */}

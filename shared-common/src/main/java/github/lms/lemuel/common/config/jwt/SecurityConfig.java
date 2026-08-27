@@ -247,6 +247,11 @@ public class SecurityConfig {
                         // 리뷰 관리 콘솔 — 다루는 것이 개인정보가 아니라 공개된 게시물이고, 신고 대응은
                         // CS 업무의 일부라 MANAGER 까지 연다(회원 콘솔과 다른 판단).
                         .requestMatchers("/admin/reviews/**").hasAnyRole("ADMIN", "MANAGER")
+                        // 문의 응대 콘솔 — 답변 등록·삭제. 리뷰 콘솔과 같은 판단으로 MANAGER 까지 연다
+                        // (문의 응대는 CS 업무 그 자체다). 다만 여기서 읽는 것은 공개 게시물이 아니라
+                        // 비밀글 본문까지 포함하므로, 매처를 빠뜨리면 anyRequest().authenticated() 로
+                        // 떨어져 로그인한 아무나 남의 비밀 문의를 읽는다.
+                        .requestMatchers("/admin/inquiries", "/admin/inquiries/**").hasAnyRole("ADMIN", "MANAGER")
                         // 환불 콘솔 — 실패/재시도 소진 환불 조회(운영 개입용). 실행 없는 조회라 MANAGER 도 허용
                         .requestMatchers("/admin/refunds/**").hasAnyRole("ADMIN", "MANAGER")
                         // 매출 콘솔 — 기간 수납·환불 합계와 결제수단 구성. 개인정보가 아니라 집계라

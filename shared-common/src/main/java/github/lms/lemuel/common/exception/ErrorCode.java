@@ -216,7 +216,17 @@ public enum ErrorCode {
     // ─── site (사이트 팝업) ───────────────────────────────────────────────────
     POPUP_NOT_FOUND(HttpStatus.NOT_FOUND, "팝업을 찾을 수 없습니다."),
     // 지운 팝업을 고치려 했거나 노출 구간이 뒤집혔다 — 요청을 고치면 성공하므로 400 이다.
-    POPUP_INVALID_STATE(HttpStatus.BAD_REQUEST, "현재 상태에서는 팝업을 변경할 수 없습니다.");
+    POPUP_INVALID_STATE(HttpStatus.BAD_REQUEST, "현재 상태에서는 팝업을 변경할 수 없습니다."),
+
+    // ─── inquiry (상품 문의 · 1:1 문의) ───────────────────────────────────────
+    INQUIRY_NOT_FOUND(HttpStatus.NOT_FOUND, "문의를 찾을 수 없습니다."),
+    // 빈 제목·본문, 길이 초과, 종류가 요구하는 대상(상품·주문) 누락 — 요청을 고치면 성공하므로 400.
+    INQUIRY_INVARIANT(HttpStatus.BAD_REQUEST, "문의 내용을 확인해 주세요."),
+    // 답변이 달린 뒤의 수정·삭제. 요청은 옳고 상태가 달라진 경우라 409 다. 400 으로 묶으면
+    // 화면이 "입력을 고치세요"라고 안내하게 되는데, 고칠 입력이 없다.
+    INQUIRY_ALREADY_ANSWERED(HttpStatus.CONFLICT, "이미 답변된 문의는 변경할 수 없습니다."),
+    // 지우려는 답변이 없다. INQUIRY_NOT_FOUND 와 뭉치면 "문의가 사라졌나"를 의심하게 된다.
+    INQUIRY_ANSWER_NOT_FOUND(HttpStatus.NOT_FOUND, "그 문의에 달린 답변이 아닙니다.");
 
     private final HttpStatus status;
     private final String defaultMessage;
