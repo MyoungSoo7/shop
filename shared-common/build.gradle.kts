@@ -131,6 +131,10 @@ dependencies {
     testFixturesImplementation("com.fasterxml.jackson.core:jackson-databind")
 
     // 테스트
+    // ArchUnit — 위 testFixturesCompileOnly 와 별개다. 저건 소비 서비스에 <픽스처를 주기> 위한 것이고,
+    // 이건 shared-common 자신의 경계를 검사(SharedCommonArchitectureTest)하기 위한 것이다.
+    // 둘을 합치려다 testFixtures 소비자에게 버전을 강제하게 되므로 그대로 둘로 둔다.
+    testImplementation("com.tngtech.archunit:archunit-junit5:1.4.1")
     testImplementation("org.springframework.boot:spring-boot-starter-test")
     testImplementation("org.springframework.boot:spring-boot-starter-data-jpa-test")
     testImplementation("org.springframework.boot:spring-boot-starter-jackson-test")
