@@ -9,6 +9,7 @@ import github.lms.lemuel.common.audit.application.port.in.SearchAuditLogsUseCase
 import github.lms.lemuel.common.audit.domain.AuditAction;
 import github.lms.lemuel.common.web.csv.CsvResponse;
 import github.lms.lemuel.common.web.csv.ExportScope;
+import github.lms.lemuel.operation.audit.application.port.in.ExportOperationAuditLogsUseCase;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import org.springframework.core.io.ByteArrayResource;
@@ -71,12 +72,16 @@ public class OperationAuditLogController {
             AuditAction.BOARD_UPDATED,
             AuditAction.BOARD_DEACTIVATED,
             AuditAction.BOARD_ACTIVATED,
-            AuditAction.BOARD_DELETED);
+            AuditAction.BOARD_DELETED,
+            AuditAction.OPERATION_AUDIT_LOG_EXPORTED);
 
     private final SearchAuditLogsUseCase searchAuditLogsUseCase;
+    private final ExportOperationAuditLogsUseCase exportAuditLogsUseCase;
 
-    public OperationAuditLogController(SearchAuditLogsUseCase searchAuditLogsUseCase) {
+    public OperationAuditLogController(SearchAuditLogsUseCase searchAuditLogsUseCase,
+                                       ExportOperationAuditLogsUseCase exportAuditLogsUseCase) {
         this.searchAuditLogsUseCase = searchAuditLogsUseCase;
+        this.exportAuditLogsUseCase = exportAuditLogsUseCase;
     }
 
     @GetMapping
@@ -122,6 +127,10 @@ public class OperationAuditLogController {
      *
      * <p>잘렸는지를 응답 헤더 {@code X-Export-Truncated}·{@code X-Export-Total} 로 알린다.
      * 본문에 경고 행을 끼우면 그 행이 데이터로 읽혀 집계를 오염시키므로, 메타는 메타 자리에 둔다.
+     *
+     * <p>조회와 달리 {@link ExportOperationAuditLogsUseCase} 를 거친다 — <b>반출은 그 자체가
+     * 감사 대상</b>이라 애스펙트가 가로챌 경계가 필요하기 때문이다. 자세한 이유는 그 구현
+     * ({@code OperationAuditLogExportService}) 에 적혀 있다.
      */
     @GetMapping("/export")
     @Operation(summary = "감사 로그 CSV", description = "화면과 같은 조건으로 상한까지 내려받는다")
@@ -134,7 +143,7 @@ public class OperationAuditLogController {
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate from,
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate to) {
 
-        AuditLogExport export = searchAuditLogsUseCase.export(
+        AuditLogExport export = exportAuditLogsUseCase.export(
                 toQuery(actorEmail, actorId, action, resourceType, resourceId, from, to, 0, 1));
 
         return CsvResponse.of(
