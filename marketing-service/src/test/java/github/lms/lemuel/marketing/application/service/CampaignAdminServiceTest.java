@@ -10,7 +10,6 @@ import github.lms.lemuel.marketing.application.port.out.LoadLuckyboxCampaignPort
 import github.lms.lemuel.marketing.application.port.out.LuckyboxPrizePort;
 import github.lms.lemuel.marketing.application.port.out.SaveAttendanceCampaignPort;
 import github.lms.lemuel.marketing.application.port.out.SaveLuckyboxCampaignPort;
-import github.lms.lemuel.marketing.domain.AmountBasis;
 import github.lms.lemuel.marketing.domain.AttendanceCampaign;
 import github.lms.lemuel.marketing.domain.BenefitType;
 import github.lms.lemuel.marketing.domain.CampaignStatus;
@@ -20,7 +19,6 @@ import github.lms.lemuel.marketing.domain.LuckyboxCampaign;
 import github.lms.lemuel.marketing.domain.LuckyboxPrize;
 import github.lms.lemuel.marketing.domain.PeriodType;
 import github.lms.lemuel.marketing.domain.PrizeType;
-import github.lms.lemuel.marketing.domain.ShippingStatusRequirement;
 import github.lms.lemuel.marketing.domain.StreakRule;
 import github.lms.lemuel.marketing.domain.exception.CampaignNotFoundException;
 import github.lms.lemuel.marketing.support.MarketingFixtures;
@@ -165,8 +163,7 @@ class CampaignAdminServiceTest {
 
         private CreateLuckyboxCampaignCommand createCommand() {
             return new CreateLuckyboxCampaignCommand("tenant-1", "9월 럭키박스", START, END, BenefitType.IMMEDIATE,
-                    null, EntryCondition.PER_DAY, null, LocalDate.of(2026, 12, 31), AmountBasis.ACTUAL_PAID,
-                    new BigDecimal("10000"), ShippingStatusRequirement.DELIVERED, "1일 1회",
+                    null, EntryCondition.PER_DAY, LocalDate.of(2026, 12, 31), "1일 1회",
                     "pc.png", "mo.png", ACTOR);
         }
 
@@ -181,7 +178,6 @@ class CampaignAdminServiceTest {
             assertEquals(id, saved.getValue().id());
             assertEquals(CampaignStatus.DRAFT, saved.getValue().status());
             assertEquals(EntryCondition.PER_DAY, saved.getValue().entryCondition());
-            assertEquals(new BigDecimal("10000"), saved.getValue().minOrderAmount());
         }
 
         @Test

@@ -73,7 +73,7 @@ const luckyboxCampaign = (over: Record<string, unknown> = {}) => ({
   endsOn: '2026-09-30',
   benefitType: 'IMMEDIATE',
   benefitOn: null,
-  entryCondition: 'ALL_MEMBERS',
+  entryCondition: 'PER_DAY',
   rewardExpiresOn: null,
   note: null,
   pcImageUrl: null,
@@ -201,20 +201,37 @@ describe('PromotionAdminPage', () => {
     expect(admin.createAttendance.mock.calls[0][0].goalRewardPoints).toBeNull();
   });
 
-  it('럭키박스 등록은 참여 조건까지 실어 보낸다', async () => {
+  it('럭키박스 등록은 참여 횟수 제한까지 실어 보낸다', async () => {
     const user = userEvent.setup();
     admin.createLuckybox.mockResolvedValue('new-2');
 
     render(<PromotionAdminPage />);
     await user.type(await screen.findByLabelText('럭키박스 캠페인 이름'), '겨울 박스');
-    await user.selectOptions(screen.getByLabelText('참여 조건'), 'PURCHASER');
+    await user.selectOptions(screen.getByLabelText('참여 횟수'), 'PER_PERIOD');
     await user.type(screen.getByLabelText('럭키박스 시작일'), '2026-12-01');
     await user.click(screen.getByTestId('luckybox-create'));
 
     await waitFor(() => expect(admin.createLuckybox).toHaveBeenCalled());
     expect(admin.createLuckybox.mock.calls[0][0]).toMatchObject({
-      name: '겨울 박스', entryCondition: 'PURCHASER', startsOn: '2026-12-01',
+      name: '겨울 박스', entryCondition: 'PER_PERIOD', startsOn: '2026-12-01',
     });
+  });
+
+  /**
+   * 이 목록은 marketing-service 의 `EntryCondition` 열거형과 글자까지 같아야 한다.
+   *
+   * 어긋나 있어도 이 화면의 테스트는 초록이었다 — `createLuckybox` 가 목이라 값이 무엇이든
+   * 통과했기 때문이다. 실제로 이 select 는 `ALL_MEMBERS`/`NEW_MEMBER`/`PURCHASER` 를 보내고
+   * 있었고(레거시의 참여 *대상* 코드), 백엔드의 같은 이름 필드는 참여 *빈도* 라 어느 값도
+   * 역직렬화되지 않았다. 그래서 이 화면으로는 럭키박스 캠페인을 하나도 만들 수 없었다.
+   * 목을 쓰는 한 값 자체를 고정하는 수밖에 없다.
+   */
+  it('참여 횟수 선택지는 백엔드 EntryCondition 과 같은 값만 쓴다', async () => {
+    render(<PromotionAdminPage />);
+
+    const select = await screen.findByLabelText('참여 횟수');
+    const values = Array.from(select.querySelectorAll('option')).map((o) => o.value);
+    expect(values).toEqual(['PER_DAY', 'PER_PERIOD']);
   });
 
   it('경품은 고르기 전에는 부르지 않는다', async () => {

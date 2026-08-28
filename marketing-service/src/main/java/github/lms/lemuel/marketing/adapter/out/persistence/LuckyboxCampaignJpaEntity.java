@@ -1,12 +1,10 @@
 package github.lms.lemuel.marketing.adapter.out.persistence;
 
-import github.lms.lemuel.marketing.domain.AmountBasis;
 import github.lms.lemuel.marketing.domain.BenefitType;
 import github.lms.lemuel.marketing.domain.CampaignBanner;
 import github.lms.lemuel.marketing.domain.CampaignStatus;
 import github.lms.lemuel.marketing.domain.EntryCondition;
 import github.lms.lemuel.marketing.domain.LuckyboxCampaign;
-import github.lms.lemuel.marketing.domain.ShippingStatusRequirement;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.EnumType;
@@ -15,7 +13,6 @@ import jakarta.persistence.Id;
 import jakarta.persistence.Table;
 import jakarta.persistence.Version;
 
-import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.time.OffsetDateTime;
 import java.util.UUID;
@@ -55,22 +52,8 @@ class LuckyboxCampaignJpaEntity {
     @Column(name = "entry_condition", nullable = false, length = 16)
     private EntryCondition entryCondition;
 
-    @Column(name = "member_joined_from")
-    private LocalDate memberJoinedFrom;
-
     @Column(name = "reward_expires_on")
     private LocalDate rewardExpiresOn;
-
-    @Enumerated(EnumType.STRING)
-    @Column(name = "amount_basis", length = 16)
-    private AmountBasis amountBasis;
-
-    @Column(name = "min_order_amount", precision = 19, scale = 2)
-    private BigDecimal minOrderAmount;
-
-    @Enumerated(EnumType.STRING)
-    @Column(name = "shipping_status_required", length = 16)
-    private ShippingStatusRequirement shippingStatusRequired;
 
     @Column
     private String note;
@@ -106,10 +89,6 @@ class LuckyboxCampaignJpaEntity {
         e.tenantRef = c.tenantRef();
         e.benefitType = c.benefitType();
         e.entryCondition = c.entryCondition();
-        e.memberJoinedFrom = c.memberJoinedFrom();
-        e.amountBasis = c.amountBasis();
-        e.minOrderAmount = c.minOrderAmount();
-        e.shippingStatusRequired = c.shippingStatusRequired();
         e.createdBy = c.createdBy();
         e.createdAt = OffsetDateTime.now();
         e.sync(c);
@@ -132,8 +111,7 @@ class LuckyboxCampaignJpaEntity {
 
     LuckyboxCampaign toDomain() {
         return LuckyboxCampaign.rehydrate(id, tenantRef, name, startsOn, endsOn, status, benefitType, benefitOn,
-                entryCondition, memberJoinedFrom, rewardExpiresOn, amountBasis, minOrderAmount,
-                shippingStatusRequired, note, CampaignBanner.of(pcImageUrl, mobileImageUrl),
+                entryCondition, rewardExpiresOn, note, CampaignBanner.of(pcImageUrl, mobileImageUrl),
                 createdBy, updatedBy, version);
     }
 }

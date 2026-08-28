@@ -87,9 +87,8 @@ describe('promotionAdminApi', () => {
     await promotionAdminApi.listLuckybox();
     const created = await promotionAdminApi.createLuckybox({
       tenantRef: 'default', name: '가을 럭키박스', startsOn: '2026-09-01', endsOn: '2026-09-30',
-      benefitType: 'IMMEDIATE', benefitOn: null, entryCondition: 'ALL_MEMBERS',
-      memberJoinedFrom: null, rewardExpiresOn: null, amountBasis: null, minOrderAmount: null,
-      shippingStatusRequired: null, note: null, pcImageUrl: null, mobileImageUrl: null,
+      benefitType: 'IMMEDIATE', benefitOn: null, entryCondition: 'PER_DAY',
+      rewardExpiresOn: null, note: null, pcImageUrl: null, mobileImageUrl: null,
     });
 
     expect(api.get).toHaveBeenNthCalledWith(1, '/admin/promotions/attendance');
@@ -142,9 +141,8 @@ describe('promotionAdminApi', () => {
 
     await promotionAdminApi.updateLuckybox('l1', {
       tenantRef: 'default', name: 'n', startsOn: '2026-09-01', endsOn: '2026-09-30',
-      benefitType: 'IMMEDIATE', benefitOn: null, entryCondition: 'ALL_MEMBERS',
-      memberJoinedFrom: null, rewardExpiresOn: null, amountBasis: null, minOrderAmount: null,
-      shippingStatusRequired: null, note: null, pcImageUrl: null, mobileImageUrl: null,
+      benefitType: 'IMMEDIATE', benefitOn: null, entryCondition: 'PER_DAY',
+      rewardExpiresOn: null, note: null, pcImageUrl: null, mobileImageUrl: null,
     });
 
     expect(vi.mocked(api.put).mock.calls[0][0]).toBe('/admin/promotions/luckybox/l1');
