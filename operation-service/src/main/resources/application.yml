@@ -187,6 +187,9 @@ app:
       username: ${MAIL_USERNAME:}
       password: ${MAIL_PASSWORD:}
       from: ${MAIL_FROM:no-reply@lemuel.co.kr}
+      # jakarta.mail 기본값은 무한 대기다. 응답을 멈춘 SMTP 서버 하나에 연결이 상한 없이
+      # 쌓이지 않도록 연결·읽기·쓰기에 모두 이 값을 건다(EmailChannel 주석 참조).
+      timeout-ms: ${MAIL_TIMEOUT_MS:3000}
 
   ops:
     webhook:

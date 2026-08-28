@@ -5,8 +5,12 @@ import github.lms.lemuel.operation.notification.domain.NotificationType;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
+import java.util.List;
+import java.util.Properties;
+
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -18,7 +22,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 class EmailChannelTest {
 
     private static EmailChannel channel(String username, String password) {
-        return new EmailChannel("127.0.0.1", 1, username, password, "no-reply@lemuel.co.kr");
+        return new EmailChannel("127.0.0.1", 1, username, password, "no-reply@lemuel.co.kr", 3000);
     }
 
     private static Notification notification() {
@@ -43,6 +47,23 @@ class EmailChannelTest {
         // 루프백 1번 포트는 즉시 거부하므로, 메시지 조립 전 경로를 모두 태운 뒤 전송 실패에 도달한다
         // — 실제 MTA 없이.
         assertThrows(Exception.class, () -> channel("u", "p").send(notification()));
+    }
+
+    @Test
+    @DisplayName("연결·읽기·쓰기 타임아웃이 모두 유한한 값으로 걸려 있다")
+    void everyBlockingPhaseCarriesAFiniteTimeout() {
+        // 이 세 키가 없으면 jakarta.mail 은 무한 대기가 기본이다. 죽은 SMTP 서버 하나에
+        // 연결이 상한 없이 쌓이는데, 증상은 "알림이 느리다"로만 보여 원인에 닿기 어렵다.
+        // 디스패처의 채널별 상한은 호출자만 풀어줄 뿐 남은 시도를 끝내지 못하므로(인터럽트는
+        // 블로킹 소켓 읽기를 깨우지 못한다) 시도를 실제로 끝내는 마감선은 여기뿐이다.
+        Properties props = channel("u", "p").smtpProperties();
+
+        for (String key : List.of("mail.smtp.connectiontimeout", "mail.smtp.timeout", "mail.smtp.writetimeout")) {
+            String value = props.getProperty(key);
+            assertNotNull(value, key + " 미설정 = 무한 대기");
+            assertTrue(Integer.parseInt(value) > 0, key + " 은 양수여야 한다");
+        }
+        assertEquals("3000", props.getProperty("mail.smtp.timeout"), "설정값이 그대로 반영돼야 한다");
     }
 
     @Test
