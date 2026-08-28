@@ -292,6 +292,23 @@ groups:
             여부(outbox_pending_count{job="lemuel"}) → marketing 의 lemuel-marketing 그룹 lag.
 
   # ──────────────────────────────────────────────────────────────────────
+  # 입점사 콘솔 — 조직·매출 프로젝션을 들고 있다. 여기서 나가는 사고는 화면이 비는 쪽이
+  # 아니라 숫자가 **굳는** 쪽이다. 0 으로 보이지 않아서 사람 눈으로는 거의 안 잡힌다.
+  # ──────────────────────────────────────────────────────────────────────
+  - name: lemuel_partner_alerts
+    interval: 30s
+    rules:
+      - alert: PartnerServiceDown
+        expr: up{job="partner"} == 0
+        for: 1m
+        labels:
+          severity: critical
+          component: partner
+        annotations:
+          summary: "partner-service 다운 — 입점사 콘솔 중단"
+          description: "입점사 로그인·정산 조회가 막히고 매출 프로젝션 갱신이 멈춥니다. instance={{ $labels.instance }}"
+
+  # ──────────────────────────────────────────────────────────────────────
   # 게이트웨이 — 뒤가 전부 멀쩡해도 여기가 죽으면 사용자에겐 사이트 전체가 죽은 것이다.
   # ──────────────────────────────────────────────────────────────────────
   - name: lemuel_gateway_alerts

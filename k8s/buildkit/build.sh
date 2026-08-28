@@ -22,6 +22,7 @@ order-service=
 gateway-service=-gateway
 operation-service=-operation
 marketing-service=-marketing
+partner-service=-partner
 "
 
 all_modules() { echo "$MAPPING" | sed '/^$/d' | cut -d= -f1; }

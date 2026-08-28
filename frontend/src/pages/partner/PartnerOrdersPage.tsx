@@ -121,8 +121,9 @@ export default function PartnerOrdersPage() {
     } finally {
       setLoading(false);
     }
-    // filter 는 매 렌더 새 객체라 의존성에 넣으면 무한 루프가 된다. 인자로 받는다.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    // filter 는 매 렌더 새 객체라 의존성에 넣으면 무한 루프가 된다. 그래서 인자로 받는다 —
+    // 이 콜백 안에서 filter 를 참조하지 않으므로 exhaustive-deps 는 애초에 아무 말도 하지
+    // 않는다. 억제 주석을 달면 --report-unused-disable-directives 가 그것을 오류로 잡는다.
   }, []);
 
   useEffect(() => { void load(0, { from: null, to: null, orderId: null }); }, [load]);

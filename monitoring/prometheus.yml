@@ -52,6 +52,21 @@ scrape_configs:
           application: 'lemuel-marketing'
           environment: 'production'
 
+  # partner-service — 입점사 콘솔(조직·매출 프로젝션). marketing 과 똑같은 자리에서 똑같이
+  # 빠져 있었다. 배포 로스터 게이트(scripts/harness/test/deploy-roster-gate.test.mjs)가
+  # marketing 의 누락을 잡으려고 2026-08-28 에 생겼는데, 그 다음 서비스가 같은 구멍으로
+  # 들어왔다 — 게이트는 재발을 막은 게 아니라 재발을 *보이게* 만든 것이다. 그게 일이다.
+  #
+  # 이 서비스는 매출 프로젝션을 들고 있어 조용히 죽으면 입점사 화면의 숫자가 굳는다.
+  # 굳은 숫자는 0 처럼 보이지 않아서 사람 눈으로는 거의 안 잡힌다.
+  - job_name: 'partner'
+    metrics_path: '/actuator/prometheus'
+    static_configs:
+      - targets: ['partner-service:8080']
+        labels:
+          application: 'lemuel-partner'
+          environment: 'production'
+
   # gateway-service — 모든 외부 요청이 지나는 자리. 여기가 죽으면 뒤가 전부 멀쩡해도 사용자에겐
   # 사이트 전체가 죽은 것이다. 백엔드 지표만 보고 "다 초록" 이라고 읽는 상태를 막는다.
   #
