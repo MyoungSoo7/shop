@@ -114,6 +114,11 @@ public enum AuditAction {
     BOARD_DEACTIVATED,
     BOARD_ACTIVATED,
     BOARD_DELETED,
+    // 운영 콘솔에서 감사 로그 자체를 CSV 로 내보냄. 목록을 보는 것과 가져가는 것은 감사에서
+    // 같은 무게가 아니라는 판단은 MEMBER_LIST_EXPORTED 와 같고, 여기서는 한 겹 더 무겁다 —
+    // 내보내지는 행에 다른 사람의 이메일·IP·조작 상세가 들어 있기 때문이다. 감사 기록을
+    // 열람·반출하는 행위가 감사에 남지 않으면, 그 반출만은 아무도 되짚을 수 없다.
+    OPERATION_AUDIT_LOG_EXPORTED,
 
     // ── ai 슬라이스 (AI 챗봇 — ADR 0040 으로 settlement-service 에 흡수) ──
     // 사용자가 자기 대화를 삭제 — 발화(비정형 PII 가능)와 그 이력이 사라지는 사건이라 "누가 언제

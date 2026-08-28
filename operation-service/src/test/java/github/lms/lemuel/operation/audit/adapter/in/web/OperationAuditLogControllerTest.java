@@ -7,6 +7,7 @@ import github.lms.lemuel.common.audit.application.port.in.SearchAuditLogsUseCase
 import github.lms.lemuel.common.audit.application.port.in.SearchAuditLogsUseCase.AuditLogQuery;
 import github.lms.lemuel.common.audit.application.port.in.SearchAuditLogsUseCase.AuditLogRow;
 import github.lms.lemuel.common.audit.domain.AuditAction;
+import github.lms.lemuel.operation.audit.application.service.OperationAuditLogExportService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -36,7 +37,9 @@ class OperationAuditLogControllerTest {
     @BeforeEach
     void setUp() {
         search = new StubSearch();
-        controller = new OperationAuditLogController(search);
+        // 반출은 감사 한 겹을 씌운 유스케이스를 거친다. 여기서도 실제 배선과 같은 것을 끼우므로
+        // 아래 export 검증들은 그 우회로를 포함해 그대로 성립한다(애스펙트는 프록시 밖이라 조용하다).
+        controller = new OperationAuditLogController(search, new OperationAuditLogExportService(search));
     }
 
     @Test
@@ -89,7 +92,9 @@ class OperationAuditLogControllerTest {
         List<String> actions = controller.actions().getBody();
 
         assertThat(actions).containsExactly(
-                "BOARD_ACTIVATED", "BOARD_CREATED", "BOARD_DEACTIVATED", "BOARD_DELETED", "BOARD_UPDATED");
+                "BOARD_ACTIVATED", "BOARD_CREATED", "BOARD_DEACTIVATED", "BOARD_DELETED", "BOARD_UPDATED",
+                // 감사 기록을 반출하는 행위 자체도 이 서비스가 남기는 사건이라 필터에 있어야 한다.
+                "OPERATION_AUDIT_LOG_EXPORTED");
         // 공용 enum 전체를 흘리면 운영자가 고른 값 대부분이 영원히 0건이 된다.
         assertThat(actions).hasSizeLessThan(AuditAction.values().length);
     }
