@@ -4,6 +4,8 @@ import github.lms.lemuel.sellertier.application.port.in.EvaluateSellerTiersUseCa
 import github.lms.lemuel.sellertier.application.port.in.EvaluateSellerTiersUseCase.TierEvaluationReport;
 import github.lms.lemuel.sellertier.application.port.in.CheckSellerTierIntegrityUseCase;
 import github.lms.lemuel.sellertier.application.port.in.CheckSellerTierIntegrityUseCase.TierIntegrityReport;
+import github.lms.lemuel.sellertier.application.port.in.ListSellerTiersUseCase;
+import github.lms.lemuel.sellertier.application.port.in.ListSellerTiersUseCase.SellerTierRoster;
 import github.lms.lemuel.sellertier.application.port.in.OverrideSellerTierUseCase;
 import github.lms.lemuel.sellertier.domain.SellerTierGrade;
 import github.lms.lemuel.sellertier.domain.SellerTierPolicy;
@@ -30,6 +32,7 @@ import java.time.LocalDate;
  * 셀러 등급 운영 콘솔 (ADR 0031).
  *
  * <pre>
+ *   GET  /admin/seller-tiers                          셀러 명부 — 누가 몇 등급인가(읽기 전용)
  *   POST /admin/seller-tiers/evaluate                 미리보기(무변경)
  *   POST /admin/seller-tiers/evaluate?dryRun=false    실제 재산정
  *   POST /admin/seller-tiers/{sellerId}/override      관리자 지정(사유 필수)
@@ -39,6 +42,10 @@ import java.time.LocalDate;
  *
  * <p>등급 하나가 수수료율·정산주기·홀드백을 동시에 바꾸므로 <b>미리보기가 기본값</b>이다 —
  * 파라미터를 빠뜨린 호출이 곧바로 전 셀러 등급을 바꾸면 안 된다.
+ *
+ * <p>명부가 목록의 <b>맨 앞</b>에 있는 이유: 처음 이 콘솔에는 등급을 바꾸는 길만 있고 보는 길이 없었다.
+ * 관리자 지정은 셀러 ID 를 이미 알아야 쓸 수 있었고(화면 입력란이 숫자다), 등급 분포를 확인하려면
+ * DB 를 직접 봐야 했다. 바꿀 수는 있는데 볼 수 없는 콘솔은 사실상 쓸 수 없는 콘솔이다.
  *
  * <p>{@code /policy} 는 현재 적용 중인 임계를 그대로 보여준다. 임계는 설정값이라 배포 환경마다
  * 다를 수 있고, "지금 무슨 기준으로 도는가"를 확인할 방법이 없으면 미리보기 결과를 해석할 수 없다.
@@ -52,20 +59,35 @@ public class AdminSellerTierController {
 
     private static final int DEFAULT_LIMIT = 1000;
     private static final int DEFAULT_SAMPLE_LIMIT = 50;
+    private static final int DEFAULT_ROSTER_LIMIT = 200;
 
     private final EvaluateSellerTiersUseCase useCase;
     private final OverrideSellerTierUseCase overrideUseCase;
     private final CheckSellerTierIntegrityUseCase integrityUseCase;
+    private final ListSellerTiersUseCase listUseCase;
     private final SellerTierPolicy policy;
 
     public AdminSellerTierController(EvaluateSellerTiersUseCase useCase,
                                      OverrideSellerTierUseCase overrideUseCase,
                                      CheckSellerTierIntegrityUseCase integrityUseCase,
+                                     ListSellerTiersUseCase listUseCase,
                                      SellerTierPolicy policy) {
         this.useCase = useCase;
         this.overrideUseCase = overrideUseCase;
         this.integrityUseCase = integrityUseCase;
+        this.listUseCase = listUseCase;
         this.policy = policy;
+    }
+
+    @Operation(summary = "셀러 등급 명부 — 누가 몇 등급인가",
+            description = "읽기 전용. 상품을 가졌거나 등급 정본이 있는 계정을 셀러로 보고, 정본 등급·읽기 캐시·"
+                    + "적용일·강등 유예·12개월 순매출을 함께 낸다. 아직 산정되지 않은 셀러도 등급 없음으로 나온다.")
+    @GetMapping
+    public ResponseEntity<SellerTierRoster> list(
+            @RequestParam(name = "date", required = false)
+            @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate date,
+            @RequestParam(name = "limit", defaultValue = "" + DEFAULT_ROSTER_LIMIT) int limit) {
+        return ResponseEntity.ok(listUseCase.list(date == null ? LocalDate.now() : date, limit));
     }
 
     @Operation(summary = "등급 재산정 — dryRun 기본 true",

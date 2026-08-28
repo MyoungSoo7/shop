@@ -2,7 +2,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import SellerTierAdminPage from '@/pages/SellerTierAdminPage';
-import { sellerTierApi } from '@/api/sellerTier';
+import { sellerTierApi, type SellerTierRow } from '@/api/sellerTier';
 
 /**
  * 이 콘솔이 지켜야 하는 규율은 <b>되돌릴 수 없는 것 앞에 문턱을 둔다</b>로 요약된다.
@@ -14,6 +14,10 @@ import { sellerTierApi } from '@/api/sellerTier';
  *
  * <p>지정에 사유를 강제하는 것도 같은 결이다 — 근거 없는 등급 변경이 이력에 쌓이면 감사가
  * 의미를 잃는다. 서버가 @NotBlank 로 막지만 버튼 단계에서 먼저 거른다.
+ *
+ * <p>그 위에 <b>명부</b>가 있다. 처음 이 화면에는 바꾸는 길만 있고 보는 길이 없었다 — 셋 다 버튼을
+ * 눌러야 무언가 나왔고, 지정은 셀러 번호를 이미 알아야 쓸 수 있었다. 그래서 명부는 버튼 없이
+ * 떠야 하고, 행에서 바로 지정 대상이 잡혀야 한다.
  */
 
 const showToast = vi.fn();
@@ -24,12 +28,18 @@ vi.mock('@/api/sellerTier', async (importOriginal) => {
   return {
     ...actual,
     sellerTierApi: {
-      evaluate: vi.fn(), override: vi.fn(), integrity: vi.fn(), policy: vi.fn(),
+      evaluate: vi.fn(), override: vi.fn(), integrity: vi.fn(), policy: vi.fn(), list: vi.fn(),
     },
   };
 });
 
 const mocked = vi.mocked(sellerTierApi);
+
+const rosterRow = (over: Partial<SellerTierRow> = {}): SellerTierRow => ({
+  sellerId: 13, email: 'vip@lemuel.co.kr', name: '김셀러', tier: 'VIP', cachedTier: 'VIP',
+  effectiveFrom: '2026-08-01', demotionGuardUntil: '2026-11-01', consecutiveMissCount: 0,
+  netSales12m: 820000000, productCount: 12, mismatched: false, ...over,
+});
 
 const report = (over: Partial<ReturnType<typeof baseReport>> = {}) => ({ ...baseReport(), ...over });
 const baseReport = () => ({
@@ -43,6 +53,90 @@ beforeEach(() => {
   vi.clearAllMocks();
   mocked.policy.mockResolvedValue({ vipThreshold: 50000000, strategicThreshold: 200000000 });
   mocked.evaluate.mockResolvedValue(report());
+  mocked.list.mockResolvedValue({ rows: [rosterRow()], total: 1, truncated: false });
+});
+
+describe('SellerTierAdminPage — 셀러 명부', () => {
+  it('화면에 들어오면 버튼 없이 명부가 뜬다 — "셀러 등급이 안 보인다"의 실체가 여기였다', async () => {
+    render(<SellerTierAdminPage />);
+
+    await waitFor(() => expect(screen.getAllByTestId('tier-roster-row')).toHaveLength(1));
+    expect(mocked.list).toHaveBeenCalled();
+    const row = screen.getByTestId('tier-roster-row');
+    expect(row).toHaveTextContent('김셀러');
+    expect(row).toHaveTextContent('#13');
+    expect(row).toHaveTextContent('VIP');
+    expect(row).toHaveTextContent('820,000,000');
+  });
+
+  it('아직 산정되지 않은 셀러도 명부에 남는다 — 지정할 대상이 정확히 이들이다', async () => {
+    mocked.list.mockResolvedValue({
+      rows: [rosterRow({ sellerId: 21, name: null, email: 'new@lemuel.co.kr', tier: null,
+        cachedTier: 'NORMAL', effectiveFrom: null, demotionGuardUntil: null, netSales12m: 0 })],
+      total: 1, truncated: false,
+    });
+    render(<SellerTierAdminPage />);
+
+    const row = await screen.findByTestId('tier-roster-row');
+    expect(row).toHaveTextContent('new@lemuel.co.kr');
+    expect(row).toHaveTextContent('—');
+  });
+
+  it('정본과 캐시가 어긋난 행은 표에서 바로 드러난다 — 총계만으로는 누구인지 알 수 없다', async () => {
+    mocked.list.mockResolvedValue({
+      rows: [rosterRow({ tier: 'VIP', cachedTier: 'NORMAL', mismatched: true })],
+      total: 1, truncated: false,
+    });
+    render(<SellerTierAdminPage />);
+
+    expect(await screen.findByText('캐시 일반')).toBeInTheDocument();
+  });
+
+  it('상한에 잘렸으면 전체 셀러 수를 함께 알린다 — 안 보이는 셀러가 있다는 사실이 숨으면 안 된다', async () => {
+    mocked.list.mockResolvedValue({ rows: [rosterRow()], total: 57, truncated: true });
+    render(<SellerTierAdminPage />);
+
+    expect(await screen.findByText(/셀러 57명 중 1명/)).toBeInTheDocument();
+  });
+
+  it('셀러가 없으면 그 사실을 말한다 — 빈 표는 고장과 구분되지 않는다', async () => {
+    mocked.list.mockResolvedValue({ rows: [], total: 0, truncated: false });
+    render(<SellerTierAdminPage />);
+
+    expect(await screen.findByTestId('tier-roster-empty')).toBeInTheDocument();
+  });
+
+  it('명부를 못 불러와도 번호로 지정하는 길은 남는다', async () => {
+    mocked.list.mockRejectedValue(new Error('boom'));
+    render(<SellerTierAdminPage />);
+
+    await waitFor(() => expect(screen.getByText(/셀러 명부를 불러오지 못했습니다/)).toBeInTheDocument());
+    expect(screen.getByLabelText('셀러 ID')).toBeInTheDocument();
+  });
+
+  it('행의 등급 지정을 누르면 번호를 적지 않고 그 셀러가 대상이 된다', async () => {
+    const user = userEvent.setup();
+    mocked.override.mockResolvedValue({
+      sellerId: 13, tier: 'VIP', effectiveFrom: '2026-08-29', demotionGuardUntil: '2026-11-29',
+    });
+    render(<SellerTierAdminPage />);
+
+    await user.click(await screen.findByRole('button', { name: '등급 지정' }));
+
+    // 번호 입력란이 사라지고 고른 셀러가 그대로 보인다 — 숫자만 남으면 엉뚱한 셀러의
+    // 수수료율을 바꿔도 화면에서 알아챌 방법이 없다.
+    const chip = screen.getByTestId('tier-override-target');
+    expect(chip).toHaveTextContent('김셀러');
+    expect(chip).toHaveTextContent('현재 VIP');
+    expect(screen.queryByLabelText('셀러 ID')).not.toBeInTheDocument();
+
+    await user.type(screen.getByLabelText('변경 사유'), '전략 제휴 계약');
+    await user.click(screen.getByRole('button', { name: '지정' }));
+
+    await waitFor(() => expect(mocked.override).toHaveBeenCalledWith(13, 'VIP', '전략 제휴 계약'));
+    // 지정 뒤 명부를 다시 읽는다 — 방금 바꾼 등급이 표에 낡은 채 남으면 무엇이 반영됐는지 알 수 없다.
+    await waitFor(() => expect(mocked.list).toHaveBeenCalledTimes(2));
+  });
 });
 
 describe('SellerTierAdminPage', () => {
