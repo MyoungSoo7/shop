@@ -3,6 +3,7 @@ package github.lms.lemuel.marketing.adapter.in.scheduler;
 import github.lms.lemuel.marketing.application.port.in.SettleScheduledRewardsUseCase;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 
@@ -23,8 +24,13 @@ import java.time.ZoneId;
  * {@code (accountId, referenceType, referenceId)} 로 멱등 처리하고, 우리 쪽도 상태를 PENDING 인
  * 행만 집어 올리므로 두 번째 인스턴스는 빈손이 된다. 다만 무의미한 중복 실행이므로 인스턴스를
  * 늘릴 때는 잡 리더 선출을 붙이는 편이 낫다.
+ *
+ * <p>{@code app.marketing.settlement.enabled=false} 로 잡 자체를 내릴 수 있다. 지급이 잘못
+ * 나가는 것을 발견했을 때 크론 식을 고쳐 재배포하는 것보다 스위치 하나가 빠르다. 기본은 켜짐이라
+ * 설정을 안 준 환경에서 지급이 조용히 멈추지는 않는다.
  */
 @Component
+@ConditionalOnProperty(name = "app.marketing.settlement.enabled", havingValue = "true", matchIfMissing = true)
 public class RewardSettlementScheduler {
 
     private static final Logger log = LoggerFactory.getLogger(RewardSettlementScheduler.class);
