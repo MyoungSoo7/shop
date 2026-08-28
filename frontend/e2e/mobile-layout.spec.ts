@@ -114,6 +114,60 @@ async function expectNoHorizontalOverflow(page: Page, route: string) {
     .toBeLessThanOrEqual(viewportWidth + SUBPIXEL_SLACK);
 }
 
+/**
+ * 라우트 한 개의 내비게이션 예산.
+ *
+ * 전역 설정은 `timeout: 30_000`(테스트 전체)과 `navigationTimeout: 30_000`(내비게이션 한 번)이
+ * **같은 값**이다. 그래서 라우트 하나가 느리면 그 `goto` 한 번이 테스트 예산을 통째로 먹고,
+ * 나머지 라우트는 재보지도 못한 채 `Test timeout of 30000ms exceeded` 로 끝난다 — 실패 메시지에
+ * "어느 화면이 넘쳤는지"는커녕 "어느 화면이 느렸는지"도 안 남는다. 실제로 2026-08-28 main
+ * (`bdfb3a4`)의 smoke 가 이 모양으로 빨간불이었다.
+ *
+ * 문서 자체는 느리지 않다(같은 날 `/admin/system/menus` TTFB 5회 실측 0.37~0.61초). 느려지는
+ * 것은 `goto` 의 기본 대기 조건인 `load` 로, 라우트마다 번들·폰트를 다시 기다리는 데다 CI 가
+ * 여러 모바일 프로젝트로 같은 운영 사이트를 동시에 두드린다. 즉 **가끔 느린 건 정상**이고,
+ * 예산 배분이 틀렸던 것이다. 그래서 내비게이션 예산을 테스트 예산보다 작게 따로 잡는다.
+ */
+const ROUTE_NAV_TIMEOUT_MS = 12_000;
+
+/**
+ * 로그인 왕복 예산. 운영 백엔드로 auto-login POST 가 나가는데 전역 `expect.timeout` 7초로는
+ * 모자랐다(같은 실행에서 클릭 후 7초 동안 `/login` 에 머물러 실패).
+ */
+const LOGIN_TIMEOUT_MS = 20_000;
+
+/** 라우트당 총 예산 — 내비게이션 + 도달 확인 + 폭 안정화 대기에 여유를 얹은 값. */
+const ROUTE_BUDGET_MS = 15_000;
+
+/**
+ * 라우트 수에 비례해 테스트 예산을 잡는다.
+ *
+ * 목록에 라우트를 더하면 예산도 같이 늘어난다는 뜻이다. 상수로 박아 두면 목록이 자라는 순간
+ * 조용히 모자라지고, 그때 나오는 건 "이 화면이 깨졌다" 가 아니라 **타임아웃**이라 원인을
+ * 엉뚱한 데서 찾게 된다. ADMIN 목록이 7개로 늘면서 실제로 그렇게 됐다.
+ */
+function budgetFor(routeCount: number) {
+  return LOGIN_TIMEOUT_MS + routeCount * ROUTE_BUDGET_MS;
+}
+
+/**
+ * 라우트 목록을 훑으며 도달과 넘침을 확인한다.
+ *
+ * `goto` 에 `waitUntil` 을 바꾸지 않은 것은 의도다. `domcontentloaded` 로 낮추면 빨라지지만
+ * 스타일시트가 붙기 전에 재게 되어 FOUC 상태의 폭을 "정상" 으로 읽고 지나갈 수 있다 —
+ * 거짓 실패가 아니라 **거짓 통과**라 더 나쁘다.
+ *
+ * @param authenticated 로그인 뒤 도는 동선인지. 비로그인 목록에는 `/login` 자체가 들어 있어
+ *   `expectRouteReached`(= `/login` 으로 튕기지 않았는가)를 걸면 **항상 실패**한다.
+ */
+async function sweepRoutes(page: Page, routes: readonly string[], authenticated: boolean) {
+  for (const route of routes) {
+    await page.goto(route, { timeout: ROUTE_NAV_TIMEOUT_MS });
+    if (authenticated) await expectRouteReached(page, route);
+    await expectNoHorizontalOverflow(page, route);
+  }
+}
+
 async function loginAs(page: Page, button: string, expectedPath: string) {
   await page.addInitScript(() => {
     try {
@@ -122,9 +176,9 @@ async function loginAs(page: Page, button: string, expectedPath: string) {
       // origin 이 아직 없으면 SecurityError — 첫 내비게이션이 origin 을 만든다.
     }
   });
-  await page.goto('/login');
+  await page.goto('/login', { timeout: ROUTE_NAV_TIMEOUT_MS });
   await page.getByRole('button', { name: button }).click();
-  await expect(page).toHaveURL(new RegExp(`${expectedPath}(/|$|\\?)`));
+  await expect(page).toHaveURL(new RegExp(`${expectedPath}(/|$|\\?)`), { timeout: LOGIN_TIMEOUT_MS });
 }
 
 /** 로그인 없이 볼 수 있는 화면. */
@@ -169,27 +223,19 @@ test.describe('모바일 레이아웃 — 가로 넘침 회귀 가드', () => {
   // 종료 시 페이지 정리(WebKit 워커 행 회피)는 fixtures.ts 의 `releaseAppPages` 가 전 스펙 공통으로 한다.
 
   test('비로그인 화면이 뷰포트를 넘지 않는다', async ({ page }) => {
-    for (const route of PUBLIC_ROUTES) {
-      await page.goto(route);
-      await expectNoHorizontalOverflow(page, route);
-    }
+    test.setTimeout(budgetFor(PUBLIC_ROUTES.length));
+    await sweepRoutes(page, PUBLIC_ROUTES, false);
   });
 
   test('USER 동선 화면이 뷰포트를 넘지 않는다', async ({ page }) => {
+    test.setTimeout(budgetFor(USER_ROUTES.length));
     await loginAs(page, '👤 일반 사용자', '/order');
-    for (const route of USER_ROUTES) {
-      await page.goto(route);
-      await expectRouteReached(page, route);
-      await expectNoHorizontalOverflow(page, route);
-    }
+    await sweepRoutes(page, USER_ROUTES, true);
   });
 
   test('ADMIN 동선 화면이 뷰포트를 넘지 않는다', async ({ page }) => {
+    test.setTimeout(budgetFor(ADMIN_ROUTES.length));
     await loginAs(page, '👑 관리자', '/admin');
-    for (const route of ADMIN_ROUTES) {
-      await page.goto(route);
-      await expectRouteReached(page, route);
-      await expectNoHorizontalOverflow(page, route);
-    }
+    await sweepRoutes(page, ADMIN_ROUTES, true);
   });
 });
