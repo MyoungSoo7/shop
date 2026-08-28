@@ -44,6 +44,17 @@ spring:
               # 서버가 막지 않는 경로를 올리면 그게 곧 무인증 공개다(gateway-route-gate 주석 참조).
               predicates:
                 - Path=/api/promotions/**,/admin/promotions/**
+            - id: partner-service
+              uri: ${PARTNER_SERVICE_URI:http://localhost:8100}
+              # 파트너 콘솔 — 우리 몰에 입점한 기업이 자기 매출·주문만 본다. 전 경로 인증 필수이고
+              # 쓰기 매핑이 하나도 없다(읽기 전용 사본 서비스).
+              #
+              # 접두어를 /api/partner 하나로 묶은 것은 의도다. 여기서 보이는 값은 전부 "남의 것일 수도
+              # 있는" 매출이라, 경로가 흩어지면 게이트웨이에 한 줄 추가하는 것만으로 인가 범위가
+              # 넓어지는 실수를 하게 된다. 한 접두어면 서비스 쪽 securityMatcher 도 한 줄이라
+              # 게이트웨이에 뚫린 경로와 서버가 막는 경로가 눈으로 대조된다.
+              predicates:
+                - Path=/api/partner/**
             - id: notification-stream
               uri: ${OPERATION_SERVICE_URI:http://localhost:8092}
               # 알림 푸시 SSE — 스트림 하나만 노출한다. operation-service 의 notification 슬라이스가 서빙한다.

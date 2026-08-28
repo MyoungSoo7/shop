@@ -189,6 +189,24 @@ export const FALLBACK_MENUS: FallbackMenuNode[] = [
     description: '출석체크 · 럭키박스 참여',
     area: 'SHOP', type: 'ITEM', roles: ['USER'],
   },
+  {
+    // 파트너 콘솔 — 입점 기업이 자기 매출·주문을 보는 자리다. 이 저장소에서 CORP 영역에
+    // 처음 들어오는 줄이다.
+    //
+    // roles 가 ['USER'] 인 것은 실수가 아니다. 이 저장소의 메뉴 역할 어휘는 ADMIN·MANAGER·
+    // USER 뿐이고 PARTNER 라는 역할이 없다. 없는 역할을 여기에 적으면 서버는 그 역할을 모르니
+    // 아무도 막지 못하는데 화면에는 통제가 있는 것처럼 보인다 — 빈 통제는 보호가 아니라 착각만
+    // 준다. 그래서 메뉴는 로그인까지만 걸고, 입점사가 아닌 계정이 눌렀을 때 서버가 403
+    // NOT_A_PARTNER 로 돌려주면 화면이 "이 계정은 입점 조직에 속해 있지 않습니다" 를 그린다.
+    // 즉 차단 지점은 하나(서버)이고, 메뉴는 그 사실을 가리지 않는다.
+    id: -2, name: '파트너 콘솔', shortName: '파트너', path: '/partner', icon: '🏢',
+    description: '입점 기업 매출 · 주문 조회',
+    area: 'CORP', type: 'GROUP', roles: ['USER'],
+    children: [
+      { id: -22, name: '매출 대시보드', path: '/partner', icon: '📈', description: '기간별 매출 · 일자별 추이 · 인기 상품', area: 'CORP', type: 'ITEM', roles: ['USER'] },
+      { id: -23, name: '주문 내역', path: '/partner/orders', icon: '🧾', description: '결제 건별 조회 · CSV 내려받기', area: 'CORP', type: 'ITEM', roles: ['USER'] },
+    ],
+  },
 ];
 
 const accessible = (node: FallbackMenuNode, role: string | null): boolean =>

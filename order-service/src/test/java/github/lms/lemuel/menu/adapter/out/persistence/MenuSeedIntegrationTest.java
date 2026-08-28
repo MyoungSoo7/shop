@@ -79,13 +79,17 @@ class MenuSeedIntegrationTest {
     }
 
     @Test
-    @DisplayName("시드 총 50행 — 커머스 + 운영 범위")
-    void seedsExactlyFifty() {
-        assertThat(adapter.findAll()).hasSize(50);
+    @DisplayName("시드 총 53행 — 커머스 + 운영 + 파트너 범위")
+    void seedsExactlyFiftyThree() {
+        // 50 → 53 은 V20260828210000 의 세 행이다: '파트너 콘솔' GROUP 하나와
+        // 그 자식 '매출 대시보드' · '주문 내역'. 이 숫자를 고정해 두는 이유는 시드가
+        // 조용히 늘어나는 걸 잡기 위해서다 — 늘어난 이유를 여기 적지 않으면 다음 사람은
+        // 숫자만 고쳐 통과시키고, 그러면 이 검사는 아무것도 지키지 않게 된다.
+        assertThat(adapter.findAll()).hasSize(53);
     }
 
     @Test
-    @DisplayName("최상위 19개가 상단 네비 순서대로 들어간다")
+    @DisplayName("최상위 20개가 상단 네비 순서대로 들어간다")
     void rootsInOrder() {
         List<Menu> roots = adapter.findAll().stream()
                 .filter(m -> m.getParentId() == null)
@@ -124,7 +128,16 @@ class MenuSeedIntegrationTest {
                 // 화면만 이 SPA 에 있고 부르는 API 는 marketing-service 것이다(ADR 0045).
                 // 메뉴 원장은 order-service 의 menus 한 벌뿐이라 행 자체는 여기 있다.
                 "주문하기", "추천받기", "대량주문", "나눠 결제", "내 포인트·상품권", "내 알림", "내 문의",
-                "여러 곳 배송", "배송지 주소록", "포인트 선물", "카테고리 탐색", "이벤트");
+                "여러 곳 배송", "배송지 주소록", "포인트 선물", "카테고리 탐색", "이벤트",
+                // 파트너 콘솔(70, V20260828210000)이 맨 뒤다. 앞의 것들과 달리 area 가 CORP 라
+                // 여태 행이 하나도 없던 영역의 첫 행인데, 그래도 이 목록에 들어온다 — 상단 네비는
+                // area 로 거르지 않고 최상위를 전부 그린다. area 는 표시 필터가 아니라 분류다.
+                // required_role 이 'USER' 인 것도 실수가 아니다. 이 저장소의 메뉴 역할 어휘는
+                // ADMIN · MANAGER · USER 뿐이고 PARTNER 가 없어서, 'PARTNER' 라고 적으면 서버가
+                // 모르는 값이라 아무도 안 걸리는데 원장에는 통제가 있는 것처럼 남는다. 진짜 차단은
+                // partner-service 한 곳에서만 한다 — 토큰의 회원번호로 조직을 못 찾으면 403.
+                // 그래서 이 행이 늘린 것은 권한이 아니라 노출이다.
+                "파트너 콘솔");
     }
 
     @Test

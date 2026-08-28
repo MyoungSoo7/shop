@@ -39,13 +39,10 @@ const PUBLISH_ONLY = new Map([
   // lemuel.user.registered 는 2026-08-25 에 여기서 빠졌다 — operation 의 "오늘 한눈에" 집계
   // 컨슈머가 구독하면서 발행 전용이 아니게 됐고, 아래 "죽은 항목" 검사가 그걸 먼저 잡아냈다.
   // 편입은 ADR 0024 절차대로 정본 샘플을 실제 컨슈머에 통과시키는 테스트로 끝냈다.
-  ['lemuel.product.changed', '발행 전용 — 상품 마스터 변경 통지, 소비자는 저장소 밖'],
-  ['lemuel.seller.tier_changed', '발행 전용 — 셀러 등급 변경 통지, 소비자는 저장소 밖'],
-  // organization 4종 — 조직 마스터. 발행 전용이 이 슬라이스의 설계다(컨슈머 0).
-  ['lemuel.organization.created', '발행 전용 — 조직 마스터 통지, 소비자는 저장소 밖'],
-  ['lemuel.organization.member_joined', '발행 전용 — 조직 마스터 통지, 소비자는 저장소 밖'],
-  ['lemuel.organization.member_removed', '발행 전용 — 조직 마스터 통지, 소비자는 저장소 밖'],
-  ['lemuel.organization.member_role_changed', '발행 전용 — 조직 마스터 통지, 소비자는 저장소 밖'],
+  // lemuel.product.changed / lemuel.seller.tier_changed / organization 4종은 2026-08-28 에
+  // 여기서 빠졌다 — partner-service(파트너 콘솔)가 여섯을 모두 구독하면서 발행 전용이 아니게
+  // 됐다. 여섯은 원래 "소비자가 저장소 밖" 이라고 적혀 있었지만, 실제로는 소비자가 저장소 안에
+  // 없었을 뿐이다. 파트너 콘솔은 이 여섯이 만드는 사본만으로 화면을 그린다.
   // point 5종 — 포인트 원장. 원장은 order 안에서 닫히고 발행은 회계·관측용이다.
   // lemuel.point.granted 는 2026-08-27 에 여기서 빠졌다 — marketing-service 가 이벤트 프로모션
   // 보상의 적립 성사 여부를 확인하려고 구독하면서 발행 전용이 아니게 됐다(요청 → 적립 → 확정의

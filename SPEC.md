@@ -154,7 +154,9 @@ DB: opslab(로컬 `application.yml` 기본값 — **compose 는 `inter`** 다. �
 - **상태머신**: Organization ACTIVE⇄SUSPENDED. Membership INVITED→ACTIVE⇄SUSPENDED, 각 상태→REMOVED(터미널).
 - **이벤트 발행**(Outbox, `aggregateType="Organization"`): `lemuel.organization.created`, `lemuel.organization.member_joined`,
   `lemuel.organization.member_role_changed`, `lemuel.organization.member_removed`.
-  4종 모두 **발행 전용**이다 — 소비자는 이 저장소 밖에 있다(컨슈머 0 이 이 슬라이스의 설계다).
+  4종 모두 2026-08-28 부터 **partner-service 가 구독**한다(ADR 0046). 파트너 콘솔의 접근 범위 —
+  누가 어느 조직 사람인가 — 는 전적으로 이 4종이 만드는 사본으로 판정한다. 즉 이 슬라이스의
+  이벤트가 멈추면 파트너는 로그인은 되는데 아무것도 못 보는 상태가 된다.
   shared-common 의존(JWT·Outbox·멱등컨슈머).
 
 ### 3.4 board 슬라이스 — 메타 주도 게시판 (operation-service 内, port 8092, lemuel_operation · ADR 0043)
@@ -316,17 +318,18 @@ Course(교육) : DRAFT → PUBLISHED ⇄ HIDDEN → CLOSED  (삭제 없음 — �
 
 | 토픽                                                                                    | 프로듀서                     | 주요 컨슈머                                        |
 | ----------------------------------------------------------------------------------------- | ---------------------------- | -------------------------------------------------- |
-| `lemuel.order.created`                                                                  | order                        | operation(신호 버킷 분모 · 오늘 집계)              |
-| `lemuel.payment.captured`                                                               | order                        | operation(신호 버킷 분모 · 알림 팬아웃 · 오늘 집계) |
-| `lemuel.payment.refunded`                                                               | order                        | operation(알림 팬아웃 · 오늘 집계)                 |
+| `lemuel.order.created`                                                                  | order                        | operation(신호 버킷 분모 · 오늘 집계) · partner(주문 상태·상품 사본) |
+| `lemuel.payment.captured`                                                               | order                        | operation(신호 버킷 분모 · 알림 팬아웃 · 오늘 집계) · partner(매출 사본) |
+| `lemuel.payment.refunded`                                                               | order                        | operation(알림 팬아웃 · 오늘 집계) · partner(환불 차감) |
 | `lemuel.user.registered`                                                                | order                        | operation(오늘 집계 — 2026-08-25 편입)             |
-| `lemuel.product.changed`                                                                | order                        | 발행 전용 — 소비자는 이 저장소 밖                  |
-| `lemuel.seller.tier_changed`                                                            | order                        | 발행 전용. `reason=BACKFILL` 은 변경이 아니라 초기 적재용 재발행(ADR 0031) |
+| `lemuel.product.changed`                                                                | order                        | partner(상품명 사본 — 2026-08-28 편입)             |
+| `lemuel.seller.tier_changed`                                                            | order                        | partner(등급 표시 — 2026-08-28 편입). `reason=BACKFILL` 은 변경이 아니라 초기 적재용 재발행(ADR 0031) |
 | `lemuel.point.charged` / `.used` / `.restored` / `.expired` / `.revoked`                | order                        | 발행 전용 — 포인트 부채 GL 소비자는 이 저장소 밖. 순서키 `accountId` |
 | `lemuel.point.granted`                                                                  | order                        | marketing(보상 확정 — 2026-08-27 편입). 순서키 `accountId` |
 | `lemuel.marketing.reward_requested`                                                     | marketing                    | order(포인트 원장 적립). 순서키 `rewardId`         |
 | `lemuel.giftcard.registered` / `.used` / `.restored` / `.expired`                       | order                        | 발행 전용 — 상품권 부채 GL 소비자는 이 저장소 밖. 순서키 `giftCardId` |
-| `lemuel.organization.created` / `.member_joined` / `.member_role_changed` / `.member_removed` | order(organization 슬라이스) | 발행 전용 — 조직 마스터 통지, 소비자는 이 저장소 밖 |
+| `lemuel.organization.created`                                                           | order(organization 슬라이스) | partner(파트너 조직 사본 — 2026-08-28 편입)        |
+| `lemuel.organization.member_joined` / `.member_role_changed` / `.member_removed`         | order(organization 슬라이스) | partner(콘솔 접근 범위 — 2026-08-28 편입). 순서키 `organizationId` |
 | `lemuel.education.course_published`                                                     | operation(education 슬라이스) | 발행 전용 — 과정 공개 통지. 순서키 `courseId`      |
 
 부가(계약 스키마 없음): `lemuel.ops.*`(실패 신호 `*.failed` + `stock.depleted`·`stock.reclaim_delayed`·`shipping.delayed`).
@@ -348,6 +351,12 @@ Course(교육) : DRAFT → PUBLISHED ⇄ HIDDEN → CLOSED  (삭제 없음 — �
 > 적립을 되돌아오는 이 이벤트로 확정하면서 `.charged` 이하 다섯과 한 줄에 묶여 있던 것을 떼어냈다.
 > **포인트 여섯이 한 행이었다는 게 문제였다** — 그중 하나만 소비자가 생겨도 행 전체가 "발행 전용"
 > 이라고 계속 주장한다. 표의 한 칸이 여러 토픽을 대표하면 그 칸은 가장 느슨한 토픽만 설명한다.
+>
+> 2026-08-28 에 여섯이 한꺼번에 빠졌다 — `lemuel.product.changed` · `lemuel.seller.tier_changed`
+> 와 organization 4종이다. partner-service(파트너 콘솔)가 이 여섯이 만드는 사본만으로 화면을
+> 그린다. 여섯 모두 "소비자는 이 저장소 밖" 이라고 적혀 있었지만, 사실은 **소비자가 아직
+> 저장소 안에 없었을 뿐**이었다. 이 문장과 그 문장은 같은 관측을 설명하면서 전혀 다른 것을
+> 예측한다 — 전자는 "여기 소비자가 생길 리 없다", 후자는 "생기면 편입한다" 다. 그리고 생겼다.
 
 역방향 예약: `lemuel.ops.order.failed` 는 operation 이 구독하지만 emit 지점 미배선
 (OpsSignalCategory 주석 참조).

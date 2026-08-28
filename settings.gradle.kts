@@ -14,6 +14,9 @@ include(
     // 마케팅 — 이벤트 프로모션 운영 도구. 출석체크·럭키박스. 보상은 포인트 원장에 직접 쓰지 않고
     // lemuel.marketing.reward_requested 로 요청만 낸다 - 원장 오너십은 order 가 유지한다
     "marketing-service",
+    // 파트너 콘솔 — 우리 몰에 입점한 기업이 자기 매출/주문만 보는 읽기 전용 백오피스.
+    // 사실은 전부 다른 서비스의 이벤트로 받는 사본이고 여기서 쓰는 API 는 없다
+    "partner-service",
     // API Gateway — 라우팅만, 자체 인증 필터 없음
     "gateway-service",
 )

@@ -85,6 +85,31 @@ services:
       timeout: 3s
       retries: 10
 
+  # ★ DB-per-service: partner-service 전용 PostgreSQL (입점사 콘솔 — 조직·매출 프로젝션)
+  # 안에 있는 것이 전부 사본이라 "그냥 order DB 를 읽으면 되지 않나" 가 매번 나온다. 그러면
+  # 입점사 화면 하나가 주문 원장에 직접 붙게 되고, 그때부터 격리는 없다 — 조인 한 줄이면
+  # 남의 매출이 보인다. 사본을 따로 두는 값을 치르는 이유가 그것이다.
+  partner-postgres:
+    image: postgres:17-alpine
+    container_name: lemuel-partner-db
+    env_file:
+      - path: .env
+        required: false
+    environment:
+      POSTGRES_DB: lemuel_partner
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+    ports:
+      - "127.0.0.1:5442:5432"
+    volumes:
+      - partner-postgres-data:/var/lib/postgresql/data
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB"]
+      interval: 10s
+      timeout: 3s
+      retries: 10
+
   elasticsearch:
     image: docker.elastic.co/elasticsearch/elasticsearch:8.17.0
     container_name: lemuel-elasticsearch
@@ -360,6 +385,54 @@ services:
       redpanda:
         condition: service_healthy
 
+  partner-service:
+    build:
+      context: .
+      args:
+        MODULE: partner-service
+    image: ghcr.io/myoungsoo7/shop-partner:latest
+    container_name: lemuel-partner
+    env_file:
+      - path: .env
+        required: false
+    environment:
+      SPRING_PROFILES_ACTIVE: prod
+      # 자체 DB(lemuel_partner) — 조직·결제 프로젝션. 타 서비스와 코드·DB 의존 0.
+      SPRING_DATASOURCE_URL: jdbc:postgresql://partner-postgres:5432/lemuel_partner?reWriteBatchedInserts=true
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      # JWT 시크릿은 order-service 와 동일해야 한다. 이 서비스의 격리는 전적으로 토큰에서
+      # 꺼낸 회원번호에 걸려 있다 — 검증이 안 되면 조직 판정 자체가 성립하지 않는다.
+      JWT_ISSUER: ${JWT_ISSUER}
+      JWT_SECRET: ${JWT_SECRET}
+      JWT_TTL_SECONDS: ${JWT_TTL_SECONDS}
+      # 이 서비스는 자기 사실을 하나도 갖고 있지 않다. Kafka 가 꺼지면 화면은 뜨지만 숫자가
+      # 그 시점에 얼어붙는다 — 비어 보이는 것이 아니라 낡은 값이 그대로 남아 더 위험하다.
+      APP_KAFKA_ENABLED: "true"
+      SPRING_KAFKA_BOOTSTRAP_SERVERS: redpanda:29092
+      CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost:3000}
+      JAVA_OPTS: "-XX:+UseContainerSupport -XX:MaxRAMPercentage=75.0 -XX:InitialRAMPercentage=50.0"
+      SERVER_PORT: 8080
+      MANAGEMENT_SERVER_PORT: 8080
+    ports:
+      - "127.0.0.1:8100:8080"
+    restart: unless-stopped
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "curl -fsS http://localhost:8080/actuator/health || exit 1",
+        ]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+      start_period: 60s
+    depends_on:
+      partner-postgres:
+        condition: service_healthy
+      redpanda:
+        condition: service_healthy
+
   gateway-service:
     build:
       context: .
@@ -375,6 +448,7 @@ services:
       ORDER_SERVICE_URI: http://order-service:8080
       OPERATION_SERVICE_URI: http://operation-service:8080
       MARKETING_SERVICE_URI: http://marketing-service:8080
+      PARTNER_SERVICE_URI: http://partner-service:8080
       JAVA_OPTS: "-XX:+UseContainerSupport -XX:MaxRAMPercentage=75.0 -XX:InitialRAMPercentage=50.0"
     ports:
       - "127.0.0.1:8080:8080"
@@ -528,6 +602,7 @@ volumes:
   # 첨부 볼륨은 operation-service 가 이어받아 계속 쓴다.
   board-attachment-data:
   marketing-postgres-data:
+  partner-postgres-data:
   elasticsearch-data:
   redpanda-data:
   redis-data:

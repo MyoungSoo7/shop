@@ -72,6 +72,10 @@ const SellerTierAdminPage = lazy(() => import('./pages/SellerTierAdminPage'));
 // 운영 관제 (최고 관리자 전용) — operation-service 인시던트 콘솔
 const OperationConsolePage = lazy(() => import('./pages/operation/OperationConsolePage'));
 
+// 파트너 콘솔 — partner-service. 입점 기업이 자기 매출·주문만 본다(ADR 0046).
+const PartnerConsolePage = lazy(() => import('./pages/partner/PartnerConsolePage'));
+const PartnerOrdersPage = lazy(() => import('./pages/partner/PartnerOrdersPage'));
+
 // 시스템 관리 (최고 관리자 전용, 좌측 사이드바)
 const MenuManagementPage = lazy(() => import('./pages/system/MenuManagementPage'));
 const CommonCodeManagementPage = lazy(() => import('./pages/system/CommonCodeManagementPage'));
@@ -164,6 +168,14 @@ function App() {
                 promotions 는 nginx 두 벌이 게이트웨이로 넘기는 API 세그먼트 목록에 없어서
                 화면 경로로 그대로 써도 새로고침에 JSON 이 뜨지 않는다. 고른 이벤트는 ?promotion=아이디. */}
             <Route path="/promotions" element={<ProtectedRoute><PromotionsPage /></ProtectedRoute>} />
+            {/* 파트너 콘솔 — 입점 기업이 자기 매출을 본다. 관리자 화면이 아니므로 /admin 아래가 아니다.
+                partner 는 nginx 두 벌이 게이트웨이로 넘기는 API 세그먼트 목록에 없어서 새로고침해도
+                JSON 이 뜨지 않는다(/browse·/promotions 와 같은 이유로 고른 이름이다).
+                등급은 ProtectedRoute(로그인) 까지다 — 이 저장소의 메뉴 역할 어휘에 PARTNER 가 없어서
+                없는 역할을 지어내면 서버에서 아무도 막지 못하는 '통제처럼 보이는 것' 만 생긴다.
+                실제 차단은 서버가 토큰의 회원번호로 조직을 찾아 403 NOT_A_PARTNER 로 한다. */}
+            <Route path="/partner"        element={<ProtectedRoute><PartnerConsolePage /></ProtectedRoute>} />
+            <Route path="/partner/orders" element={<ProtectedRoute><PartnerOrdersPage /></ProtectedRoute>} />
             {/* 찜 — 장바구니와 다른 목록이다("지금 살 것" 대 "언젠가 살 것"). 경로도 섞지 않는다. */}
             <Route path="/wishlist"    element={<ProtectedRoute><WishlistPage /></ProtectedRoute>} />
             {/* 알림 푸시 SSE 구독 — 수신함이 아니라 스트림이다(서버가 알림을 저장하지 않는다). */}

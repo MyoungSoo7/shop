@@ -40,9 +40,11 @@ const REPO_ROOT = join(dirname(fileURLToPath(import.meta.url)), '..', '..', '..'
  *
  * marketing-service 는 신설과 <b>동시에</b> 편입했다(ADR 0045). 대상 밖으로 두면 화면 없는
  * 컨트롤러가 부채로 잡히지도 않는다 — 그 상태가 이 게이트가 막으려던 바로 그 상태다.
+ * partner-service 도 같은 선례로 신설과 동시에 넣었다(ADR 0046). 컨트롤러 3개가 전부
+ * 화면 두 개에 물려 있어 예산은 0 그대로다.
  */
 const SERVICES = [
-  'order-service', 'operation-service', 'marketing-service',
+  'order-service', 'operation-service', 'marketing-service', 'partner-service',
 ];
 
 /**

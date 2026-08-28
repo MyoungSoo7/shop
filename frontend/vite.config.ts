@@ -98,6 +98,11 @@ export default defineConfig({
         target: 'http://localhost:8096',
         changeOrigin: true,
       },
+      // 파트너 콘솔은 partner-service(8100)가 서빙한다(ADR 0046) — 같은 이유로 '/api' 앞이다.
+      '/api/partner': {
+        target: 'http://localhost:8100',
+        changeOrigin: true,
+      },
       '/api': {
         target: 'http://localhost:8088',
         changeOrigin: true,

@@ -1,0 +1,153 @@
+spring:
+  profiles:
+    active: local
+
+  application:
+    name: lemuel-partner
+
+  threads:
+    virtual:
+      enabled: true
+
+  # ★ partner-service 는 자체 DB(lemuel_partner) 를 소유한다 (DB-per-service).
+  #   로컬 기본값은 compose 의 호스트 매핑(127.0.0.1:5442 → partner-postgres:5432)을 가리킨다.
+  datasource:
+    url: jdbc:postgresql://localhost:5442/lemuel_partner?reWriteBatchedInserts=true
+    username: ${POSTGRES_USER}
+    password: ${POSTGRES_PASSWORD}
+    driver-class-name: org.postgresql.Driver
+    hikari:
+      pool-name: lemuel-partner-pool
+      maximum-pool-size: ${DB_POOL_MAX:20}
+      minimum-idle: ${DB_POOL_MIN_IDLE:5}
+      connection-timeout: 10000
+      leak-detection-threshold: 30000
+      # 형제 서비스와 같은 이유로 둔다 — 파드와 postgres 가 다른 노드에 있으면 유휴 커넥션이
+      # CNI/conntrack 상태 만료로 소리 없이 끊기고, 다음 borrow 에서 08003 으로 터진다.
+      max-lifetime: 1800000     # 30분
+      keepalive-time: 300000    # 5분
+
+  jpa:
+    hibernate:
+      ddl-auto: validate
+    show-sql: false
+    open-in-view: false
+    properties:
+      hibernate:
+        # ★ shared-common OutboxSchema 가 이 값을 읽어 outbox 네이티브 쿼리의 스키마를 정한다.
+        #   (@Value("${spring.jpa.properties.hibernate.default_schema:public}")) — 여기와
+        #   flyway.schemas 가 어긋나면 폴러가 없는 테이블을 찾는다.
+        default_schema: partner
+        jdbc:
+          batch_size: 50
+          batch_versioned_data: true
+        order_inserts: true
+        order_updates: true
+
+  # 자체 DB 마이그레이션을 직접 책임진다 (V1 파트너 코어, V2 outbox/멱등 인프라).
+  flyway:
+    enabled: true
+    schemas: partner
+    locations: classpath:db/migration
+
+  cache:
+    type: caffeine
+    caffeine:
+      spec: maximumSize=500,expireAfterWrite=600s
+
+  # Kafka — 구독 전용이다. 이 서비스는 토픽을 하나도 발행하지 않는다.
+  # group-id 는 모듈 소유 규칙(guard KAFKA-GROUP-OWNER): <module>-service → lemuel-<module>.
+  # auto-offset-reset=earliest — 프로젝션이 곧 화면이다. 놓친 구간은 매출이 통째로 비어
+  # 보이고, 그 구멍은 재처리 말고는 메울 방법이 없다(원본을 이 서비스가 안 갖는다).
+  kafka:
+    bootstrap-servers: ${SPRING_KAFKA_BOOTSTRAP_SERVERS:localhost:9092}
+    consumer:
+      group-id: lemuel-partner
+      auto-offset-reset: earliest
+      enable-auto-commit: false
+      properties:
+        isolation.level: read_committed
+    listener:
+      ack-mode: manual_immediate
+      missing-topics-fatal: false
+
+  lifecycle:
+    timeout-per-shutdown-phase: 30s
+
+server:
+  port: 8100
+  shutdown: graceful
+  servlet:
+    encoding:
+      charset: UTF-8
+      enabled: true
+      force: true
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics,prometheus
+      base-path: /actuator
+  endpoint:
+    prometheus:
+      enabled: true
+    health:
+      show-details: when-authorized
+      probes:
+        enabled: true
+  health:
+    elasticsearch:
+      enabled: false
+    db:
+      enabled: true
+  server:
+    port: 8101
+  metrics:
+    tags:
+      application: ${spring.application.name}
+      environment: ${ENVIRONMENT:local}
+
+springdoc:
+  api-docs:
+    path: /v3/api-docs
+  swagger-ui:
+    path: /swagger-ui.html
+
+app:
+  # Kafka 컨슈머·인프라 빈 토글 (shared-common KafkaConfig + 컨슈머의 @ConditionalOnProperty).
+  # 로컬/테스트 기본 off — 브로커 없이 부팅. compose/운영에서 APP_KAFKA_ENABLED=true 주입.
+  kafka:
+    enabled: ${APP_KAFKA_ENABLED:false}
+    topic:
+      # ADR 0035 — owner 는 "이 모듈이 발행(소유)하는 토픽" 선언이다. partner-service 는
+      # 발행이 0 이라 소유 토픽이 없지만, 폴러가 있는 모듈은 값을 요구하므로 모듈명을 둔다.
+      owner: partner-service
+      # 구독 — 아래가 이 서비스의 입력 전부다. 화면의 모든 숫자가 여기서 나온다.
+      payment-captured: ${PARTNER_TOPIC_PAYMENT_CAPTURED:lemuel.payment.captured}
+      payment-refunded: ${PARTNER_TOPIC_PAYMENT_REFUNDED:lemuel.payment.refunded}
+      order-created: ${PARTNER_TOPIC_ORDER_CREATED:lemuel.order.created}
+      product-changed: ${PARTNER_TOPIC_PRODUCT_CHANGED:lemuel.product.changed}
+      seller-tier-changed: ${PARTNER_TOPIC_SELLER_TIER_CHANGED:lemuel.seller.tier_changed}
+      organization-created: ${PARTNER_TOPIC_ORGANIZATION_CREATED:lemuel.organization.created}
+      organization-member-joined: ${PARTNER_TOPIC_ORGANIZATION_MEMBER_JOINED:lemuel.organization.member_joined}
+      organization-member-removed: ${PARTNER_TOPIC_ORGANIZATION_MEMBER_REMOVED:lemuel.organization.member_removed}
+      organization-member-role-changed: ${PARTNER_TOPIC_ORGANIZATION_MEMBER_ROLE_CHANGED:lemuel.organization.member_role_changed}
+
+  # Outbox → Kafka 발행 폴링 주기. 발행이 0 이라 빈 테이블을 훑지만, 폴러 빈 자체는
+  # 루트 스캔으로 반드시 살아 있어야 한다(harness outbox-poller-gate).
+  outbox:
+    polling-delay-ms: ${APP_OUTBOX_POLLING_DELAY_MS:2000}
+
+  # JWT — shared-common JwtProperties(prefix=app.jwt). 루트 스캔이 common.config.jwt 를 잡으므로
+  # secret 이 필수다(order-service 와 동일 시크릿이어야 회원 토큰이 여기서도 검증된다).
+  jwt:
+    issuer: ${JWT_ISSUER:lemuel}
+    secret: ${JWT_SECRET}
+    ttl-seconds: ${JWT_TTL_SECONDS:3600}
+
+  partner:
+    # 엑셀(CSV) 다운로드 1회 최대 행수. 레퍼런스는 무제한이라 큰 기간을 고르면 백오피스가
+    # 통째로 멎었다. 여기서는 잘라내고 잘렸다는 사실을 응답 헤더로 알린다.
+    export:
+      max-rows: ${PARTNER_EXPORT_MAX_ROWS:50000}

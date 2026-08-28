@@ -55,3 +55,4 @@
 **/GatewayServiceApplication*
 **/OperationServiceApplication*
 **/MarketingServiceApplication*
+**/PartnerServiceApplication*

@@ -30,6 +30,7 @@
 | [0043](0043-board-education-absorbed-into-operation.md)          | board·education → operation-service 슬라이스 흡수 (operation 을 "플랫폼 운영 서비스"로 재정의)       | Accepted |
 | [0044](0044-deployment-stays-on-compose.md)                      | 데모 배포는 Docker Compose 유지 (쿠버네티스 이관 보류 — 결함은 런타임이 아니라 provenance 였다)      | Accepted |
 | [0045](0045-marketing-service-extracted-from-legacy.md)          | 레거시 이벤트 프로모션 → marketing-service 신설 (6축 미달을 알고 낸 예외 — 포인트 원장은 order 에 남긴다) | Accepted |
+| [0046](0046-partner-service-read-only-projection.md)             | 입점사 콘솔 → partner-service 신설 (쓰기 없는 읽기 전용 프로젝션 — 조직 판정은 토큰에서만, 6축 미달 예외 2회차) | Accepted |
 
 > **0019 결번**: 0019 번은 ADR 이 작성된 적이 없다(결번). 문서·코드 어디에도 참조가 없어 유실이 아니라
 > 건너뛴 번호로 간주한다. 규칙 1(번호 재사용 금지)에 따라 재할당하지 않는다.
