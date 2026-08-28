@@ -1,6 +1,5 @@
 package github.lms.lemuel.marketing.support;
 
-import github.lms.lemuel.marketing.domain.AmountBasis;
 import github.lms.lemuel.marketing.domain.AttendanceCampaign;
 import github.lms.lemuel.marketing.domain.AttendanceMessages;
 import github.lms.lemuel.marketing.domain.BenefitType;
@@ -12,7 +11,6 @@ import github.lms.lemuel.marketing.domain.LuckyboxCampaign;
 import github.lms.lemuel.marketing.domain.LuckyboxPrize;
 import github.lms.lemuel.marketing.domain.PeriodType;
 import github.lms.lemuel.marketing.domain.PrizeType;
-import github.lms.lemuel.marketing.domain.ShippingStatusRequirement;
 import github.lms.lemuel.marketing.domain.StreakRule;
 
 import java.math.BigDecimal;
@@ -58,9 +56,8 @@ public final class MarketingFixtures {
     public static LuckyboxCampaign luckybox(CampaignStatus status, BenefitType benefitType, LocalDate benefitOn,
                                             EntryCondition entryCondition, LocalDate startsOn, LocalDate endsOn) {
         return LuckyboxCampaign.rehydrate(UUID.randomUUID(), "tenant-1", "8월 럭키박스", startsOn, endsOn, status,
-                benefitType, benefitOn, entryCondition, null, LocalDate.of(2026, 12, 31),
-                AmountBasis.ACTUAL_PAID, new BigDecimal("10000"), ShippingStatusRequirement.DELIVERED,
-                "1일 1회", CampaignBanner.of("pc.png", "mo.png"), ACTOR, ACTOR, 2L);
+                benefitType, benefitOn, entryCondition, LocalDate.of(2026, 12, 31), "1일 1회",
+                CampaignBanner.of("pc.png", "mo.png"), ACTOR, ACTOR, 2L);
     }
 
     /** 진행 중, 즉시 지급, 하루 1회. */

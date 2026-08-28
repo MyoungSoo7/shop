@@ -8,6 +8,7 @@ import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.util.UUID;
 
+import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
@@ -28,7 +29,7 @@ class LuckyboxCampaignTest {
                                           BenefitType benefitType, LocalDate benefitOn,
                                           EntryCondition entryCondition) {
         return LuckyboxCampaign.draft(UUID.randomUUID(), "tenant-1", name, startsOn, endsOn, benefitType,
-                benefitOn, entryCondition, null, null, null, null, null, "안내", null, "admin");
+                benefitOn, entryCondition, null, "안내", null, "admin");
     }
 
     // ------------------------------------------------------------ 생성 규칙
@@ -50,7 +51,7 @@ class LuckyboxCampaignTest {
     void id_와_이름과_기간을_검사한다() {
         assertThrows(IllegalArgumentException.class, () -> LuckyboxCampaign.draft(
                 null, "t", "이름", START, END, BenefitType.IMMEDIATE, null, EntryCondition.PER_DAY,
-                null, null, null, null, null, null, null, "admin"));
+                null, null, null, "admin"));
         assertThrows(IllegalArgumentException.class,
                 () -> draft("  ", START, END, BenefitType.IMMEDIATE, null, EntryCondition.PER_DAY));
         assertThrows(IllegalArgumentException.class,
@@ -194,13 +195,25 @@ class LuckyboxCampaignTest {
     }
 
     @Test
-    void 되살린_캠페인은_참여_자격_설정을_그대로_들고_온다() {
+    void 되살린_캠페인은_버전을_그대로_들고_온다() {
         LuckyboxCampaign campaign = MarketingFixtures.runningLuckybox();
 
-        assertEquals(AmountBasis.ACTUAL_PAID, campaign.amountBasis());
-        assertEquals(new BigDecimal("10000"), campaign.minOrderAmount());
-        assertEquals(ShippingStatusRequirement.DELIVERED, campaign.shippingStatusRequired());
-        assertNull(campaign.memberJoinedFrom());
         assertEquals(2L, campaign.version());
+    }
+
+    /**
+     * 참여 자격은 이 둘이 전부다 — 상태와 기간. 한때 가입일·주문금액·배송상태 조건이 필드로
+     * 있었지만 이 메서드가 읽지 않아 "설정했는데 안 먹는" 상태였고, 그래서 지웠다
+     * (docs/plan/marketing-legacy-gap.md §2 ④). 조건을 다시 늘리려면 그 데이터가 이 서비스
+     * 안에 있어야 한다는 것을 이 테스트가 상기시킨다.
+     */
+    @Test
+    void 참여_자격은_상태와_기간뿐이다() {
+        LuckyboxCampaign campaign = MarketingFixtures.runningLuckybox();
+
+        assertDoesNotThrow(() -> campaign.assertDrawAllowed(START));
+        assertDoesNotThrow(() -> campaign.assertDrawAllowed(END));
+        assertThrows(CampaignNotOpenException.class, () -> campaign.assertDrawAllowed(START.minusDays(1)));
+        assertThrows(CampaignNotOpenException.class, () -> campaign.assertDrawAllowed(END.plusDays(1)));
     }
 }

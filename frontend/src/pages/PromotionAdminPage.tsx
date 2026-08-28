@@ -31,6 +31,24 @@ import { apiErrorMessage } from '@/lib/apiError';
 
 const TENANT_REF = 'default';
 
+/**
+ * 럭키박스 참여 횟수 제한. **값은 백엔드 `EntryCondition` 열거형과 글자까지 같아야 한다.**
+ *
+ * 이 화면은 한동안 `ALL_MEMBERS`/`NEW_MEMBER`/`PURCHASER`(레거시 `EVENT_CONDITION` 의 참여
+ * *대상* 코드)를 보내고 있었다. 백엔드의 같은 이름 필드는 참여 *빈도*(하루 1회/기간 1회)라
+ * 어느 값도 역직렬화되지 않았고, 그래서 이 화면에서 만든 럭키박스 캠페인은 하나도 저장되지
+ * 않았다 — 화면에는 "전체 회원 / 신규 회원 / 구매자" 라는, 백엔드가 할 수 없는 대상 조건이
+ * 떠 있었다. 가입일·주문금액·배송상태 조건이 저장만 되고 안 먹던 것과 같은 뿌리다
+ * (docs/plan/marketing-legacy-gap.md §2 ④).
+ *
+ * 값 자체는 `PromotionAdminPage.test.tsx` 가 고정한다. 여기와 백엔드 열거형이 어긋나면
+ * 그 테스트와 marketing-service 의 `MarketingValueTypesTest` 중 하나가 깨진다.
+ */
+const ENTRY_CONDITIONS: ReadonlyArray<readonly [string, string]> = [
+  ['PER_DAY', '하루 1회'],
+  ['PER_PERIOD', '기간 중 1회'],
+];
+
 const emptyAttendance = (): AttendanceCampaignRequest => ({
   tenantRef: TENANT_REF,
   name: '',
@@ -59,12 +77,8 @@ const emptyLuckybox = (): LuckyboxCampaignRequest => ({
   endsOn: '',
   benefitType: 'IMMEDIATE',
   benefitOn: null,
-  entryCondition: 'ALL_MEMBERS',
-  memberJoinedFrom: null,
+  entryCondition: 'PER_DAY',
   rewardExpiresOn: null,
-  amountBasis: null,
-  minOrderAmount: null,
-  shippingStatusRequired: null,
   note: null,
   pcImageUrl: null,
   mobileImageUrl: null,
@@ -383,16 +397,16 @@ export default function PromotionAdminPage() {
             />
           </label>
           <label className="text-sm">
-            참여 조건
+            참여 횟수
             <select
               className="w-full rounded border px-2 py-1"
               value={luckyboxForm.entryCondition}
               onChange={(e) => setLuckyboxForm({ ...luckyboxForm, entryCondition: e.target.value })}
-              aria-label="참여 조건"
+              aria-label="참여 횟수"
             >
-              <option value="ALL_MEMBERS">전체 회원</option>
-              <option value="NEW_MEMBER">신규 회원</option>
-              <option value="PURCHASER">구매자</option>
+              {ENTRY_CONDITIONS.map(([value, label]) => (
+                <option key={value} value={value}>{label}</option>
+              ))}
             </select>
           </label>
           <label className="text-sm">

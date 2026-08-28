@@ -118,6 +118,23 @@ marketing ◀── lemuel.point.granted ◀────────────
 (기간 1회로 참여한 사람이 하루 1회로 바뀌는 순간 다시 참여할 수 있게 된다). 규칙을 바꾸려면
 새 캠페인을 연다.
 
+### 참여 *대상* 조건은 아예 들고 오지 않는다 (2026-08-29 개정)
+
+초판은 럭키박스에 `memberJoinedFrom`(가입일)·`amountBasis`+`minOrderAmount`(주문금액)·
+`shippingStatusRequired`(배송상태) 를 필드와 컬럼으로 함께 옮겼다. **판정에는 쓰이지
+않았다** — `assertDrawAllowed` 는 상태와 기간만 본다. 레거시의 빈 주석 자리를 필드까지
+만들어 옮겨온 셈이었고, 저장은 되고 안 먹는 상태는 조건이 없는 것보다 나쁘다.
+
+`V5__drop_unenforced_luckybox_entry_conditions.sql` 로 걷어냈다. 강제하는 쪽을 택하지 않은
+이유는 **데이터가 이 서비스에 없기 때문**이다: 토픽 카탈로그 22개에 배송 단계 토픽이 없고,
+주문금액은 회원별 읽기 모델이 따로 필요하고, `lemuel.user.registered` 는 백필이 없어 켜는
+순간 기존 회원을 전부 차단한다. 되살리는 선행 조건과 순서는
+`docs/plan/marketing-legacy-gap.md` §2 ④ 에 있다.
+
+남은 `entryCondition` 은 **대상이 아니라 빈도**다(`PER_DAY`/`PER_PERIOD`). 운영 화면의
+라벨도 그에 맞춰 "참여 횟수" 로 고쳤다 — 초판 화면은 이 자리에 백엔드에 없는 값
+(`ALL_MEMBERS` 등)을 보내고 있어서 럭키박스 등록이 항상 실패했다.
+
 ### 화면은 서비스와 같은 커밋에 붙인다
 
 API 만 옮기고 화면을 뒤로 미루면 이 저장소에서는 **부채로 잡히지도 않는다.** 화면-API 대조

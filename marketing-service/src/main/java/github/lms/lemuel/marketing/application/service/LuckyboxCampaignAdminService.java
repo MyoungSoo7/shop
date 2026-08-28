@@ -40,8 +40,7 @@ public class LuckyboxCampaignAdminService implements ManageLuckyboxCampaignUseCa
     public UUID create(CreateLuckyboxCampaignCommand c) {
         LuckyboxCampaign campaign = LuckyboxCampaign.draft(
                 UUID.randomUUID(), c.tenantRef(), c.name(), c.startsOn(), c.endsOn(), c.benefitType(),
-                c.benefitOn(), c.entryCondition(), c.memberJoinedFrom(), c.rewardExpiresOn(), c.amountBasis(),
-                c.minOrderAmount(), c.shippingStatusRequired(), c.note(),
+                c.benefitOn(), c.entryCondition(), c.rewardExpiresOn(), c.note(),
                 CampaignBanner.of(c.pcImageUrl(), c.mobileImageUrl()), c.actor());
         return savePort.save(campaign).id();
     }

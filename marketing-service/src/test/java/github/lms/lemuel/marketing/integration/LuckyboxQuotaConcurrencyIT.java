@@ -195,8 +195,8 @@ class LuckyboxQuotaConcurrencyIT {
     private UUID draftCampaign(String name, LocalDate on) {
         return admin.create(new CreateLuckyboxCampaignCommand(
                 "lemuel", name, on.minusDays(1), on.plusDays(7),
-                BenefitType.IMMEDIATE, null, EntryCondition.PER_PERIOD, null, on.plusDays(90),
-                null, null, null, "테스트 캠페인", null, null, "admin@lemuel.test"));
+                BenefitType.IMMEDIATE, null, EntryCondition.PER_PERIOD, on.plusDays(90),
+                "테스트 캠페인", null, null, "admin@lemuel.test"));
     }
 
     /**

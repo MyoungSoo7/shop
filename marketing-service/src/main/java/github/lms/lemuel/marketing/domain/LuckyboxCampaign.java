@@ -2,7 +2,6 @@ package github.lms.lemuel.marketing.domain;
 
 import github.lms.lemuel.marketing.domain.exception.CampaignNotOpenException;
 
-import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.util.UUID;
 
@@ -12,6 +11,10 @@ import java.util.UUID;
  * <p>참여 가능 여부와 보상 지급 시점을 결정한다. 경품 목록과 추첨은 각각
  * {@link LuckyboxPrize} 와 {@link PrizeDraw} 가 맡는다 — 캠페인이 경품 리스트를 품으면
  * 참여 한 번에 경품 전체를 적재하게 되고, 그 리스트는 동시 참여자마다 다르게 소진된다.
+ *
+ * <p><b>가입일·주문금액·배송상태 조건은 여기 없다.</b> 한때 필드로 들고 컬럼에 저장까지 했지만
+ * 아무도 읽지 않았다. 왜 지웠는지와 되살리려면 무엇이 먼저 있어야 하는지는
+ * {@code docs/plan/marketing-legacy-gap.md} §2 ④ 에 있다.
  */
 public final class LuckyboxCampaign {
 
@@ -24,11 +27,7 @@ public final class LuckyboxCampaign {
     private final BenefitType benefitType;
     private LocalDate benefitOn;
     private final EntryCondition entryCondition;
-    private LocalDate memberJoinedFrom;
     private LocalDate rewardExpiresOn;
-    private AmountBasis amountBasis;
-    private BigDecimal minOrderAmount;
-    private ShippingStatusRequirement shippingStatusRequired;
     private String note;
     private CampaignBanner banner;
     private final String createdBy;
@@ -37,10 +36,8 @@ public final class LuckyboxCampaign {
 
     private LuckyboxCampaign(UUID id, String tenantRef, String name, LocalDate startsOn, LocalDate endsOn,
                              CampaignStatus status, BenefitType benefitType, LocalDate benefitOn,
-                             EntryCondition entryCondition, LocalDate memberJoinedFrom, LocalDate rewardExpiresOn,
-                             AmountBasis amountBasis, BigDecimal minOrderAmount,
-                             ShippingStatusRequirement shippingStatusRequired, String note, CampaignBanner banner,
-                             String createdBy, String updatedBy, long version) {
+                             EntryCondition entryCondition, LocalDate rewardExpiresOn, String note,
+                             CampaignBanner banner, String createdBy, String updatedBy, long version) {
         if (id == null) throw new IllegalArgumentException("id is required");
         if (name == null || name.isBlank()) throw new IllegalArgumentException("name is required");
         if (startsOn == null || endsOn == null) throw new IllegalArgumentException("기간은 필수다");
@@ -61,11 +58,7 @@ public final class LuckyboxCampaign {
         this.benefitType = benefitType;
         this.benefitOn = benefitOn;
         this.entryCondition = entryCondition;
-        this.memberJoinedFrom = memberJoinedFrom;
         this.rewardExpiresOn = rewardExpiresOn;
-        this.amountBasis = amountBasis;
-        this.minOrderAmount = minOrderAmount;
-        this.shippingStatusRequired = shippingStatusRequired;
         this.note = note;
         this.banner = banner == null ? CampaignBanner.empty() : banner;
         this.createdBy = createdBy;
@@ -75,33 +68,28 @@ public final class LuckyboxCampaign {
 
     public static LuckyboxCampaign draft(UUID id, String tenantRef, String name, LocalDate startsOn, LocalDate endsOn,
                                          BenefitType benefitType, LocalDate benefitOn, EntryCondition entryCondition,
-                                         LocalDate memberJoinedFrom, LocalDate rewardExpiresOn,
-                                         AmountBasis amountBasis, BigDecimal minOrderAmount,
-                                         ShippingStatusRequirement shippingStatusRequired, String note,
-                                         CampaignBanner banner, String actor) {
+                                         LocalDate rewardExpiresOn, String note, CampaignBanner banner, String actor) {
         return new LuckyboxCampaign(id, tenantRef, name, startsOn, endsOn, CampaignStatus.DRAFT, benefitType,
-                benefitOn, entryCondition, memberJoinedFrom, rewardExpiresOn, amountBasis, minOrderAmount,
-                shippingStatusRequired, note, banner, actor, actor, 0L);
+                benefitOn, entryCondition, rewardExpiresOn, note, banner, actor, actor, 0L);
     }
 
     /** 영속 상태에서 애그리거트를 되살린다 — 어댑터 전용 진입점. */
     public static LuckyboxCampaign rehydrate(UUID id, String tenantRef, String name, LocalDate startsOn,
                                              LocalDate endsOn, CampaignStatus status, BenefitType benefitType,
                                              LocalDate benefitOn, EntryCondition entryCondition,
-                                             LocalDate memberJoinedFrom, LocalDate rewardExpiresOn,
-                                             AmountBasis amountBasis, BigDecimal minOrderAmount,
-                                             ShippingStatusRequirement shippingStatusRequired, String note,
-                                             CampaignBanner banner, String createdBy, String updatedBy, long version) {
+                                             LocalDate rewardExpiresOn, String note, CampaignBanner banner,
+                                             String createdBy, String updatedBy, long version) {
         return new LuckyboxCampaign(id, tenantRef, name, startsOn, endsOn, status, benefitType, benefitOn,
-                entryCondition, memberJoinedFrom, rewardExpiresOn, amountBasis, minOrderAmount,
-                shippingStatusRequired, note, banner, createdBy, updatedBy, version);
+                entryCondition, rewardExpiresOn, note, banner, createdBy, updatedBy, version);
     }
 
     /**
      * 오늘 이 캠페인에 참여할 수 있는지 확인한다. 못 하면 던진다.
      *
-     * <p>{@code memberJoinedFrom}(가입일 조건)과 금액 조건은 여기서 보지 않는다 — 둘 다 회원·주문
-     * 정보가 필요하고, 그건 이 서비스가 소유하지 않는다. 자세한 건 {@link AmountBasis} 주석에 있다.
+     * <p>여기서 보는 것이 참여 자격의 <b>전부</b>다 — 캠페인이 열려 있는가, 오늘이 기간 안인가.
+     * 한 사람이 몇 번 참여할 수 있는지는 이 메서드가 아니라 {@code (campaign_id, member_ref,
+     * entry_slot)} 유니크 인덱스가 막는다({@link #entrySlot}). 조건을 늘리려면 그 조건에 필요한
+     * 데이터가 이 서비스 안에 있어야 한다.
      */
     public void assertDrawAllowed(LocalDate today) {
         if (status != CampaignStatus.RUNNING) {
@@ -165,11 +153,7 @@ public final class LuckyboxCampaign {
     public BenefitType benefitType() { return benefitType; }
     public LocalDate benefitOn() { return benefitOn; }
     public EntryCondition entryCondition() { return entryCondition; }
-    public LocalDate memberJoinedFrom() { return memberJoinedFrom; }
     public LocalDate rewardExpiresOn() { return rewardExpiresOn; }
-    public AmountBasis amountBasis() { return amountBasis; }
-    public BigDecimal minOrderAmount() { return minOrderAmount; }
-    public ShippingStatusRequirement shippingStatusRequired() { return shippingStatusRequired; }
     public String note() { return note; }
     public CampaignBanner banner() { return banner; }
     public String createdBy() { return createdBy; }

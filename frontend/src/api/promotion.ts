@@ -190,12 +190,9 @@ export interface LuckyboxCampaignRequest {
   endsOn: string;
   benefitType: string;
   benefitOn: string | null;
+  /** 참여 *빈도*. PER_DAY(하루 1회) | PER_PERIOD(기간 중 1회) — 백엔드 EntryCondition 과 같은 값이어야 한다. */
   entryCondition: string;
-  memberJoinedFrom: string | null;
   rewardExpiresOn: string | null;
-  amountBasis: string | null;
-  minOrderAmount: string | null;
-  shippingStatusRequired: string | null;
   note: string | null;
   pcImageUrl: string | null;
   mobileImageUrl: string | null;

@@ -7,7 +7,6 @@ import github.lms.lemuel.marketing.application.port.in.ManageAttendanceCampaignU
 import github.lms.lemuel.marketing.application.port.in.ManageLuckyboxCampaignUseCase;
 import github.lms.lemuel.marketing.application.port.in.UpdateAttendanceCampaignCommand;
 import github.lms.lemuel.marketing.application.port.in.UpdateLuckyboxCampaignCommand;
-import github.lms.lemuel.marketing.domain.AmountBasis;
 import github.lms.lemuel.marketing.domain.AttendanceCampaign;
 import github.lms.lemuel.marketing.domain.BenefitType;
 import github.lms.lemuel.marketing.domain.DayTypeRule;
@@ -16,7 +15,6 @@ import github.lms.lemuel.marketing.domain.LuckyboxCampaign;
 import github.lms.lemuel.marketing.domain.LuckyboxPrize;
 import github.lms.lemuel.marketing.domain.PeriodType;
 import github.lms.lemuel.marketing.domain.PrizeType;
-import github.lms.lemuel.marketing.domain.ShippingStatusRequirement;
 import github.lms.lemuel.marketing.domain.StreakRule;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.DeleteMapping;
@@ -120,10 +118,8 @@ public class AdminPromotionController {
     public ResponseEntity<Map<String, UUID>> createLuckybox(@RequestBody LuckyboxCampaignRequest request) {
         UUID id = luckyboxUseCase.create(new CreateLuckyboxCampaignCommand(
                 request.tenantRef(), request.name(), request.startsOn(), request.endsOn(), request.benefitType(),
-                request.benefitOn(), request.entryCondition(), request.memberJoinedFrom(),
-                request.rewardExpiresOn(), request.amountBasis(), request.minOrderAmount(),
-                request.shippingStatusRequired(), request.note(), request.pcImageUrl(), request.mobileImageUrl(),
-                CurrentMember.actor()));
+                request.benefitOn(), request.entryCondition(), request.rewardExpiresOn(), request.note(),
+                request.pcImageUrl(), request.mobileImageUrl(), CurrentMember.actor()));
         return ResponseEntity.ok(Map.of("campaignId", id));
     }
 
@@ -188,12 +184,17 @@ public class AdminPromotionController {
             String messageAchieved, String messageClosed) {
     }
 
+    /**
+     * 등록·수정 공용 본문.
+     *
+     * <p>{@code entryCondition} 은 참여 <b>빈도</b>({@code PER_DAY}/{@code PER_PERIOD})다. 참여
+     * <b>대상</b>을 고르는 필드는 없다 — 가입일·주문금액·배송상태 조건이 왜 빠졌는지는
+     * {@code docs/plan/marketing-legacy-gap.md} §2 ④ 에 있다.
+     */
     public record LuckyboxCampaignRequest(
             String tenantRef, String name, LocalDate startsOn, LocalDate endsOn, BenefitType benefitType,
-            LocalDate benefitOn, EntryCondition entryCondition, LocalDate memberJoinedFrom,
-            LocalDate rewardExpiresOn, AmountBasis amountBasis, BigDecimal minOrderAmount,
-            ShippingStatusRequirement shippingStatusRequired, String note, String pcImageUrl,
-            String mobileImageUrl) {
+            LocalDate benefitOn, EntryCondition entryCondition, LocalDate rewardExpiresOn, String note,
+            String pcImageUrl, String mobileImageUrl) {
     }
 
     public record LuckyboxPrizeRequest(

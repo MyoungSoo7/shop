@@ -124,19 +124,6 @@ class MarketingValueTypesTest {
             assertFalse(BenefitType.BATCH.isImmediate());
         }
 
-        /** 설정만 보관하는 enum 두 개 — 값이 사라지면 마이그레이션이 깨진다. */
-        @ParameterizedTest
-        @EnumSource(AmountBasis.class)
-        void 금액_기준은_이름으로_저장된다(AmountBasis basis) {
-            assertEquals(basis, AmountBasis.valueOf(basis.name()));
-        }
-
-        @ParameterizedTest
-        @EnumSource(ShippingStatusRequirement.class)
-        void 배송_조건은_이름으로_저장된다(ShippingStatusRequirement requirement) {
-            assertEquals(requirement, ShippingStatusRequirement.valueOf(requirement.name()));
-        }
-
         @ParameterizedTest
         @EnumSource(RewardSource.class)
         void 보상_출처는_이름으로_저장된다(RewardSource source) {
