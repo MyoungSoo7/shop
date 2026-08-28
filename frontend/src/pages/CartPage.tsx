@@ -57,6 +57,11 @@ const CartItemRow: React.FC<CartItemRowProps> = ({ item, onRemove, onQuantityCha
 
       <div className="flex-1 min-w-0">
         <p className="font-semibold text-gray-900 text-sm truncate">{product.name}</p>
+        {/* 고른 옵션 — 같은 상품이 옵션만 다른 두 줄로 들어올 수 있으므로, 이 라벨이 없으면
+            사용자는 어느 줄이 어느 것인지 구분할 수 없다. */}
+        {item.optionLabel && (
+          <p className="text-xs text-gray-500 mt-0.5 truncate">{item.optionLabel}</p>
+        )}
         <p className="text-sm text-blue-600 font-medium mt-0.5">{fmt(product.price)}</p>
         {product.description && (
           <p className="text-xs text-gray-400 truncate mt-0.5">{product.description}</p>
@@ -129,7 +134,13 @@ const CartPage: React.FC = () => {
    * 마스터에서 확정한다. 쿠폰 미리보기도 같은 라인을 쓰므로 미리보기 금액과 결제 금액이 갈라지지 않는다.
    */
   const orderLines = useMemo(
-    () => items.map(({ product, quantity }) => ({ productId: product.id, quantity })),
+    // variantId 를 실어 보낸다. 빼면 서버가 상품 기준 재고를 보고, 옵션 SKU 의 재고는
+    // 그대로 남는다 — 팔렸는데 재고가 줄지 않는 주문이 된다.
+    () => items.map(({ product, quantity, variantId }) => ({
+      productId: product.id,
+      variantId: variantId ?? null,
+      quantity,
+    })),
     [items],
   );
 
@@ -387,11 +398,13 @@ const CartPage: React.FC = () => {
           <div className="lg:col-span-2 bg-white rounded-2xl shadow-sm border border-gray-200 p-6">
             <p className="text-sm font-medium text-gray-500 mb-3">총 {totalCount}개 상품</p>
             {items.map((item) => (
+              // key 도 삭제·수량변경도 (상품, SKU) 두 값을 함께 넘긴다. 상품 id 만 쓰면
+              // 같은 상품의 다른 옵션 줄이 같은 key 를 갖고, 한 줄을 지울 때 둘 다 사라진다.
               <CartItemRow
-                key={item.product.id}
+                key={`${item.product.id}:${item.variantId ?? 'none'}`}
                 item={item}
-                onRemove={() => removeItem(item.product.id)}
-                onQuantityChange={(q) => updateQuantity(item.product.id, q)}
+                onRemove={() => removeItem(item.product.id, item.variantId ?? null)}
+                onQuantityChange={(q) => updateQuantity(item.product.id, q, item.variantId ?? null)}
                 disabled={false}
               />
             ))}

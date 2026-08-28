@@ -196,13 +196,13 @@ describe('CartPage — 목록', () => {
     const buttons = within(row).getAllByRole('button');
 
     await userEvent.click(buttons[0]); // 감소
-    expect(updateQuantity).toHaveBeenCalledWith(1, 1);
+    expect(updateQuantity).toHaveBeenCalledWith(1, 1, null);
 
     await userEvent.click(buttons[1]); // 증가
-    expect(updateQuantity).toHaveBeenCalledWith(1, 3);
+    expect(updateQuantity).toHaveBeenCalledWith(1, 3, null);
 
     await userEvent.click(buttons[2]); // 삭제
-    expect(removeItem).toHaveBeenCalledWith(1);
+    expect(removeItem).toHaveBeenCalledWith(1, null);
   });
 
   it('재고까지 담았으면 증가 버튼이 잠긴다', () => {
@@ -253,7 +253,7 @@ describe('CartPage — 일반 결제', () => {
 
     await waitFor(() =>
       expect(mockedOrder.createMultiItemOrder).toHaveBeenCalledWith(
-        1, [{ productId: 1, quantity: 3 }], FILLED_ADDRESS, AGREED_ACCEPTANCES, null, expect.any(String),
+        1, [{ productId: 1, variantId: null, quantity: 3 }], FILLED_ADDRESS, AGREED_ACCEPTANCES, null, expect.any(String),
       ),
     );
   });
@@ -292,7 +292,7 @@ describe('CartPage — 일반 결제', () => {
 
     await waitFor(() =>
       expect(mockedOrder.createMultiItemOrder).toHaveBeenCalledWith(
-        1, [{ productId: 1, quantity: 1 }], FILLED_ADDRESS, AGREED_ACCEPTANCES, 'WELCOME10', expect.any(String),
+        1, [{ productId: 1, variantId: null, quantity: 1 }], FILLED_ADDRESS, AGREED_ACCEPTANCES, 'WELCOME10', expect.any(String),
       ),
     );
     // 서버가 같은 트랜잭션에서 기록한다. 여기서 또 부르면 쿠폰이 두 번 소진된다.

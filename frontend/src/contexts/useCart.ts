@@ -10,13 +10,25 @@ import { ProductResponse } from '@/types';
 export interface CartItem {
   product: ProductResponse;
   quantity: number;
+  /**
+   * 고른 SKU. 옵션 없는 상품은 null 이다.
+   *
+   * <p>이 필드가 없던 동안 장바구니 항목의 열쇠는 상품 id 하나였다. 그래서 같은 티셔츠의
+   * 빨강/L 과 파랑/M 이 한 줄로 합쳐졌고, 서버로 나가는 것도 옵션 없는 항목이었다 —
+   * 재고는 SKU 에 붙어 있으므로 그 주문은 어느 재고도 깎지 않는다.
+   * 서버 장바구니는 처음부터 (productId, variantId) 를 열쇠로 쓰고 있었다(중복은 수량 증가로
+   * 흡수한다). 화면만 그 열쇠를 절반만 들고 있었던 것이다.
+   */
+  variantId?: number | null;
+  /** 사람이 읽는 옵션 표시("빨강 / L"). 서버 값이 아니라 고를 때 만든 라벨이다. */
+  optionLabel?: string | null;
 }
 
 export interface CartContextType {
   items: CartItem[];
-  addItem: (product: ProductResponse) => void;
-  removeItem: (productId: number) => void;
-  updateQuantity: (productId: number, quantity: number) => void;
+  addItem: (product: ProductResponse, variantId?: number | null, optionLabel?: string | null) => void;
+  removeItem: (productId: number, variantId?: number | null) => void;
+  updateQuantity: (productId: number, quantity: number, variantId?: number | null) => void;
   clearCart: () => void;
   totalAmount: number;
   totalCount: number;

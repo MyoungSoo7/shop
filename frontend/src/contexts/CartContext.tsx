@@ -26,15 +26,29 @@ const readLocal = (): CartItem[] => {
  */
 const hydrate = async (serverItems: ServerCartItem[]): Promise<CartItem[]> => {
   const settled = await Promise.allSettled(
-    serverItems.map(async (item) => ({
-      product: await productApi.getProduct(item.productId),
-      quantity: item.quantity,
-    }))
+    serverItems.map(
+      async (item): Promise<CartItem> => ({
+        product: await productApi.getProduct(item.productId),
+        quantity: item.quantity,
+        variantId: item.variantId,
+      })
+    )
   );
   return settled
     .filter((r): r is PromiseFulfilledResult<CartItem> => r.status === 'fulfilled')
     .map((r) => r.value);
 };
+
+/**
+ * 장바구니 한 줄의 열쇠는 <b>(상품, SKU)</b> 다 — 상품 id 하나가 아니다.
+ *
+ * <p>열쇠가 상품 id 뿐이면 같은 티셔츠의 빨강/L 과 파랑/M 이 한 줄로 합쳐지고, 수량 변경·삭제도
+ * 어느 옵션을 가리키는지 알 수 없어진다. 서버 장바구니는 처음부터 두 값을 열쇠로 썼으므로
+ * (옵션 없는 항목은 variantId=null), 여기서 맞춰 두지 않으면 화면과 서버가 서로 다른 줄을 센다.
+ * {@code null} 과 {@code undefined} 를 같게 보기 위해 {@code ?? null} 로 정규화해 비교한다.
+ */
+const sameLine = (item: CartItem, productId: number, variantId: number | null): boolean =>
+  item.product.id === productId && (item.variantId ?? null) === variantId;
 
 /**
  * 장바구니 상태 공급자 — 로그인 여부에 따라 저장소가 바뀐다.
@@ -86,7 +100,7 @@ export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children
       try {
         const pending = readLocal();
         for (const item of pending) {
-          await cartApi.addItem(userId, item.product.id, item.quantity);
+          await cartApi.addItem(userId, item.product.id, item.quantity, item.variantId ?? null);
         }
         if (pending.length > 0) localStorage.removeItem(STORAGE_KEY);
         if (!cancelled) await reload(userId);
@@ -122,32 +136,36 @@ export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children
   );
 
   const addItem = useCallback(
-    (product: ProductResponse) => {
+    (product: ProductResponse, variantId?: number | null, optionLabel?: string | null) => {
+      const vid = variantId ?? null;
       // 낙관적 갱신 — 서버 왕복을 기다리며 버튼이 먹통이 되지 않게 한다.
       setItems((prev) => {
-        const existing = prev.find((i) => i.product.id === product.id);
+        const existing = prev.find((i) => sameLine(i, product.id, vid));
         if (existing) {
           return prev.map((i) =>
-            i.product.id === product.id
+            sameLine(i, product.id, vid)
               ? { ...i, quantity: Math.min(i.quantity + 1, product.stockQuantity) }
               : i
           );
         }
-        return [...prev, { product, quantity: 1 }];
+        return [...prev, { product, quantity: 1, variantId: vid, optionLabel: optionLabel ?? null }];
       });
       if (userId != null) {
-        void withServer(userId, () => cartApi.addItem(userId, product.id, 1).then(() => undefined));
+        void withServer(userId, () =>
+          cartApi.addItem(userId, product.id, 1, vid).then(() => undefined)
+        );
       }
     },
     [userId, withServer]
   );
 
   const removeItem = useCallback(
-    (productId: number) => {
-      setItems((prev) => prev.filter((i) => i.product.id !== productId));
+    (productId: number, variantId?: number | null) => {
+      const vid = variantId ?? null;
+      setItems((prev) => prev.filter((i) => !sameLine(i, productId, vid)));
       if (userId != null) {
         void withServer(userId, () =>
-          cartApi.removeItem(userId, productId).then(() => undefined)
+          cartApi.removeItem(userId, productId, vid).then(() => undefined)
         );
       }
     },
@@ -155,17 +173,18 @@ export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children
   );
 
   const updateQuantity = useCallback(
-    (productId: number, quantity: number) => {
+    (productId: number, quantity: number, variantId?: number | null) => {
+      const vid = variantId ?? null;
       if (quantity <= 0) {
-        removeItem(productId);
+        removeItem(productId, vid);
         return;
       }
       setItems((prev) =>
-        prev.map((i) => (i.product.id === productId ? { ...i, quantity } : i))
+        prev.map((i) => (sameLine(i, productId, vid) ? { ...i, quantity } : i))
       );
       if (userId != null) {
         void withServer(userId, () =>
-          cartApi.changeQuantity(userId, productId, quantity).then(() => undefined)
+          cartApi.changeQuantity(userId, productId, quantity, vid).then(() => undefined)
         );
       }
     },
