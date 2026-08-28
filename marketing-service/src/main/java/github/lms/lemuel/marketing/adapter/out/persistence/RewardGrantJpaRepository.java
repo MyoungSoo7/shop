@@ -5,6 +5,7 @@ import github.lms.lemuel.marketing.domain.RewardStatus;
 import org.springframework.data.domain.Limit;
 import org.springframework.data.jpa.repository.JpaRepository;
 
+import java.time.Instant;
 import java.time.LocalDate;
 import java.util.List;
 import java.util.Optional;
@@ -18,4 +19,6 @@ interface RewardGrantJpaRepository extends JpaRepository<RewardGrantJpaEntity, U
             RewardStatus status, LocalDate on, Limit limit);
 
     List<RewardGrantJpaEntity> findByMemberRefOrderByCreatedAtDesc(String memberRef, Limit limit);
+
+    long countByStatusAndRequestedAtBefore(RewardStatus status, Instant before);
 }

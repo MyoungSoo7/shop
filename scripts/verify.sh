@@ -118,13 +118,26 @@ run_stage "하네스 삭제 가드 (삭제 $DELETED_COUNT 건)" \
   node scripts/harness/guard.mjs --deleted-list "$DELETED_LIST"
 
 # ── 4. Gradle 빌드/테스트 ──
-# ci.yml 의 매핑과 동일하게 유지할 것. 여기가 어긋나면 로컬 통과 → CI 실패가 난다.
-MODULES=(
-  order-service settlement-service gateway-service account-service operation-service
-  loan-service financial-statements-service economics-service company-service
-  market-service common-data-service investment-service
-  organization-service card-service
-)
+# 모듈 목록은 settings.gradle.kts 에서 읽는다 — 손으로 적지 않는다.
+#
+# 2026-08-28 실측: 여기 적혀 있던 14개는 이 저장소에 없는 모듈이었다(settlement-service·
+# loan-service·card-service…). 다른 저장소에서 베껴 온 목록이 그대로 남아 있었고, 정작 이
+# 저장소의 marketing-service 는 빠져 있었다. 그래서 marketing 의 SQL 마이그레이션만 고치면
+# 어느 모듈에도 안 걸리고 자바 확장자도 아니라 **로컬 검증이 아무것도 안 돌고 통과**했다.
+# 사본은 언제나 정본보다 뒤처진다. 그래서 사본을 없앤다.
+#
+# 같은 병을 JS 게이트 쪽에서 이미 한 번 앓았다(scripts/harness/lib/java-controllers.mjs 의
+# javaServices 주석 참조) — 거기서 쓰는 규칙과 같다: include( 부터 첫 닫는 괄호까지, 그 안의
+# 따옴표 문자열이 모듈명이다. 그래서 settings.gradle.kts 의 그 블록 주석에는 닫는 괄호도
+# 큰따옴표도 쓰면 안 된다(파일 자체에 그렇게 적혀 있다).
+# mapfile 은 bash 4 부터라 맥 기본 bash 3.2 에서 못 쓴다 — 이식성 있는 형태로 읽는다.
+MODULES=()
+while IFS= read -r _m; do
+  [ -n "$_m" ] && MODULES+=("$_m")
+done <<EOF
+$(sed -n '/include(/,/)/p' "$REPO_ROOT/settings.gradle.kts" | grep -oE '"[a-z0-9-]+"' | tr -d '"')
+EOF
+[ "${#MODULES[@]}" -gt 0 ] || { echo "settings.gradle.kts 에서 모듈을 한 개도 못 읽었다" >&2; exit 1; }
 
 gradle_tasks() {
   # shared-common 변경 → 전체 (CI 와 동일하게 게이트 약화 방지)

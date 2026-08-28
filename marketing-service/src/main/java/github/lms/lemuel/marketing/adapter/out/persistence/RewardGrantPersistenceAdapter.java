@@ -7,6 +7,7 @@ import github.lms.lemuel.marketing.domain.RewardStatus;
 import org.springframework.data.domain.Limit;
 import org.springframework.stereotype.Component;
 
+import java.time.Instant;
 import java.time.LocalDate;
 import java.util.List;
 import java.util.Optional;
@@ -44,6 +45,11 @@ class RewardGrantPersistenceAdapter implements RewardGrantPort {
     public List<RewardGrant> findByMember(String memberRef, int limit) {
         return repository.findByMemberRefOrderByCreatedAtDesc(memberRef, Limit.of(limit))
                 .stream().map(RewardGrantJpaEntity::toDomain).toList();
+    }
+
+    @Override
+    public long countRequestedBefore(Instant before) {
+        return repository.countByStatusAndRequestedAtBefore(RewardStatus.REQUESTED, before);
     }
 
     @Override

@@ -143,3 +143,13 @@ app:
     settlement:
       enabled: ${MARKETING_SETTLEMENT_ENABLED:true}
       cron: ${MARKETING_SETTLEMENT_CRON:0 5 3 * * *}
+
+    # 보상 왕복 정체 감시 — RewardStalenessMetrics.
+    # reward_requested 를 내고 point.granted 로 확정을 받기까지가 왕복이다. 나가는 쪽이 막히면
+    # outbox 적체가 잡지만 돌아오는 쪽이 끊긴 상태는 어떤 기존 지표에도 안 나타난다.
+    reward:
+      # 이 시간 안에 확정 안 된 건만 "정체" 로 센다. 정상 왕복(수초)까지 세면 지표가 상시 0 이
+      # 아니게 되고, 그러면 알람 임계를 올리게 되고, 그러면 진짜 정체를 놓친다.
+      stuck-after: ${MARKETING_REWARD_STUCK_AFTER:PT15M}
+      # 게이지 갱신 주기. 스크레이프마다 DB 를 치지 않도록 여기서 캐싱한다.
+      stuck-scan-delay-ms: ${MARKETING_REWARD_STUCK_SCAN_DELAY_MS:60000}

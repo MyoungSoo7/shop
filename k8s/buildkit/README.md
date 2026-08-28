@@ -53,7 +53,7 @@ kubectl -n build create secret generic frontend-build-args \
 ```bash
 ./k8s/buildkit/build.sh order-service operation-service      # 특정 서비스만
 ./k8s/buildkit/build.sh frontend                              # 프론트엔드만
-./k8s/buildkit/build.sh --all --wait                          # 백엔드 17 + 프론트엔드, 로그 추적
+./k8s/buildkit/build.sh --all --wait                          # 백엔드 전부 + 프론트엔드, 로그 추적
 ./k8s/buildkit/build.sh --ref main --all --wait --scan        # main + Trivy 게이트
 ./k8s/buildkit/build.sh --dry-run --all                       # YAML 만 출력
 ```
@@ -62,6 +62,9 @@ kubectl -n build create secret generic frontend-build-args \
 `<branch>`, `<branch>-<sha7>`, 그리고 `main` 일 때만 `latest`.
 이미지 이름 매핑(`order-service` → suffix 없음, `operation-service` → `-operation` …)도 `ci.yml` 의
 `mapping` 블록을 그대로 옮긴 것이다. **한쪽만 고치면 같은 서비스가 두 이미지로 갈라진다.**
+사본이 어긋나는 건 시간 문제라, 두 매핑이 글자 그대로 같은지를
+`scripts/harness/test/deploy-roster-gate.test.mjs` 가 대조한다 — 새 모듈이 `--all` 에서
+조용히 빠지는 것도 같은 게이트가 잡는다(실패가 아니라 누락이라 로그만 봐서는 안 보인다).
 
 ## 반드시 알아야 할 것
 

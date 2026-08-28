@@ -27,6 +27,7 @@
     "scripts/harness/test/contract-schema-parity-gate.test.mjs",
     "scripts/harness/test/coverage-excludes-gate.test.mjs",
     "scripts/harness/test/coverage-scope-gate.test.mjs",
+    "scripts/harness/test/deploy-roster-gate.test.mjs",
     "scripts/harness/test/guard.test.mjs",
     "scripts/harness/test/harness-audit-gate.test.mjs",
     "scripts/harness/test/java-services-roster-gate.test.mjs",
