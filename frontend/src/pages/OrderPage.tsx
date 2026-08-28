@@ -2,6 +2,9 @@ import React, { useState, useEffect } from 'react';
 import OptionFacetPanel from '@/components/product/OptionFacetPanel';
 import WishlistHeart from '@/components/product/WishlistHeart';
 import ProductInquiries from '@/components/product/ProductInquiries';
+import ProductOptionSelector from '@/components/product/ProductOptionSelector';
+import { productOptionApi } from '@/api/productOptions';
+import { productVariantApi } from '@/api/productVariant';
 import {
   facetApi, countSelected, toggleFacetValue,
   type Facet, type FacetSelection,
@@ -91,6 +94,20 @@ const OrderFormTab: React.FC = () => {
   const [facetProducts, setFacetProducts] = useState<ProductResponse[] | null>(null);
   const [loadingFacets, setLoadingFacets] = useState(false);
 
+  /*
+   * 고른 옵션 — 축코드 → 값코드.
+   *
+   * 이 화면은 지금까지 옵션을 아예 그리지 않았다. 그래서 주문 라인이 늘
+   * `{ productId, quantity }` 로만 만들어졌고, 옵션이 있는 상품도 SKU 를 가리키지 않는
+   * 주문으로 나갔다 — 재고는 SKU 에 붙어 있으므로 그런 주문은 재고를 깎지 않는다.
+   *
+   * variantId 를 여기에 들고 있지 않는 것이 중요하다. 조합 → SKU 해석의 주인은 서버의
+   * `POST /products/{id}/variants/resolve` 하나이고, 화면은 <b>주문/담기 직전에</b> 그걸
+   * 불러 받는다. 미리 받아 두면 그 사이에 SKU 가 바뀌어도 화면은 옛 id 로 주문한다.
+   */
+  const [optionSelection, setOptionSelection] = useState<Record<string, string>>({});
+  const [optionsReady, setOptionsReady] = useState(true);
+
   // 상품 리뷰 미리보기
   const [reviews, setReviews] = useState<ReviewResponse[]>([]);
   const [reviewsOpen, setReviewsOpen] = useState(false);
@@ -121,6 +138,13 @@ const OrderFormTab: React.FC = () => {
     return () => { cancelled = true; };
   }, [facetSelection]);
 
+  // 상품이 바뀌면 옵션 선택은 무효다 — 축 코드가 상품마다 다르므로 남겨 두면
+  // 이전 상품의 선택이 새 상품의 조합 판정에 섞인다.
+  useEffect(() => {
+    setOptionSelection({});
+    setOptionsReady(true);
+  }, [selectedProduct]);
+
   useEffect(() => {
     if (!selectedProduct) { setReviews([]); setReviewsOpen(false); return; }
     setLoadingReviews(true);
@@ -145,20 +169,46 @@ const OrderFormTab: React.FC = () => {
     .filter((p) => p.name.toLowerCase().includes(searchQuery.toLowerCase()))
     .slice(0, PRODUCTS_PER_PAGE);
 
+  /**
+   * 고른 옵션을 SKU 로 바꾼다. 옵션이 없는 상품이면 null.
+   *
+   * <p>축·값 <b>코드</b>를 그대로 보낸다. 서버는 {@code OptionCode.fromDisplayName} 으로
+   * 정규화하는데 그 규칙이 "내부 공백만 하이픈으로 접기"이고 코드에는 공백이 들어갈 수 없으므로
+   * 코드에 대해서는 항등이다 — 즉 표시명을 다시 조립해 보낼 이유가 없다(조립하는 순간
+   * 이름을 바꾸면 주문이 깨지는 옛 문자열 규약으로 되돌아간다).
+   */
+  const resolveVariantId = async (productId: number): Promise<number | null> => {
+    const selections = Object.entries(optionSelection)
+      .filter(([, value]) => value)
+      .map(([name, value]) => ({ name, value }));
+    if (selections.length === 0) return null;
+    const variant = await productVariantApi.resolve(productId, selections);
+    return variant.id;
+  };
+
+  /** 사람이 읽는 옵션 라벨 — 장바구니 줄을 구분해 보여주기 위한 표시값이다. */
+  const optionLabel = (): string | null => {
+    const chosen = Object.values(optionSelection).filter(Boolean);
+    return chosen.length > 0 ? chosen.join(' / ') : null;
+  };
+
   const handleCreateOrder = async () => {
     if (userId === null) { setError('로그인이 필요합니다.'); return; }
     if (!selectedProduct) { setError('상품을 선택해주세요.'); return; }
+    if (!optionsReady) { setError('옵션을 선택해주세요.'); return; }
     if (!addressReady) { setError('배송지를 입력해주세요.'); return; }
     if (!consent.ready) { setError('필수 개인정보 동의 항목에 동의해주세요.'); return; }
     setLoading(true);
     setError(null);
     try {
+      // 옵션이 있으면 주문 <b>직전에</b> SKU 로 해석한다. 해석의 주인은 서버 하나다.
+      const variantId = await resolveVariantId(selectedProduct.id);
       // 장바구니와 같은 경로로 통일. 금액은 보내지 않는다 — 단가·쿠폰 할인·배송비는 서버가
       // 상품 마스터에서 확정하고, 쿠폰 사용 기록도 같은 트랜잭션에서 남긴다(그래서 여기서
       // couponApi.use 를 부르지 않는다. 부르면 두 번 소진된다).
       const orderRes = await orderApi.createMultiItemOrder(
         userId,
-        [{ productId: selectedProduct.id, quantity: 1 }],
+        [{ productId: selectedProduct.id, variantId, quantity: 1 }],
         shippingAddress,
         consent.acceptances,
         appliedCouponCode ?? null,
@@ -249,10 +299,52 @@ const OrderFormTab: React.FC = () => {
     }
   };
 
-  const handleAddToCart = (product: ProductResponse) => {
+  /**
+   * 장바구니 담기.
+   *
+   * <p>목록의 각 줄에 담기 버튼이 있는데 옵션 선택기는 <b>고른 상품 하나</b>에만 뜬다. 그래서
+   * 옵션이 있는 상품을 목록에서 바로 담으면 옵션 없는 항목이 들어가고, 그건 재고를 깎지 않는
+   * 주문으로 이어진다. 그렇다고 모든 담기를 두 단계로 만들면 옵션 없는 상품(대부분)이 불편해진다.
+   *
+   * <p>그래서 담기 시점에 옵션 트리를 한 번 물어 <b>갈라진다</b>: 고를 축이 없으면 지금까지처럼
+   * 바로 담고, 있으면 그 상품을 선택 상태로 바꿔 선택기를 띄운다. 이미 고른 상품이면 선택을
+   * SKU 로 해석해 담는다. 조회가 실패하면 담기를 막지 않고 옵션 없이 담는다 — 옵션 API 하나가
+   * 죽었다고 장바구니가 통째로 멈추는 편이 더 나쁘다.
+   */
+  const handleAddToCart = async (product: ProductResponse) => {
+    const flash = (id: number) => {
+      setAddedProductId(id);
+      setTimeout(() => setAddedProductId(null), 1500);
+    };
+
+    if (selectedProduct?.id === product.id && Object.keys(optionSelection).length > 0) {
+      if (!optionsReady) { setError('옵션을 선택해주세요.'); return; }
+      try {
+        const variantId = await resolveVariantId(product.id);
+        addItem(product, variantId, optionLabel());
+        flash(product.id);
+      } catch (err) {
+        setError(apiErrorMessage(err, '선택한 옵션으로 담을 수 없습니다.'));
+      }
+      return;
+    }
+
+    let hasOptions: boolean;
+    try {
+      const options = await productOptionApi.describe(product.id);
+      hasOptions = options.axes.some((a) => a.values.length > 0);
+    } catch {
+      hasOptions = false;
+    }
+
+    if (hasOptions) {
+      setSelectedProduct(product);
+      setError('옵션을 선택한 뒤 담아주세요.');
+      return;
+    }
+
     addItem(product);
-    setAddedProductId(product.id);
-    setTimeout(() => setAddedProductId(null), 1500);
+    flash(product.id);
   };
 
   const handleNewOrder = () => {
@@ -362,7 +454,7 @@ const OrderFormTab: React.FC = () => {
                           {/* `tap-target` — 아이콘 버튼이라 시각 크기는 30×30 이지만 터치 환경에서는
                               눌리는 영역만 44×44 로 넓힌다(index.css, 데스크톱 무영향). */}
                           <button
-                            onClick={(e) => { e.stopPropagation(); handleAddToCart(product); }}
+                            onClick={(e) => { e.stopPropagation(); void handleAddToCart(product); }}
                             title="장바구니 담기"
                             className={`tap-target p-1.5 rounded-lg border transition-all flex-shrink-0 ${
                               addedProductId === product.id
@@ -415,6 +507,17 @@ const OrderFormTab: React.FC = () => {
                   </div>
                 </div>
               </div>
+            )}
+
+            {/* 옵션 선택 — 요약 바로 아래다. 고르는 것이 금액(추가금)과 재고를 정하므로
+                쿠폰·배송지보다 앞에 와야 순서가 맞는다. */}
+            {selectedProduct && (
+              <ProductOptionSelector
+                productId={selectedProduct.id}
+                selection={optionSelection}
+                onChange={setOptionSelection}
+                onReadyChange={setOptionsReady}
+              />
             )}
 
             {/* 쿠폰 입력 */}

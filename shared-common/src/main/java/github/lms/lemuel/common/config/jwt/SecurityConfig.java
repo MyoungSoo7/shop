@@ -212,6 +212,15 @@ public class SecurityConfig {
                         .requestMatchers(HttpMethod.GET, "/products/*/variants").hasRole("ADMIN")
                         .requestMatchers(HttpMethod.POST, "/products/*/variants").hasRole("ADMIN")
                         .requestMatchers(HttpMethod.POST, "/products/*/variants/*/decrease-stock").hasRole("ADMIN")
+                        /*
+                         * 구매자용 옵션 트리 — 위 ADMIN 매처들과 갈라지는 지점이라 명시한다.
+                         * `*` 는 한 세그먼트만 매치하므로 /products/1/options 는 /variants 줄 어디에도
+                         * 걸리지 않아 이 줄이 없어도 authenticated() 로 떨어진다. 그래도 적는 이유는
+                         * 결과가 아니라 <b>의도</b>를 남기기 위해서다 — 이 경로는 재고 수량도 variantId 도
+                         * 내보내지 않기 때문에 ADMIN 이 아니어도 되고, 그 판단이 이 목록에 안 보이면
+                         * 다음 사람이 "왜 /variants 만 잠겨 있지" 를 다시 헤맨다.
+                         */
+                        .requestMatchers(HttpMethod.GET, "/products/*/options").authenticated()
                         // 송장 일괄 업로드 - 다건 출고를 한 번에 반영. dryRun 기본값이라 파라미터 누락 호출은 미리보기로 떨어진다.
                         .requestMatchers("/admin/shipments/**").hasAnyRole("ADMIN", "MANAGER")
                         // 셀러 배송비 정책 — 고객에게 청구되는 금액을 직접 바꾸므로 운송장 콘솔과 달리 ADMIN 만.

@@ -34,6 +34,14 @@ vi.mock('@/api/wishlist', () => ({
 vi.mock('@/api/product', () => ({
   productApi: { getAvailableProducts: vi.fn() },
 }));
+// 옵션 없는 상품이라 축이 비어 온다 — 담기 버튼이 선택기로 우회하지 않는 경로를 검증한다.
+vi.mock('@/api/productOptions', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/api/productOptions')>()),
+  productOptionApi: { describe: vi.fn().mockResolvedValue({ productId: 1, axes: [], combinations: [] }) },
+}));
+vi.mock('@/api/productVariant', () => ({
+  productVariantApi: { resolve: vi.fn() },
+}));
 vi.mock('@/api/order', () => ({
   orderApi: { createMultiItemOrder: vi.fn() },
 }));
@@ -343,7 +351,7 @@ describe('OrderPage — 주문·결제 흐름', () => {
     // 하드코딩하고 있어서 둘이 짝을 이뤄 초록이었다 — 서버는 토큰의 uid 와 대조하므로
     // 1번 사용자가 아닌 모든 계정이 주문 버튼에서 403 을 받았다.
     expect(mockedOrder.createMultiItemOrder).toHaveBeenCalledWith(
-      7, [{ productId: 1, quantity: 1 }], FILLED_ADDRESS, AGREED_ACCEPTANCES, null, expect.any(String),
+      7, [{ productId: 1, variantId: null, quantity: 1 }], FILLED_ADDRESS, AGREED_ACCEPTANCES, null, expect.any(String),
     );
 
     await userEvent.click(screen.getByRole('button', { name: '결제 진행하기' }));
@@ -426,7 +434,7 @@ describe('OrderPage — 주문·결제 흐름', () => {
 
     await waitFor(() =>
       expect(mockedOrder.createMultiItemOrder).toHaveBeenCalledWith(
-        7, [{ productId: 1, quantity: 1 }], FILLED_ADDRESS, AGREED_ACCEPTANCES, 'WELCOME10', expect.any(String),
+        7, [{ productId: 1, variantId: null, quantity: 1 }], FILLED_ADDRESS, AGREED_ACCEPTANCES, 'WELCOME10', expect.any(String),
       ),
     );
     // 서버가 같은 트랜잭션에서 기록한다. 여기서 또 부르면 쿠폰이 두 번 소진된다.

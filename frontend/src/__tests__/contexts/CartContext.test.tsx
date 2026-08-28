@@ -143,7 +143,7 @@ describe('CartContext', () => {
 
       renderWith(authValue(7));
 
-      await waitFor(() => expect(cartApi.addItem).toHaveBeenCalledWith(7, 100, 3));
+      await waitFor(() => expect(cartApi.addItem).toHaveBeenCalledWith(7, 100, 3, null));
       await waitFor(() => expect(localStorage.getItem('lemuel_cart')).toBeNull());
       await waitFor(() => expect(screen.getByText('상품100:3')).toBeInTheDocument());
     });
@@ -163,13 +163,13 @@ describe('CartContext', () => {
       await waitFor(() => expect(cartApi.get).toHaveBeenCalled());
 
       fireEvent.click(screen.getByRole('button', { name: 'add' }));
-      await waitFor(() => expect(cartApi.addItem).toHaveBeenCalledWith(7, 100, 1));
+      await waitFor(() => expect(cartApi.addItem).toHaveBeenCalledWith(7, 100, 1, null));
 
       fireEvent.click(screen.getByRole('button', { name: 'qty5' }));
-      await waitFor(() => expect(cartApi.changeQuantity).toHaveBeenCalledWith(7, 100, 5));
+      await waitFor(() => expect(cartApi.changeQuantity).toHaveBeenCalledWith(7, 100, 5, null));
 
       fireEvent.click(screen.getByRole('button', { name: 'remove' }));
-      await waitFor(() => expect(cartApi.removeItem).toHaveBeenCalledWith(7, 100));
+      await waitFor(() => expect(cartApi.removeItem).toHaveBeenCalledWith(7, 100, null));
 
       fireEvent.click(screen.getByRole('button', { name: 'clear' }));
       await waitFor(() => expect(cartApi.clear).toHaveBeenCalledWith(7));
