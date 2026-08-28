@@ -43,9 +43,10 @@ class GatewayServiceApplicationTest {
         // 고쳐야 한다 — 예전에 흡수 커밋이 이 단정을 안 고쳐 게이트가 빨간 채로 방치된 적이 있다.
         // notification-stream 은 operation 이 서빙하는 알림 SSE 라우트다(ADR 0041).
         // marketing-service 는 이벤트 프로모션(출석·럭키박스) 라우트다(ADR 0045).
+        // partner-service 는 입점사 콘솔(/api/partner, 읽기 전용) 라우트다.
         assertThat(routes).extracting(Route::getId)
                 .containsExactlyInAnyOrder(
                         "order-service-orders", "operation-service", "marketing-service",
-                        "notification-stream");
+                        "partner-service", "notification-stream");
     }
 }
