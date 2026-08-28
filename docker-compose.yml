@@ -200,7 +200,11 @@ services:
       context: .
       args:
         MODULE: order-service
-    image: ghcr.io/myoungsoo7/lemuel-order:latest
+    # CI 가 실제로 올리는 이름과 같아야 `docker compose pull` 로 배포된다.
+    # (.github/workflows/ci.yml 의 module → image_suffix 매핑: order-service="" ·
+    #  gateway-service="-gateway" · operation-service="-operation" · marketing-service="-marketing")
+    # 옛 이름 ghcr.io/myoungsoo7/lemuel-* 은 GHCR 에 더 이상 없다 — 그대로 두면 pull 이 404 로 죽는다.
+    image: ghcr.io/myoungsoo7/shop:latest
     container_name: lemuel-order
     env_file:
       - path: .env
@@ -259,7 +263,7 @@ services:
       context: .
       args:
         MODULE: operation-service
-    image: ghcr.io/myoungsoo7/lemuel-operation:latest
+    image: ghcr.io/myoungsoo7/shop-operation:latest
     container_name: lemuel-operation
     env_file:
       - path: .env
@@ -314,7 +318,7 @@ services:
       context: .
       args:
         MODULE: marketing-service
-    image: ghcr.io/myoungsoo7/lemuel-marketing:latest
+    image: ghcr.io/myoungsoo7/shop-marketing:latest
     container_name: lemuel-marketing
     env_file:
       - path: .env
@@ -361,7 +365,7 @@ services:
       context: .
       args:
         MODULE: gateway-service
-    image: ghcr.io/myoungsoo7/lemuel-gateway:latest
+    image: ghcr.io/myoungsoo7/shop-gateway:latest
     container_name: lemuel-gateway
     env_file:
       - path: .env
