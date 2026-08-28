@@ -45,7 +45,7 @@ public class AttendanceCampaignAdminService implements ManageAttendanceCampaignU
     @Override
     @Transactional
     public void update(UpdateAttendanceCampaignCommand c) {
-        AttendanceCampaign campaign = get(c.campaignId());
+        AttendanceCampaign campaign = require(c.campaignId());
         campaign.update(c.name(), c.startsOn(), c.endsOn(), c.dailyRewardPoints(), c.goalRewardPoints(),
                 CampaignBanner.of(c.pcImageUrl(), c.mobileImageUrl()),
                 new AttendanceMessages(c.messageBeforeStart(), c.messageRunning(), c.messageAchieved(),
@@ -57,7 +57,7 @@ public class AttendanceCampaignAdminService implements ManageAttendanceCampaignU
     @Override
     @Transactional
     public void open(UUID campaignId, String actor) {
-        AttendanceCampaign campaign = get(campaignId);
+        AttendanceCampaign campaign = require(campaignId);
         campaign.open(actor);
         savePort.save(campaign);
     }
@@ -65,7 +65,7 @@ public class AttendanceCampaignAdminService implements ManageAttendanceCampaignU
     @Override
     @Transactional
     public void close(UUID campaignId, String actor) {
-        AttendanceCampaign campaign = get(campaignId);
+        AttendanceCampaign campaign = require(campaignId);
         campaign.close(actor);
         savePort.save(campaign);
     }
@@ -79,6 +79,16 @@ public class AttendanceCampaignAdminService implements ManageAttendanceCampaignU
     @Override
     @Transactional(readOnly = true)
     public AttendanceCampaign get(UUID campaignId) {
+        return require(campaignId);
+    }
+
+    /**
+     * 같은 클래스의 쓰기 메서드들이 쓰는 조회. {@link #get(UUID)} 을 직접 부르지 않는 이유는
+     * 스프링 AOP 가 프록시 기반이라 자기호출이 프록시를 건너뛰기 때문이다 — 지금은 전파
+     * (REQUIRED) 합류라 결과가 같지만, 나중에 이 메서드에 캐시나 권한 애노테이션이 붙으면
+     * 그날부터 조용히 무력화된다. 애노테이션 없는 private 로 두어 그 여지를 없앤다.
+     */
+    private AttendanceCampaign require(UUID campaignId) {
         return loadPort.findById(campaignId).orElseThrow(() -> new CampaignNotFoundException(campaignId));
     }
 }

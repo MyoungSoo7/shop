@@ -79,13 +79,13 @@ class MenuSeedIntegrationTest {
     }
 
     @Test
-    @DisplayName("시드 총 48행 — 커머스 + 운영 범위")
-    void seedsExactlyFortyEight() {
-        assertThat(adapter.findAll()).hasSize(48);
+    @DisplayName("시드 총 50행 — 커머스 + 운영 범위")
+    void seedsExactlyFifty() {
+        assertThat(adapter.findAll()).hasSize(50);
     }
 
     @Test
-    @DisplayName("최상위 18개가 상단 네비 순서대로 들어간다")
+    @DisplayName("최상위 19개가 상단 네비 순서대로 들어간다")
     void rootsInOrder() {
         List<Menu> roots = adapter.findAll().stream()
                 .filter(m -> m.getParentId() == null)
@@ -120,8 +120,11 @@ class MenuSeedIntegrationTest {
                 // 카테고리 탐색(60)도 그 뒤다. 자리는 '주문하기' 앞이 어울린다 — 둘러보고 고르는
                 // 순서라서 — 하지만 앞자리를 만들려면 이미 배포된 sort_order 를 전부 밀어야 한다.
                 // 경로가 /categories 가 아니라 /browse 인 것은 내 문의와 같은 이유다.
+                // 이벤트(65, V20260828190000)도 맨 뒤다 — 이유는 카테고리 탐색과 같다. 이 행은
+                // 화면만 이 SPA 에 있고 부르는 API 는 marketing-service 것이다(ADR 0045).
+                // 메뉴 원장은 order-service 의 menus 한 벌뿐이라 행 자체는 여기 있다.
                 "주문하기", "추천받기", "대량주문", "나눠 결제", "내 포인트·상품권", "내 알림", "내 문의",
-                "여러 곳 배송", "배송지 주소록", "포인트 선물", "카테고리 탐색");
+                "여러 곳 배송", "배송지 주소록", "포인트 선물", "카테고리 탐색", "이벤트");
     }
 
     @Test
@@ -152,7 +155,7 @@ class MenuSeedIntegrationTest {
     }
 
     @Test
-    @DisplayName("시스템 사이드바 28개 — 앞 3개와 게시판 관리가 RBAC permission 과 짝지어진다")
+    @DisplayName("시스템 사이드바 29개 — 앞 3개와 게시판 관리가 RBAC permission 과 짝지어진다")
     void systemChildren() {
         List<Menu> children = childrenOf("시스템 관리");
 
@@ -179,12 +182,15 @@ class MenuSeedIntegrationTest {
                 // 상품 옵션(V20260828180000)도 맨 뒤다 — '옵션 카탈로그' 바로 옆이 어울리지만
                 // 그 자리의 sort_order 가 차 있다. 이름이 비슷해도 다른 표면이다: 카탈로그는
                 // 축·값 사전이고 이쪽은 상품별 실물 SKU(재고·추가금)다.
-                "수강 신청", "강사 관리", "팝업 관리", "댓글 관리", "동의 이력", "상품 옵션");
+                // 이벤트 프로모션(V20260828190000)도 맨 뒤다. 이 그룹에서 유일하게 부르는 API 가
+                // order-service 것이 아니다 — marketing-service(8096) 다(ADR 0045). 그래도 행이
+                // 여기 있는 것은 메뉴 원장이 order-service 의 menus 한 벌뿐이기 때문이다.
+                "수강 신청", "강사 관리", "팝업 관리", "댓글 관리", "동의 이력", "상품 옵션", "이벤트 프로모션");
         assertThat(children).extracting(Menu::getRequiredPermission).containsExactly(
                 "SYSTEM_MENU_MANAGE", "SYSTEM_CODE_MANAGE", "SYSTEM_RBAC_MANAGE",
                 null, null, null, null, "SYSTEM_BOARD_MANAGE", null, null, null,
                 null, null, null, null, null, null, null,
-                null, null, null, null, null, null, null, null, null, null);
+                null, null, null, null, null, null, null, null, null, null, null);
         // 환불은 ADMIN·MANAGER — 서버가 /admin/refunds/** 를 그 등급으로 막는다(조회 전용 표면).
         // 시스템 그룹 안에서 유일하게 등급이 낮은 항목이라 명시적으로 못 박는다.
         assertThat(children.stream().filter(m -> m.getName().equals("환불 운영"))
@@ -264,7 +270,7 @@ class MenuSeedIntegrationTest {
     }
 
     @Test
-    @DisplayName("구매자 메뉴 11개는 USER 에게만 보인다 — 관리자 네비에는 주문/추천/대량주문/결제/잔액/알림/문의/여러곳배송/주소록/포인트선물/카테고리탐색이 없었다")
+    @DisplayName("구매자 메뉴 12개는 USER 에게만 보인다 — 관리자 네비에는 주문/추천/대량주문/결제/잔액/알림/문의/여러곳배송/주소록/포인트선물/카테고리탐색/이벤트가 없었다")
     void shopMenusAreUserOnly() {
         Set<String> shopNames = adapter.findAll().stream()
                 .filter(m -> m.getArea() == MenuArea.SHOP)
@@ -274,7 +280,7 @@ class MenuSeedIntegrationTest {
         assertThat(shopNames)
                 .containsExactlyInAnyOrder(
                         "주문하기", "추천받기", "대량주문", "나눠 결제", "내 포인트·상품권", "내 알림", "내 문의",
-                        "여러 곳 배송", "배송지 주소록", "포인트 선물", "카테고리 탐색");
+                        "여러 곳 배송", "배송지 주소록", "포인트 선물", "카테고리 탐색", "이벤트");
         assertThat(adapter.findAll()).filteredOn(m -> m.getArea() == MenuArea.SHOP)
                 .allSatisfy(m -> assertThat(m.allowedRoles()).containsExactly("USER"));
     }
