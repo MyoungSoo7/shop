@@ -4,6 +4,7 @@ import {
   sellerTierApi,
   type SellerTierGrade,
   type SellerTierPolicyView,
+  type SellerTierRoster,
   type TierAssignmentView,
   type TierEvaluationReport,
   type TierIntegrityReport,
@@ -113,6 +114,38 @@ describe('sellerTierApi', () => {
     // unreadable 이 0 이 아니면 그 자체가 조사 대상이다 — 0 으로 뭉개면 안 된다.
     expect(result.unreadable).toBe(1);
     expect(result.samples[0].kind).toBe('CACHE_STALE');
+  });
+
+  it('명부는 GET /admin/seller-tiers 로, 상한 없이도 부를 수 있다', async () => {
+    const roster: SellerTierRoster = {
+      rows: [{
+        sellerId: 13, email: 'vip@lemuel.co.kr', name: '김셀러', tier: 'VIP', cachedTier: 'NORMAL',
+        effectiveFrom: '2026-08-01', demotionGuardUntil: null, consecutiveMissCount: 1,
+        netSales12m: 820_000_000, productCount: 12, mismatched: true,
+      }],
+      total: 1,
+      truncated: false,
+    };
+    vi.mocked(api.get).mockResolvedValueOnce({ data: roster });
+
+    const result = await sellerTierApi.list();
+
+    expect(api.get).toHaveBeenCalledWith('/admin/seller-tiers', {
+      params: { limit: undefined, date: undefined },
+    });
+    // 불일치 판정은 서버 값을 그대로 싣는다 — 화면이 따로 비교하면 정합 검사 총계와 갈라진다.
+    expect(result.rows[0].mismatched).toBe(true);
+    expect(result.total).toBe(1);
+  });
+
+  it('명부 상한과 기준일은 그대로 전달된다', async () => {
+    vi.mocked(api.get).mockResolvedValueOnce({ data: { rows: [], total: 0, truncated: false } });
+
+    await sellerTierApi.list(50, '2026-09-01');
+
+    expect(api.get).toHaveBeenCalledWith('/admin/seller-tiers', {
+      params: { limit: 50, date: '2026-09-01' },
+    });
   });
 
   it('임계 조회는 파라미터가 없다', async () => {

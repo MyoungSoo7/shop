@@ -1,6 +1,7 @@
 package github.lms.lemuel.sellertier.config;
 
 import github.lms.lemuel.sellertier.application.port.out.LoadSellerNetSalesPort;
+import github.lms.lemuel.sellertier.application.port.out.LoadSellerTierRosterPort;
 import github.lms.lemuel.sellertier.application.port.out.LoadTierAssignmentPort;
 import github.lms.lemuel.sellertier.application.port.out.SaveTierAssignmentPort;
 import github.lms.lemuel.sellertier.application.port.out.PublishSellerTierEventPort;
@@ -8,6 +9,7 @@ import github.lms.lemuel.sellertier.application.port.out.SaveTierHistoryPort;
 import github.lms.lemuel.sellertier.application.port.out.LoadTierCacheDriftPort;
 import github.lms.lemuel.sellertier.application.service.CheckSellerTierIntegrityService;
 import github.lms.lemuel.sellertier.application.service.EvaluateSellerTiersService;
+import github.lms.lemuel.sellertier.application.service.ListSellerTiersService;
 import github.lms.lemuel.sellertier.application.service.OverrideSellerTierService;
 import github.lms.lemuel.sellertier.application.service.SellerTierChangeProcessor;
 import github.lms.lemuel.sellertier.domain.SellerTierPolicy;
@@ -46,6 +48,15 @@ public class SellerTierConfig {
             SellerTierPolicy policy,
             @Value("${app.seller-tier.miss-threshold:2}") int missThreshold) {
         return new EvaluateSellerTiersService(netSalesPort, loadPort, processor, policy, missThreshold);
+    }
+
+    /**
+     * 명부 조회. 등급을 <b>바꾸는</b> 유스케이스들과 달리 정책·임계를 받지 않는다 — 저장된 값을
+     * 그대로 보여주는 것이 전부이고, 여기서 정책을 다시 적용하면 화면의 등급과 실제 적용 등급이 갈린다.
+     */
+    @Bean
+    public ListSellerTiersService listSellerTiersService(LoadSellerTierRosterPort rosterPort) {
+        return new ListSellerTiersService(rosterPort);
     }
 
     @Bean

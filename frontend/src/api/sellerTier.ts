@@ -67,6 +67,34 @@ export interface SellerTierPolicyView {
   strategicThreshold: number;
 }
 
+/**
+ * 명부 한 행. 서버가 저장된 값을 그대로 준 것이라, 화면은 이 값을 다시 판정하지 않는다.
+ *
+ * - `tier` 는 정본(`seller_tier_assignment`), `cachedTier` 는 결제가 실제로 싣는 읽기 캐시다.
+ * - `tier` 가 null 이면 아직 한 번도 산정되지 않은 셀러다(오류가 아니다).
+ */
+export interface SellerTierRow {
+  sellerId: number;
+  email: string | null;
+  name: string | null;
+  tier: string | null;
+  cachedTier: string | null;
+  effectiveFrom: string | null;
+  demotionGuardUntil: string | null;
+  consecutiveMissCount: number;
+  netSales12m: number;
+  productCount: number;
+  /** 정본↔캐시 불일치. 서버 판정을 그대로 쓴다 — 화면이 따로 비교하면 정합 검사 총계와 갈라진다. */
+  mismatched: boolean;
+}
+
+export interface SellerTierRoster {
+  rows: SellerTierRow[];
+  /** 전체 셀러 수. `rows.length` 와 다를 수 있다(상한에 잘린 경우). */
+  total: number;
+  truncated: boolean;
+}
+
 export interface TierAssignmentView {
   sellerId: number;
   tier: string;
@@ -76,6 +104,15 @@ export interface TierAssignmentView {
 }
 
 export const sellerTierApi = {
+  /**
+   * GET /admin/seller-tiers — 셀러 명부.
+   *
+   * <p>이 콘솔에서 "누가 몇 등급인가"에 답하는 유일한 경로다. 나머지는 전부 <b>바꾸는</b> 길이라,
+   * 이게 없으면 관리자는 지정할 셀러 ID 를 이미 알고 있어야만 콘솔을 쓸 수 있다.
+   */
+  list: async (limit?: number, date?: string): Promise<SellerTierRoster> =>
+    (await api.get<SellerTierRoster>('/admin/seller-tiers', { params: { limit, date } })).data,
+
   /**
    * POST /evaluate — 등급 재산정.
    *
