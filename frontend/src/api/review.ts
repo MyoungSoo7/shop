@@ -8,9 +8,15 @@ export const reviewApi = {
     return response.data;
   },
 
-  /** GET /reviews/product/{productId} */
+  /**
+   * GET /reviews/product/{productId}
+   *
+   * <p>부가 정보라 호출부(주문 화면·추천 화면)가 실패를 그대로 삼킨다. 전역 토스트도 함께 끈다.
+   */
   getProductReviews: async (productId: number): Promise<ReviewResponse[]> => {
-    const response = await api.get<ReviewResponse[]>(`/reviews/product/${productId}`);
+    const response = await api.get<ReviewResponse[]>(`/reviews/product/${productId}`, {
+      skipAuthToast: true,
+    });
     return response.data;
   },
 

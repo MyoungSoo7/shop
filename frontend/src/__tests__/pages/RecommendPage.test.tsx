@@ -40,12 +40,20 @@ beforeEach(() => {
 });
 
 describe('RecommendPage — 로드', () => {
-  it('상품·쿠폰·날씨를 함께 읽고 실시간 기온을 보여 준다', async () => {
+  it('상품·날씨를 함께 읽고 실시간 기온을 보여 준다', async () => {
     render(<MemoryRouter><RecommendPage /></MemoryRouter>);
 
     expect(await screen.findByText(/21\.4℃/)).toBeInTheDocument();
     expect(mockedProduct.getAvailableProducts).toHaveBeenCalled();
-    expect(mockedCoupon.getAll).toHaveBeenCalled();
+  });
+
+  // GET /coupons 는 비활성 쿠폰까지 주는 ADMIN/MANAGER 전용 API 다. USER 로 이 화면에 들어오면
+  // 403 이 떨어져 "접근 권한이 없습니다" 토스트만 뜨고 할인은 어차피 반영되지 않았다.
+  it('관리자 전용 쿠폰 목록 API 는 부르지 않는다', async () => {
+    render(<MemoryRouter><RecommendPage /></MemoryRouter>);
+
+    expect(await screen.findByText(/21\.4℃/)).toBeInTheDocument();
+    expect(mockedCoupon.getAll).not.toHaveBeenCalled();
   });
 
   it('상품 조회 실패는 사유를 보여 준다', async () => {
@@ -53,13 +61,6 @@ describe('RecommendPage — 로드', () => {
     render(<MemoryRouter><RecommendPage /></MemoryRouter>);
 
     expect(await screen.findByText('상품 목록을 불러오지 못했습니다.')).toBeInTheDocument();
-  });
-
-  it('쿠폰 조회 실패는 화면을 막지 않는다 (할인 반영만 생략)', async () => {
-    mockedCoupon.getAll.mockRejectedValue(new Error('down'));
-    render(<MemoryRouter><RecommendPage /></MemoryRouter>);
-
-    expect(await screen.findByRole('button', { name: '추천받기' })).toBeEnabled();
   });
 
   it('날씨를 못 받으면 수동 계절 선택으로 폴백한다', async () => {

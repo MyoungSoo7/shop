@@ -30,6 +30,12 @@ describe('categorize — 상품명 키워드로 카테고리 판별', () => {
     expect(categorize('나이키 클럽 조거팬츠')).toBe('BOTTOM');
   });
 
+  // 품목어 없이 브랜드·모델명만 있는 이름. 이게 null 이면 카탈로그의 유일한 패션 상품이 빠져
+  // "패션 상품 0개" 로 추천 버튼이 잠긴다.
+  it('품목어 없는 신발 모델명도 신발로 판별한다', () => {
+    expect(categorize('나이키 에어맥스 270')).toBe('SHOES');
+  });
+
   it('비패션 상품은 null 로 제외된다', () => {
     expect(categorize('애플 맥북 프로 14인치')).toBeNull();
     expect(categorize('삼성 갤럭시 S25 울트라')).toBeNull();

@@ -2,7 +2,6 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { productApi } from '@/api/product';
 import { reviewApi } from '@/api/review';
-import { couponApi } from '@/api/coupon';
 import { fetchCurrentWeather, describeWeatherCode } from '@/api/weather';
 import {
   recommend,
@@ -14,7 +13,6 @@ import {
   type ScoredProduct,
   type StyleSituation,
   type Season,
-  type RecoCoupon,
   type ReviewStat,
   type BrandReco,
 } from '@/lib/fashionRecommend';
@@ -53,7 +51,6 @@ const RecommendPage: React.FC = () => {
 
   // ── 원천 데이터 ──
   const [products, setProducts] = useState<{ id: number; name: string; price: number }[]>([]);
-  const [coupons, setCoupons] = useState<RecoCoupon[]>([]);
   const [loadingData, setLoadingData] = useState(true);
   const [dataError, setDataError] = useState<string | null>(null);
 
@@ -72,7 +69,15 @@ const RecommendPage: React.FC = () => {
   const [brands, setBrands] = useState<BrandReco[]>([]);
   const [computing, setComputing] = useState(false);
 
-  // 상품 + 쿠폰 로딩
+  // 상품 로딩
+  //
+  // 쿠폰 할인 축은 지금 비어 있다. 여기서 쓰려면 코드·유형·최소주문금액을 담은 쿠폰 "목록" 이
+  // 필요한데, 그걸 주는 GET /coupons 는 비활성 쿠폰까지 전부 노출하는 관리자 API 라
+  // SecurityConfig 에서 ADMIN/MANAGER 로 막혀 있다. USER 로 이 화면에 들어오면 403 이 떨어져
+  // 할인은 어차피 반영되지 않으면서 전역 토스트만 떴다. USER 도 되는 GET /coupons/available 은
+  // userId·amount 를 받아 금액 하나에 대한 판정(valid/discountAmount/finalAmount)만 주므로,
+  // 여러 상품을 한꺼번에 매기는 이 계산엔 못 쓴다. 되살리려면 "활성 공개 쿠폰 목록" 엔드포인트를
+  // 따로 열어야 한다.
   useEffect(() => {
     setLoadingData(true);
     productApi
@@ -87,23 +92,6 @@ const RecommendPage: React.FC = () => {
       })
       .catch(() => setDataError('상품 목록을 불러오지 못했습니다.'))
       .finally(() => setLoadingData(false));
-
-    couponApi
-      .getAll()
-      .then((list) =>
-        setCoupons(
-          list.map((c) => ({
-            code: c.code,
-            type: c.type,
-            discountValue: c.discountValue,
-            minOrderAmount: c.minOrderAmount,
-            isActive: c.isActive,
-          })),
-        ),
-      )
-      .catch(() => {
-        /* 쿠폰 실패는 무시 — 할인 반영만 생략 */
-      });
   }, []);
 
   // 실시간 날씨
@@ -129,7 +117,6 @@ const RecommendPage: React.FC = () => {
       // 1차: 리뷰 없이 랭킹 → 상위 후보만 리뷰 병렬 조회 (과호출 방지)
       const first = recommend({
         products,
-        coupons,
         budget,
         temperature: weatherFailed ? null : temperature,
         season,
@@ -157,7 +144,6 @@ const RecommendPage: React.FC = () => {
       // 2차: 평판 축 반영 재계산
       const final = recommend({
         products,
-        coupons,
         reviews,
         budget,
         temperature: weatherFailed ? null : temperature,

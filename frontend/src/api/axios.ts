@@ -1,6 +1,22 @@
 import axios, { AxiosError, InternalAxiosRequestConfig } from 'axios';
 import { getAuthStorage } from '@/lib/authStorage';
 
+/**
+ * 실패를 호출부가 직접 삼키는 요청에 붙이는 표시.
+ *
+ * <p>화면이 "실패해도 그만" 으로 처리한 호출까지 인터셉터가 "접근 권한이 없습니다" 를 띄우면,
+ * 정상 동작하는 화면 위에 경고만 뜨는 상태가 된다. 그런 호출은 이 플래그로 전역 토스트를 끈다.
+ * 콘솔 로그는 그대로 남기므로 개발자는 여전히 403 을 본다.
+ */
+declare module 'axios' {
+  // 타입 파라미터는 axios 원본 선언(<D = any, P = any>)과 이름·기본값까지 같아야 병합된다.
+  // 여기서는 안 쓰지만 지우거나 `_D` 로 바꾸면 TS2428 로 병합이 깨진다.
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any, @typescript-eslint/no-unused-vars
+  export interface AxiosRequestConfig<D = any, P = any> {
+    skipAuthToast?: boolean;
+  }
+}
+
 // Toast 관리를 위한 전역 참조
 let globalShowToast: ((message: string, type: 'success' | 'error' | 'warning' | 'info') => void) | null = null;
 
@@ -64,7 +80,7 @@ api.interceptors.response.use(
         console.error('[개발자] 비밀번호 재설정 API가 Spring Security에서 차단됨. SecurityConfig 확인 필요:', error.response.data);
       }
 
-      if (globalShowToast) {
+      if (globalShowToast && !error.config?.skipAuthToast) {
         globalShowToast('접근 권한이 없습니다.', 'error');
       }
       console.error('Access denied:', error.response.data);

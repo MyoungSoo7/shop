@@ -30,7 +30,8 @@ describe('reviewApi', () => {
 
     const result = await reviewApi.getProductReviews(42);
 
-    expect(api.get).toHaveBeenCalledWith('/reviews/product/42');
+    // 실패를 호출부가 삼키는 부가 정보라 전역 403 토스트도 함께 끈다.
+    expect(api.get).toHaveBeenCalledWith('/reviews/product/42', { skipAuthToast: true });
     expect(result).toHaveLength(1);
   });
 

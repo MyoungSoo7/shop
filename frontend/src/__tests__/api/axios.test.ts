@@ -97,4 +97,18 @@ describe('axios interceptors', () => {
     expect(showToast).toHaveBeenCalledWith('네트워크 오류가 발생했습니다. 인터넷 연결을 확인해주세요.', 'error');
     expect(consoleSpy).toHaveBeenCalled();
   });
+
+  it('skipAuthToast 요청의 403 은 토스트를 띄우지 않고 콘솔에만 남긴다', async () => {
+    const showToast = vi.fn();
+    const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    setGlobalToast(showToast);
+
+    await expect(responseRejected()({
+      response: { status: 403, data: 'denied' },
+      config: { url: '/reviews/product/1', skipAuthToast: true },
+    })).rejects.toMatchObject({ response: { status: 403 } });
+
+    expect(showToast).not.toHaveBeenCalled();
+    expect(consoleSpy).toHaveBeenCalledWith('Access denied:', 'denied');
+  });
 });
