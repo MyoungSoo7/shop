@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "title": "lemuel.marketing.reward_requested",
   "description": "이벤트 프로모션(출석체크·럭키박스)이 포인트 적립을 요청한 사실. marketing-service 는 포인트 원장을 갖지 않는다 — 이 이벤트는 '지급했다'가 아니라 '지급해 달라'다. 적립을 실제로 수행하는 쪽은 order-service 의 포인트 원장이고, 그 결과는 lemuel.point.granted 로 돌아온다.",
-  "$comment": "멱등: 소비측은 (referenceType=\"PROMOTION\", referenceId=rewardId) 로 적립을 멱등 처리한다. 같은 rewardId 가 두 번 도착해도 로트는 하나다. 재처리가 정상 경로이므로 소비측은 중복을 오류로 보지 않는다.",
+  "$comment": "멱등: 소비측은 (referenceType=source 값, referenceId=rewardId) 로 적립을 멱등 처리한다. referenceType 은 위 source 열거값(ATTENDANCE_DAILY 등)을 그대로 쓴다 — 고정 문자열이 아니다. 이 짝은 lemuel.point.granted 로 그대로 되돌아와 마케팅이 보상을 확정하는 데 쓰이므로, 한쪽만 바꾸면 적립은 되고 확정만 조용히 멈춘다. 같은 rewardId 가 두 번 도착해도 로트는 하나다. 재처리가 정상 경로이므로 소비측은 중복을 오류로 보지 않는다.",
   "type": "object",
   "properties": {
     "rewardId": {
@@ -19,8 +19,11 @@
       "format": "uuid"
     },
     "campaignName": {
-      "description": "발행 시점의 캠페인 이름 스냅샷. 캠페인이 나중에 이름을 바꿔도 이미 나간 적립의 적요는 그대로여야 한다.",
-      "type": "string"
+      "description": "발행 시점의 캠페인 이름 스냅샷. 캠페인이 나중에 이름을 바꿔도 이미 나간 적립의 적요는 그대로여야 한다. null 일 수 있다 — 일괄 지급 경로는 캠페인을 찾지 못하면 보상 메모로 대체하는데 그 메모도 없을 수 있고, 이름 하나 때문에 지급을 막지는 않기 때문이다. 수신 측은 이 값이 없으면 보상 종류로 적요를 만든다.",
+      "type": [
+        "string",
+        "null"
+      ]
     },
     "source": {
       "description": "어느 이벤트가 만든 보상인가. ATTENDANCE_DAILY=출석 일일 보상, ATTENDANCE_GOAL=연속/누적 목표 달성 보상, LUCKYBOX=럭키박스 당첨.",
