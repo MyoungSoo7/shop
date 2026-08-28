@@ -23,6 +23,10 @@ import org.springframework.security.web.authentication.UsernamePasswordAuthentic
  *       Alertmanager 는 compose 내부에서 직접 호출하며, 게이트웨이 경유 외부 유입도 같은 필터가 차단.</li>
  *   <li>그 외 /api/ops/** — 운영자 콘솔이므로 JWT ROLE_ADMIN 전용.</li>
  * </ul>
+ *
+ * <p>체인 맨 앞에는 {@link OpsAccessLogFilter} 가 선다. 인증·인가 거부(401·403)는 이 체인 안에서
+ * 끝나 바깥의 어떤 로깅에도 잡히지 않으므로, <b>거부된 접근을 보려면 관측 지점이 체인 안에 있어야
+ * 한다</b>. 감싸는 자리라 응답 코드는 되받고, 행위자는 안쪽 인증 필터가 채운 뒤라 함께 남는다.
  */
 @Configuration
 public class OperationSecurityConfig {
@@ -62,7 +66,10 @@ public class OperationSecurityConfig {
                                 response.sendError(HttpServletResponse.SC_FORBIDDEN, "Forbidden"))
                 )
                 .addFilterBefore(jwtAuthenticationFilter, UsernamePasswordAuthenticationFilter.class)
-                .addFilterBefore(opsWebhookAuthFilter, JwtAuthenticationFilter.class);
+                .addFilterBefore(opsWebhookAuthFilter, JwtAuthenticationFilter.class)
+                // 웹훅 인증 필터보다도 앞 = 이 체인이 거부하는 모든 경우를 감싼다. 빈으로 받지 않고
+                // 여기서 만드는 이유는 클래스 주석 참조(빈이면 서블릿 컨테이너에도 자동 등록돼 두 번 찍힘).
+                .addFilterBefore(new OpsAccessLogFilter(), OpsWebhookAuthFilter.class);
 
         return http.build();
     }
