@@ -1,10 +1,22 @@
 package github.lms.lemuel;
 
+import github.lms.lemuel.common.config.kafka.KafkaConsumerErrorHandlingConfig;
 import io.github.cdimascio.dotenv.Dotenv;
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
+import org.springframework.context.annotation.Import;
 import org.springframework.scheduling.annotation.EnableScheduling;
 
+/**
+ * DLT 배선을 <b>명시적으로</b> 끌어온다.
+ *
+ * <p>이 서비스의 컴포넌트 스캔은 루트가 아니라 아래 열거식이다. 지금은 목록에
+ * {@code github.lms.lemuel.common} 이 들어 있어 결과적으로 배선이 잡히지만, 그건 우연에 가깝다 —
+ * 누군가 스캔 목록을 정리하면서 common 을 빼는 순간 배선이 사라지고, 그래도 <b>기동은 성공한다</b>.
+ * Spring Kafka 기본 핸들러가 대신 뜨고 재시도 소진 메시지를 조용히 skip 하기 때문이다(사실상 유실).
+ * order 에 첫 {@code @KafkaListener}({@code MarketingRewardConsumer})가 붙는 지금 못을 박는다.
+ */
+@Import(KafkaConsumerErrorHandlingConfig.class)
 @SpringBootApplication(
     scanBasePackages = {
         "github.lms.lemuel.config",

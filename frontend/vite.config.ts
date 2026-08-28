@@ -93,6 +93,11 @@ export default defineConfig({
         target: 'http://localhost:8092',
         changeOrigin: true,
       },
+      // 이벤트 프로모션은 marketing(8096)이 서빙한다(ADR 0045) — 같은 이유로 '/api' 앞이다.
+      '/api/promotions': {
+        target: 'http://localhost:8096',
+        changeOrigin: true,
+      },
       '/api': {
         target: 'http://localhost:8088',
         changeOrigin: true,
@@ -106,6 +111,10 @@ export default defineConfig({
       },
       '/admin/education': {
         target: 'http://localhost:8092',
+        changeOrigin: true,
+      },
+      '/admin/promotions': {
+        target: 'http://localhost:8096',
         changeOrigin: true,
       },
       '/admin': {

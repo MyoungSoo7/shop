@@ -201,6 +201,15 @@
       "replicas": 1,
       "retentionDays": 7,
       "$comment": "기프트카드 소멸 — DR GIFT_CARD_LIABILITY / CR GIFT_CARD_BREAKAGE_INCOME"
+    },
+    {
+      "name": "lemuel.marketing.reward_requested",
+      "owner": "marketing-service",
+      "orderingKey": "rewardId",
+      "partitions": 3,
+      "replicas": 1,
+      "retentionDays": 7,
+      "$comment": "출석·럭키박스 보상 지급 요청 — marketing 은 원장을 갖지 않는다. order 의 포인트 원장이 이걸 듣고 적립하고, 그 결과인 lemuel.point.granted 를 marketing 이 되받아 보상을 CONFIRMED 로 닫는다. 정렬키가 memberRef 가 아니라 rewardId 인 이유: 한 회원의 보상은 서로 순서 의존이 없는데 회원으로 묶으면 헤비유저 한 명이 파티션 하나를 막는다(head-of-line blocking)."
     }
   ]
 }

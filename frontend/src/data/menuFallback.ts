@@ -120,6 +120,7 @@ export const FALLBACK_MENUS: FallbackMenuNode[] = [
       // 상품 옵션은 '옵션 카탈로그'(축·값 사전) 옆이 어울리지만 그 자리의 sort_order 가 차 있어
       // 맨 뒤다. 등급은 ADMIN 만 — 재고 차감이 주문 없이 재고를 줄이고 되돌릴 수 없어서다.
       { id: -127, name: '상품 옵션', path: '/admin/system/product-variants', icon: '🧩', description: '상품별 SKU 재고 · 추가금 · 조합 해석', area: 'SYSTEM', type: 'ITEM', roles: ['ADMIN'] },
+      { id: -128, name: '이벤트 프로모션', path: '/admin/system/promotions', icon: '🎉', description: '출석체크 · 럭키박스 캠페인 등록 · 여닫기 · 경품', area: 'SYSTEM', type: 'ITEM', roles: ['ADMIN'] },
     ],
   },
   {
@@ -180,6 +181,12 @@ export const FALLBACK_MENUS: FallbackMenuNode[] = [
     // 화면 경로를 API 세그먼트와 겹치지 않게 둔다. 고른 분류는 ?category=슬러그로 남는다.
     id: -18, name: '카테고리 탐색', path: '/browse', icon: '🧭',
     description: '분류를 골라 그 안의 상품 둘러보기',
+    area: 'SHOP', type: 'ITEM', roles: ['USER'],
+  },
+  {
+    // 이벤트 — 화면은 여기(SPA), API 는 marketing-service 가 서빙한다(ADR 0045).
+    id: -19, name: '이벤트', path: '/promotions', icon: '🎁',
+    description: '출석체크 · 럭키박스 참여',
     area: 'SHOP', type: 'ITEM', roles: ['USER'],
   },
 ];

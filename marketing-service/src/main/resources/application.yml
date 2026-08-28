@@ -1,0 +1,145 @@
+spring:
+  profiles:
+    active: local
+
+  application:
+    name: lemuel-marketing
+
+  threads:
+    virtual:
+      enabled: true
+
+  # ★ marketing-service 는 자체 DB(lemuel_marketing) 를 소유한다 (DB-per-service).
+  #   로컬 기본값은 compose 의 호스트 매핑(127.0.0.1:5441 → marketing-postgres:5432)을 가리킨다.
+  datasource:
+    url: jdbc:postgresql://localhost:5441/lemuel_marketing?reWriteBatchedInserts=true
+    username: ${POSTGRES_USER}
+    password: ${POSTGRES_PASSWORD}
+    driver-class-name: org.postgresql.Driver
+    hikari:
+      pool-name: lemuel-marketing-pool
+      maximum-pool-size: ${DB_POOL_MAX:20}
+      minimum-idle: ${DB_POOL_MIN_IDLE:5}
+      connection-timeout: 10000
+      leak-detection-threshold: 30000
+      # 형제 서비스와 같은 이유로 둔다 — 파드와 postgres 가 다른 노드에 있으면 유휴 커넥션이
+      # CNI/conntrack 상태 만료로 소리 없이 끊기고, 다음 borrow 에서 08003 으로 터진다.
+      max-lifetime: 1800000     # 30분
+      keepalive-time: 300000    # 5분
+
+  jpa:
+    hibernate:
+      ddl-auto: validate
+    show-sql: false
+    open-in-view: false
+    properties:
+      hibernate:
+        # ★ shared-common OutboxSchema 가 이 값을 읽어 outbox 네이티브 쿼리의 스키마를 정한다.
+        #   (@Value("${spring.jpa.properties.hibernate.default_schema:public}")) — 여기와
+        #   flyway.schemas 가 어긋나면 폴러가 없는 테이블을 찾는다.
+        default_schema: marketing
+        jdbc:
+          batch_size: 50
+          batch_versioned_data: true
+        order_inserts: true
+        order_updates: true
+
+  # 자체 DB 마이그레이션을 직접 책임진다 (V1 프로모션 코어, V2 outbox/멱등 인프라).
+  flyway:
+    enabled: true
+    schemas: marketing
+    locations: classpath:db/migration
+
+  cache:
+    type: caffeine
+    caffeine:
+      spec: maximumSize=500,expireAfterWrite=600s
+
+  # Kafka — 발행은 outbox 폴러가, 구독은 PointGrantedConsumer 가 한다.
+  # group-id 는 모듈 소유 규칙(guard KAFKA-GROUP-OWNER): <module>-service → lemuel-<module>.
+  # auto-offset-reset=earliest — 보상 확정(REQUESTED→CONFIRMED)은 놓치면 화면이 영원히
+  # "적립 처리 중" 으로 남는다. 트렌드 신호와 달리 과거분도 따라잡아야 한다.
+  kafka:
+    bootstrap-servers: ${SPRING_KAFKA_BOOTSTRAP_SERVERS:localhost:9092}
+    consumer:
+      group-id: lemuel-marketing
+      auto-offset-reset: earliest
+      enable-auto-commit: false
+      properties:
+        isolation.level: read_committed
+    listener:
+      ack-mode: manual_immediate
+      missing-topics-fatal: false
+
+  lifecycle:
+    timeout-per-shutdown-phase: 30s
+
+server:
+  port: 8096
+  shutdown: graceful
+  servlet:
+    encoding:
+      charset: UTF-8
+      enabled: true
+      force: true
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics,prometheus
+      base-path: /actuator
+  endpoint:
+    prometheus:
+      enabled: true
+    health:
+      show-details: when-authorized
+      probes:
+        enabled: true
+  health:
+    elasticsearch:
+      enabled: false
+    db:
+      enabled: true
+  server:
+    port: 8097
+  metrics:
+    tags:
+      application: ${spring.application.name}
+      environment: ${ENVIRONMENT:local}
+
+springdoc:
+  api-docs:
+    path: /v3/api-docs
+  swagger-ui:
+    path: /swagger-ui.html
+
+app:
+  # Kafka 컨슈머·인프라 빈 토글 (shared-common KafkaConfig + 컨슈머의 @ConditionalOnProperty).
+  # 로컬/테스트 기본 off — 브로커 없이 부팅. compose/운영에서 APP_KAFKA_ENABLED=true 주입.
+  kafka:
+    enabled: ${APP_KAFKA_ENABLED:false}
+    topic:
+      # ADR 0035 — 이 모듈이 발행(소유)하는 토픽만 owner 로 선언한다(파티션 정본은 topic-catalog.json).
+      # Outbox 폴러가 aggregateType="Marketing" + eventType="RewardRequested" 에서 토픽명을 파생한다.
+      owner: marketing-service
+      reward-requested: lemuel.marketing.reward_requested
+      # 구독 — 포인트 적립이 실제로 성사됐다는 사실. 이걸 받아야 보상이 CONFIRMED 로 넘어간다.
+      point-granted: ${MARKETING_TOPIC_POINT_GRANTED:lemuel.point.granted}
+
+  # Outbox → Kafka 발행 폴링 주기.
+  outbox:
+    polling-delay-ms: ${APP_OUTBOX_POLLING_DELAY_MS:2000}
+
+  # JWT — shared-common JwtProperties(prefix=app.jwt). 루트 스캔이 common.config.jwt 를 잡으므로
+  # secret 이 필수다(order-service 와 동일 시크릿이어야 회원 토큰이 여기서도 검증된다).
+  jwt:
+    issuer: ${JWT_ISSUER:lemuel}
+    secret: ${JWT_SECRET}
+    ttl-seconds: ${JWT_TTL_SECONDS:3600}
+
+  marketing:
+    # 일괄 지급(BENEFIT_TYPE=2) 캠페인의 정산 스케줄. 즉시 지급(1)은 참여 시점에 바로 요청을 낸다.
+    settlement:
+      enabled: ${MARKETING_SETTLEMENT_ENABLED:true}
+      cron: ${MARKETING_SETTLEMENT_CRON:0 5 3 * * *}

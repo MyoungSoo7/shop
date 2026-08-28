@@ -304,8 +304,8 @@ Course(교육) : DRAFT → PUBLISHED ⇄ HIDDEN → CLOSED  (삭제 없음 — �
 
 ## 5. 이벤트 카탈로그
 
-계약 스키마·정본 샘플: `shared-common/src/testFixtures/resources/contracts/events/` — **21개 토픽**(ADR 0024).
-전송 속성(파티션·보존·순서키) 정본은 별도다 — `kafka/topic-catalog.json` 등재 **21건**(§2.2, ADR 0035).
+계약 스키마·정본 샘플: `shared-common/src/testFixtures/resources/contracts/events/` — **22개 토픽**(ADR 0024).
+전송 속성(파티션·보존·순서키) 정본은 별도다 — `kafka/topic-catalog.json` 등재 **22건**(§2.2, ADR 0035).
 둘은 1:1 이다. 2026-08-26 이전에는 `lemuel.education.course_published` 만 계약 스키마가 없어
 카탈로그가 하나 더 많았고, 그 사실이 여기 각주로만 적혀 있었다 — 각주는 결함을 설명할 뿐 막지 않는다.
 
@@ -322,7 +322,9 @@ Course(교육) : DRAFT → PUBLISHED ⇄ HIDDEN → CLOSED  (삭제 없음 — �
 | `lemuel.user.registered`                                                                | order                        | operation(오늘 집계 — 2026-08-25 편입)             |
 | `lemuel.product.changed`                                                                | order                        | 발행 전용 — 소비자는 이 저장소 밖                  |
 | `lemuel.seller.tier_changed`                                                            | order                        | 발행 전용. `reason=BACKFILL` 은 변경이 아니라 초기 적재용 재발행(ADR 0031) |
-| `lemuel.point.charged` / `.granted` / `.used` / `.restored` / `.expired` / `.revoked`   | order                        | 발행 전용 — 포인트 부채 GL 소비자는 이 저장소 밖. 순서키 `accountId` |
+| `lemuel.point.charged` / `.used` / `.restored` / `.expired` / `.revoked`                | order                        | 발행 전용 — 포인트 부채 GL 소비자는 이 저장소 밖. 순서키 `accountId` |
+| `lemuel.point.granted`                                                                  | order                        | marketing(보상 확정 — 2026-08-27 편입). 순서키 `accountId` |
+| `lemuel.marketing.reward_requested`                                                     | marketing                    | order(포인트 원장 적립). 순서키 `rewardId`         |
 | `lemuel.giftcard.registered` / `.used` / `.restored` / `.expired`                       | order                        | 발행 전용 — 상품권 부채 GL 소비자는 이 저장소 밖. 순서키 `giftCardId` |
 | `lemuel.organization.created` / `.member_joined` / `.member_role_changed` / `.member_removed` | order(organization 슬라이스) | 발행 전용 — 조직 마스터 통지, 소비자는 이 저장소 밖 |
 | `lemuel.education.course_published`                                                     | operation(education 슬라이스) | 발행 전용 — 과정 공개 통지. 순서키 `courseId`      |
@@ -341,6 +343,11 @@ Course(교육) : DRAFT → PUBLISHED ⇄ HIDDEN → CLOSED  (삭제 없음 — �
 > 컨슈머(`BusinessEventDashboardConsumer`)가 생기면서 발행 전용에서 빠졌다. 스키마는 이미
 > 있었으므로 편입 비용은 **정본 샘플을 실제 컨슈머에 통과시키는 테스트 한 건**이었다
 > (`BusinessEventDashboardConsumerTest`). 게이트의 "죽은 항목" 검사가 목록을 지우라고 먼저 말했다.
+>
+> 2026-08-27 에 같은 일이 `lemuel.point.granted` 에 일어났다. marketing 이 자기가 요청한 보상의
+> 적립을 되돌아오는 이 이벤트로 확정하면서 `.charged` 이하 다섯과 한 줄에 묶여 있던 것을 떼어냈다.
+> **포인트 여섯이 한 행이었다는 게 문제였다** — 그중 하나만 소비자가 생겨도 행 전체가 "발행 전용"
+> 이라고 계속 주장한다. 표의 한 칸이 여러 토픽을 대표하면 그 칸은 가장 느슨한 토픽만 설명한다.
 
 역방향 예약: `lemuel.ops.order.failed` 는 operation 이 구독하지만 emit 지점 미배선
 (OpsSignalCategory 주석 참조).

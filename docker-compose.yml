@@ -63,6 +63,28 @@ services:
   # board·education 은 operation-service 의 슬라이스라 별도 DB 가 없다 —
   # lemuel_operation 안의 board·education 스키마를 쓴다.
 
+  # ★ DB-per-service: marketing-service 전용 PostgreSQL (이벤트 프로모션 — 출석체크·럭키박스)
+  marketing-postgres:
+    image: postgres:17-alpine
+    container_name: lemuel-marketing-db
+    env_file:
+      - path: .env
+        required: false
+    environment:
+      POSTGRES_DB: lemuel_marketing
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+    ports:
+      - "127.0.0.1:5441:5432"
+    volumes:
+      - marketing-postgres-data:/var/lib/postgresql/data
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB"]
+      interval: 10s
+      timeout: 3s
+      retries: 10
+
   elasticsearch:
     image: docker.elastic.co/elasticsearch/elasticsearch:8.17.0
     container_name: lemuel-elasticsearch
@@ -287,6 +309,53 @@ services:
       redpanda:
         condition: service_healthy
 
+  marketing-service:
+    build:
+      context: .
+      args:
+        MODULE: marketing-service
+    image: ghcr.io/myoungsoo7/lemuel-marketing:latest
+    container_name: lemuel-marketing
+    env_file:
+      - path: .env
+        required: false
+    environment:
+      SPRING_PROFILES_ACTIVE: prod
+      # 자체 DB(lemuel_marketing) — 이벤트 프로모션 저장소. 타 서비스와 코드·DB 의존 0.
+      SPRING_DATASOURCE_URL: jdbc:postgresql://marketing-postgres:5432/lemuel_marketing?reWriteBatchedInserts=true
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      # JWT 시크릿은 order-service 와 동일해야 참여자·운영자 토큰 검증이 된다.
+      JWT_ISSUER: ${JWT_ISSUER}
+      JWT_SECRET: ${JWT_SECRET}
+      JWT_TTL_SECONDS: ${JWT_TTL_SECONDS}
+      # 보상 지급은 Kafka 왕복이다: reward_requested 발행(outbox) → order 가 적립 →
+      # point.granted 를 여기서 받아 확정. 이게 꺼지면 화면이 영원히 "적립 처리 중" 으로 남는다.
+      APP_KAFKA_ENABLED: "true"
+      SPRING_KAFKA_BOOTSTRAP_SERVERS: redpanda:29092
+      CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost:3000}
+      JAVA_OPTS: "-XX:+UseContainerSupport -XX:MaxRAMPercentage=75.0 -XX:InitialRAMPercentage=50.0"
+      SERVER_PORT: 8080
+      MANAGEMENT_SERVER_PORT: 8080
+    ports:
+      - "127.0.0.1:8096:8080"
+    restart: unless-stopped
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "curl -fsS http://localhost:8080/actuator/health || exit 1",
+        ]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+      start_period: 60s
+    depends_on:
+      marketing-postgres:
+        condition: service_healthy
+      redpanda:
+        condition: service_healthy
+
   gateway-service:
     build:
       context: .
@@ -301,6 +370,7 @@ services:
       SPRING_PROFILES_ACTIVE: prod
       ORDER_SERVICE_URI: http://order-service:8080
       OPERATION_SERVICE_URI: http://operation-service:8080
+      MARKETING_SERVICE_URI: http://marketing-service:8080
       JAVA_OPTS: "-XX:+UseContainerSupport -XX:MaxRAMPercentage=75.0 -XX:InitialRAMPercentage=50.0"
     ports:
       - "127.0.0.1:8080:8080"
@@ -453,6 +523,7 @@ volumes:
   # ADR 0043 — board·education DB 볼륨은 operation 으로 흡수돼 제거됐다(구 볼륨은 수동 정리).
   # 첨부 볼륨은 operation-service 가 이어받아 계속 쓴다.
   board-attachment-data:
+  marketing-postgres-data:
   elasticsearch-data:
   redpanda-data:
   redis-data:

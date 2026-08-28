@@ -11,6 +11,9 @@ include(
     "order-service",
     // 운영 — 게시판·알림 팬아웃/SSE·관제 인시던트/신호/이상탐지·교육
     "operation-service",
+    // 마케팅 — 이벤트 프로모션 운영 도구. 출석체크·럭키박스. 보상은 포인트 원장에 직접 쓰지 않고
+    // lemuel.marketing.reward_requested 로 요청만 낸다 - 원장 오너십은 order 가 유지한다
+    "marketing-service",
     // API Gateway — 라우팅만, 자체 인증 필터 없음
     "gateway-service",
 )
