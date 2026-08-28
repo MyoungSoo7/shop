@@ -136,6 +136,10 @@ const payment = (over: Record<string, unknown> = {}) =>
 
 beforeEach(() => {
   vi.clearAllMocks();
+  // mockAuth 는 모듈 수준 객체라 vi.clearAllMocks 가 되돌려 주지 않는다. 한 케이스가
+  // userId 를 null 로 바꾸면 그 뒤 케이스들이 통째로 "로그인이 필요합니다"가 된다.
+  mockAuth.userId = 7;
+  mockAuth.loading = false;
   mockedProduct.getAvailableProducts.mockResolvedValue([product()] as never);
   mockedFacet.search.mockResolvedValue({ products: [], facets: [] } as never);
   mockedReview.getProductReviews.mockResolvedValue([] as never);
@@ -248,6 +252,37 @@ describe('OrderPage — 상품 목록', () => {
 
     expect(screen.getByRole('button', { name: '상품을 먼저 선택해주세요' })).toBeDisabled();
   });
+
+  /*
+   * 주문의 주인은 토큰이 정한다.
+   *
+   * 이 화면은 `const userId = 1` 을 들고 있었다. 서버는 본문의 userId 를 JWT 의 uid 와
+   * 대조하므로(ResourceOwnership.requireSelfOrAdmin) 1번 사용자가 아닌 모든 계정이
+   * 주문 버튼에서 403 을 받았고, 화면에는 "접근 권한이 없습니다" 로만 보여 인가 설정
+   * 문제로 읽혔다. 아래 두 개는 "값이 없으면 보내지 않는다"를 못박는다 — 서버 대조가
+   * 걸린 호출에 화면이 지어낸 id 를 실어 보내는 일이 다시 생기지 않게.
+   */
+  it('userId 를 모르는 동안에는 주문 버튼이 잠긴다', async () => {
+    mockAuth.userId = null;
+    mockAuth.loading = true;
+    render(<OrderPage />);
+    await screen.findByText('티셔츠');
+
+    expect(screen.getByRole('button', { name: '불러오는 중...' })).toBeDisabled();
+  });
+
+  it('로그인 주체를 확인하지 못하면 주문을 시도하지 않는다', async () => {
+    mockAuth.userId = null;
+    render(<OrderPage />);
+    await userEvent.click(await screen.findByText('티셔츠'));
+    await fillAddress();
+    await agreeRequiredConsent();
+
+    expect(screen.getByRole('button', { name: '로그인이 필요합니다' })).toBeDisabled();
+    expect(mockedOrder.createMultiItemOrder).not.toHaveBeenCalled();
+    // 쿠폰 미리보기도 같은 대조를 받는다 — 칸 자체가 나오지 않아야 한다.
+    expect(screen.queryByPlaceholderText(/쿠폰 코드 입력/)).not.toBeInTheDocument();
+  });
 });
 
 describe('OrderPage — 상품 선택 후', () => {
@@ -304,8 +339,11 @@ describe('OrderPage — 주문·결제 흐름', () => {
     await userEvent.click(screen.getByRole('button', { name: '주문하기' }));
     expect(await screen.findByText('주문이 생성되었습니다')).toBeInTheDocument();
     // 금액은 보내지 않는다 — 라인만 보내고 서버가 확정한다.
+    // 첫 인자가 mockAuth.userId(7) 인 것이 요점이다. 여기엔 1 이 박혀 있었고 화면도 1 을
+    // 하드코딩하고 있어서 둘이 짝을 이뤄 초록이었다 — 서버는 토큰의 uid 와 대조하므로
+    // 1번 사용자가 아닌 모든 계정이 주문 버튼에서 403 을 받았다.
     expect(mockedOrder.createMultiItemOrder).toHaveBeenCalledWith(
-      1, [{ productId: 1, quantity: 1 }], FILLED_ADDRESS, AGREED_ACCEPTANCES, null, expect.any(String),
+      7, [{ productId: 1, quantity: 1 }], FILLED_ADDRESS, AGREED_ACCEPTANCES, null, expect.any(String),
     );
 
     await userEvent.click(screen.getByRole('button', { name: '결제 진행하기' }));
@@ -388,7 +426,7 @@ describe('OrderPage — 주문·결제 흐름', () => {
 
     await waitFor(() =>
       expect(mockedOrder.createMultiItemOrder).toHaveBeenCalledWith(
-        1, [{ productId: 1, quantity: 1 }], FILLED_ADDRESS, AGREED_ACCEPTANCES, 'WELCOME10', expect.any(String),
+        7, [{ productId: 1, quantity: 1 }], FILLED_ADDRESS, AGREED_ACCEPTANCES, 'WELCOME10', expect.any(String),
       ),
     );
     // 서버가 같은 트랜잭션에서 기록한다. 여기서 또 부르면 쿠폰이 두 번 소진된다.

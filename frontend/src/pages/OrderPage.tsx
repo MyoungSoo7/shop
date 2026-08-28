@@ -12,6 +12,7 @@ import { productApi } from '@/api/product';
 import { reviewApi } from '@/api/review';
 import { MultiItemOrderResponse, PaymentResponse, ProductResponse, ReviewResponse, CouponPreviewResponse, ShippingAddressRequest } from '@/types';
 import { useCart } from '@/contexts/useCart';
+import { useAuth } from '@/contexts/useAuth';
 import Card from '@/components/Card';
 import Spinner from '@/components/Spinner';
 import StarRating from '@/components/review/StarRating';
@@ -49,7 +50,17 @@ const loadTossScript = (): Promise<void> =>
    주문하기 탭 - 주문 폼
 ───────────────────────────────────────── */
 const OrderFormTab: React.FC = () => {
-  const userId = 1;
+  /*
+   * 주문의 주인은 토큰이 정한다 — 화면이 정하지 않는다.
+   *
+   * 여기엔 `const userId = 1` 이 박혀 있었다. 서버는 POST /orders/multi 와
+   * /orders/coupon-preview 에서 "본문의 userId == JWT 의 uid" 를 대조하므로
+   * (OrderController → ResourceOwnership.requireSelfOrAdmin), 1번 사용자로 로그인했을
+   * 때만 우연히 동작하고 그 외 모든 계정은 주문 버튼을 누르는 순간 403 이었다.
+   * 실패가 화면에는 "접근 권한이 없습니다" 로만 보여서 권한 설정 문제로 읽히기 쉬웠다 —
+   * 실제로는 인가 설정이 아니라 보내는 값이 틀린 것이었다.
+   */
+  const { userId, loading: authLoading } = useAuth();
   const { addItem } = useCart();
   const [addedProductId, setAddedProductId] = useState<number | null>(null);
 
@@ -135,6 +146,7 @@ const OrderFormTab: React.FC = () => {
     .slice(0, PRODUCTS_PER_PAGE);
 
   const handleCreateOrder = async () => {
+    if (userId === null) { setError('로그인이 필요합니다.'); return; }
     if (!selectedProduct) { setError('상품을 선택해주세요.'); return; }
     if (!addressReady) { setError('배송지를 입력해주세요.'); return; }
     if (!consent.ready) { setError('필수 개인정보 동의 항목에 동의해주세요.'); return; }
@@ -406,7 +418,8 @@ const OrderFormTab: React.FC = () => {
             )}
 
             {/* 쿠폰 입력 */}
-            {selectedProduct && (
+            {/* 쿠폰 미리보기도 서버가 소유권을 대조한다 — userId 를 모르는 동안은 칸 자체를 내지 않는다. */}
+            {selectedProduct && userId !== null && (
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1.5">쿠폰 코드</label>
                 <CouponInput
@@ -506,16 +519,20 @@ const OrderFormTab: React.FC = () => {
             ) : (
               <button
                 onClick={handleCreateOrder}
-                disabled={!selectedProduct || !addressReady || !consent.ready}
+                disabled={authLoading || userId === null || !selectedProduct || !addressReady || !consent.ready}
                 className="w-full bg-blue-600 text-white py-3 rounded-lg font-semibold hover:bg-blue-700 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
               >
-                {!selectedProduct
-                  ? '상품을 먼저 선택해주세요'
-                  : !addressReady
-                    ? '배송지를 입력해주세요'
-                    : !consent.ready
-                      ? '필수 동의 항목에 동의해주세요'
-                      : '주문하기'}
+                {authLoading
+                  ? '불러오는 중...'
+                  : userId === null
+                    ? '로그인이 필요합니다'
+                    : !selectedProduct
+                      ? '상품을 먼저 선택해주세요'
+                      : !addressReady
+                        ? '배송지를 입력해주세요'
+                        : !consent.ready
+                          ? '필수 동의 항목에 동의해주세요'
+                          : '주문하기'}
               </button>
             )}
           </div>
