@@ -155,6 +155,7 @@ cd frontend && npx tsc -p tsconfig.app.json --noEmit && npx vitest run
 | `ci-verdict-gate` | 필수 체크 표가 워크플로에서 떨어져 나가는 것 |
 | `frontend-typecheck-scope-gate` | tsconfig exclude 로 검사에서 빠진 프론트 소스 |
 | `dockerignore-gate` · `gradle-cache-mount-gate` | 빌드 컨텍스트·캐시 마운트의 조용한 함정 |
+| `deploy-roster-gate` | 모듈이 CI 이미지 매트릭스·k3s 빌드 매핑·프로메테우스 스크레이프 중 어디선가 빠지는 것 — 실패가 아니라 **누락**이라 로그가 정상으로 보인다 |
 
 ## 하드스톱 — 절대 금지
 

@@ -3,7 +3,7 @@
 #
 #   ./k8s/buildkit/build.sh order-service operation-service
 #   ./k8s/buildkit/build.sh frontend                 # 프론트엔드도 대상이다
-#   ./k8s/buildkit/build.sh --all --wait             # 백엔드 3 + 프론트엔드
+#   ./k8s/buildkit/build.sh --all --wait             # 백엔드 전부 + 프론트엔드
 #   ./k8s/buildkit/build.sh --ref main --all --wait --scan
 #
 # 컨텍스트는 git 원격이다. 로컬 워킹트리는 빌드되지 않으므로, 원격에 push 된 커밋만 이미지가 된다.
@@ -21,6 +21,7 @@ MAPPING="
 order-service=
 gateway-service=-gateway
 operation-service=-operation
+marketing-service=-marketing
 "
 
 all_modules() { echo "$MAPPING" | sed '/^$/d' | cut -d= -f1; }
