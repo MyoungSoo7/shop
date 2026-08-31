@@ -1,6 +1,6 @@
 # Shop — 이커머스 쇼핑몰 MSA
 
-> 커머스(order)와 운영(operation) 두 축을 **2개 마이크로서비스 + API Gateway** 로 나눈 헥사고날 백엔드.
+> 커머스·운영·마케팅·파트너 네 축을 **4개 마이크로서비스 + API Gateway** 로 나눈 헥사고날 백엔드.
 > 서비스 간 연계는 **Kafka 이벤트로만** — 코드·DB 직접 의존이 0 이다.
 > 규칙은 문서가 아니라 **빌드를 깨는 게이트**로 강제한다.
 >
@@ -23,21 +23,22 @@
 | **커머스** | `order-service` (8088) | 회원·인증 · 상품/옵션/재고 · 카테고리·전시 · 장바구니 · 주문 · 결제(Toss PG·분할결제) · 환불 · **포인트 원장** · **기프트카드 원장** · 쿠폰 · 리뷰 · 배송/배송비정책 · 대량주문 · 셀러등급 · 조직/멤버십 · 관리자 백오피스(RBAC·메뉴·공통코드·감사로그) |
 | **운영** | `operation-service` (8092) | 관제(인시던트·신호 버킷·이상탐지) · 알림 팬아웃(다채널 + SSE 푸시) · 게시판(공지·FAQ·Q&A) · 교육 과정 관리 |
 | **마케팅** | `marketing-service` (8096) | 이벤트 프로모션 — 출석체크 · 럭키박스(가중치 추첨·수량 예약) · 캠페인 운영. **포인트 원장을 갖지 않는다** — 보상은 Kafka 로 order 에 요청하고 결과를 되받아 확정한다 ([ADR 0045](docs/adr/0045-marketing-service-extracted-from-legacy.md)) |
+| **파트너** | `partner-service` (8100) | 입점사 콘솔 — 자기 조직의 매출·주문만 보는 **읽기 전용** 백오피스. 데이터는 전부 다른 서비스의 이벤트로 받은 사본이고 쓰기 매핑이 하나도 없다 |
 | **관문** | `gateway-service` (8080) | 경로 라우팅만 — 자체 인증 필터 없음(인가는 각 서비스가 강제) |
 | **공용** | `shared-common` | Outbox 발행 머시너리 · JWT · 감사로그 · RateLimit · PDF · **이벤트 계약 픽스처** (`includeBuild` 로 합성되는 버전드 내부 라이브러리, [ADR 0021](docs/adr/0021-shared-common-as-platform-library.md)) |
 | **화면** | `frontend` | React 19 + Vite + TypeScript. 구매자 화면 + 관리자 콘솔 |
 
-### 규모 (2026-08-25 실측)
+### 규모 (2026-08-31 실측)
 
 | | |
 | --- | --- |
-| Java 소스 | main **1,245** · test **455** |
-| HTTP 표면 | 컨트롤러 **55** · 매핑 **262** |
-| Flyway 마이그레이션 | order **153** · operation **18** |
-| Kafka | 토픽 **21** · 계약 픽스처 **21** (1:1 강제) |
-| 프론트엔드 | TS/TSX **270** · 테스트 파일 **126** |
-| 저장소 규율 게이트 | **336건** / 46 스위트 · 실시간 가드 규칙 **14종** |
-| 결정 기록 | ADR **21건** |
+| Java 소스 | main **1,646** · test **575** |
+| HTTP 표면 | 컨트롤러 **84** · 매핑 **482** |
+| Flyway 마이그레이션 | order **182** · operation **24** · marketing **5** · partner **2** |
+| Kafka | 토픽 **22** · 계약 픽스처 **22** (1:1 강제) |
+| 프론트엔드 | TS/TSX **368** · 테스트 파일 **170** |
+| 저장소 규율 게이트 | **423건** / 60 스위트 · 실시간 가드 규칙 **18종** |
+| 결정 기록 | ADR **24건** |
 
 수치는 주장이 아니라 재현 가능한 카운트다 — 확인 커맨드는 [검증](#검증-definition-of-done) 절에 있다.
 
@@ -95,7 +96,7 @@ DB tx 안에서 outbox_events INSERT
 
 ### 4. "컴파일러가 못 보는 공백"을 게이트가 본다
 
-`node --test "scripts/harness/test/*.test.mjs"` — 게이트 **336건**이 돈다. 잡는 것은 타입 오류가
+`node --test "scripts/harness/test/*.test.mjs"` — 게이트 **423건**이 돈다. 잡는 것은 타입 오류가
 아니라 **층 사이의 빈틈**이다.
 
 | 게이트 | 잡는 것 |
@@ -114,8 +115,10 @@ DB tx 안에서 outbox_events INSERT
 | `oo-gate` | 도메인 public setter · generic `IllegalArgumentException` · 봉인 애그리거트 회귀 |
 | `coverage-scope-gate` | 커버리지 스코프가 비어 "위반 없음"으로 통과하는 위장 초록불 |
 | `node-version-gate` | `.nvmrc` ↔ `frontend/Dockerfile` major 불일치 |
+| `migration-version-gate` | 기준선 위의 Flyway 정수 버전 (빈 DB 인 CI 는 통과하고 배포 DB 만 깨진다) |
+| `deploy-roster-gate` | 새 모듈이 CI 이미지 매트릭스·k3s 빌드 매핑·프로메테우스 스크레이프에서 빠진 것 |
 
-전체 목록은 `scripts/harness/test/` (게이트 파일 **25개**). 같은 규칙이 **3중으로** 강제된다 —
+전체 목록은 `scripts/harness/test/` (게이트 파일 **38개**). 같은 규칙이 **3중으로** 강제된다 —
 실시간 PreToolUse 훅(exit 2) · git pre-commit · CI. 설치는 `node scripts/harness/install-hooks.mjs`.
 
 ---
@@ -148,10 +151,11 @@ docker compose up -d
 `frontend/dist` 는 git 에 추적되지 않는다(빌드 산출물). 빌드를 건너뛰면 마운트가 빈 디렉터리가 되어
 nginx 가 404 만 낸다 — 프로덕션은 `frontend/Dockerfile` 이 이미지 안에서 빌드하므로 영향이 없다.
 
-compose 서비스 **17개**: PostgreSQL 2종(order `inter` / operation `lemuel_operation`) · pgbouncer ·
-Elasticsearch · Redpanda · Redis · 앱 3개 · frontend · 관측 7종(exporter 3 + prometheus +
-alertmanager + tempo + grafana). 관측 7종은 `docker compose up -d postgres … frontend` 로 골라 띄우면
-빼도 된다. 발행 포트는 전부 `127.0.0.1` 바인딩이라 기본값으로는 LAN 에 노출되지 않는다.
+compose 서비스 **21개**: PostgreSQL **4종**(서비스마다 자기 DB — order/operation/marketing/partner) ·
+pgbouncer · Elasticsearch · Redpanda · Redis · 앱 **5개**(백엔드 4 + gateway) · frontend ·
+관측 7종(exporter 3 + prometheus + alertmanager + tempo + grafana). 관측 7종은
+`docker compose up -d postgres … frontend` 로 골라 띄우면 빼도 된다. 발행 포트는 전부 `127.0.0.1`
+바인딩이라 기본값으로는 LAN 에 노출되지 않는다.
 
 데모(`shop.lemuel.co.kr`)는 david 노드에서 이 compose 로 돌고, 프론트만 LAN 에 노출하기 위해
 `deploy/david/docker-compose.override.yml` 을 **명시적으로** 얹는다(루트에 두면 자동 로드되어
@@ -169,6 +173,7 @@ docker compose -f docker-compose.yml -f deploy/david/docker-compose.override.yml
 ./gradlew :order-service:bootRun        # 8088
 ./gradlew :operation-service:bootRun    # 8092
 ./gradlew :marketing-service:bootRun    # 8096
+./gradlew :partner-service:bootRun      # 8100
 ./gradlew :gateway-service:bootRun      # 8080
 ```
 
@@ -191,14 +196,15 @@ npm run build && npm run preview     # /admin 직접진입은 이쪽에서만 �
 ./gradlew :order-service:test :order-service:jacocoTestCoverageVerification
 ./gradlew :operation-service:test :operation-service:jacocoTestCoverageVerification
 ./gradlew :marketing-service:test :marketing-service:jacocoTestCoverageVerification
+./gradlew :partner-service:test :partner-service:jacocoTestCoverageVerification
 
 # 프론트엔드 — 타입체크 + 테스트(커버리지 임계 lines/statements 90)
 cd frontend && npx tsc -p tsconfig.app.json --noEmit && npx vitest run
 
-# 저장소 규율 게이트 336건
+# 저장소 규율 게이트 423건
 node --test "scripts/harness/test/*.test.mjs"
 
-# 변경 파일 가드(실시간 훅과 같은 규칙 14종)
+# 변경 파일 가드(실시간 훅과 같은 규칙 18종)
 node scripts/harness/guard.mjs --list changed.txt
 ```
 
@@ -242,6 +248,7 @@ node scripts/harness/guard.mjs --list changed.txt
 | `/api/ops/**` `/api/boards/**` `/admin/boards/**` `/admin/education/**` | operation-service |
 | `/api/notifications/stream` | operation-service (SSE 푸시) |
 | `/api/promotions/**` `/admin/promotions/**` | marketing-service |
+| `/api/partner/**` | partner-service (전 경로 인증 필수 · 읽기 전용) |
 
 내부 발송 경로(`/internal/notifications/**`)는 **게이트웨이에 올리지 않는다** — 인증 없이 발송하는
 경로라 와일드카드로 노출하면 그대로 공개 API 가 된다.
@@ -253,8 +260,9 @@ node scripts/harness/guard.mjs --list changed.txt
 네비게이션의 정본은 `menus` 테이블이다(프론트 셸은 `GET /api/menus/me` 로 그린다).
 
 1. `frontend/src/App.tsx` 에 라우트 추가
-2. 메뉴 시드 마이그레이션(`order-service/.../db/migration/V*__menu_*.sql`) +
-   `frontend/src/data/menuFallback.ts` 에 행 추가
+2. 메뉴 시드 마이그레이션(`order-service/.../db/migration/V{YYYYMMDDhhmmss}__menu_*.sql`) +
+   `frontend/src/data/menuFallback.ts` 에 행 추가 — 파일명은 **반드시 타임스탬프**다
+   ([docs/db-migrations.md](docs/db-migrations.md))
 
 메뉴에 넣지 않을 화면이면 `menu-route-gate.test.mjs` 의 `ROUTES_WITHOUT_MENU` 에 **사유와 함께** 등록한다.
 
@@ -286,7 +294,8 @@ node scripts/harness/guard.mjs --list changed.txt
 | [STRUCTURE.md](STRUCTURE.md) | 디렉토리·모듈 트리 |
 | [CLAUDE.md](CLAUDE.md) · [AGENTS.md](AGENTS.md) | 에이전트 작업 지침(가드레일·컨벤션) |
 | [HARNESS.md](HARNESS.md) | 하네스 구성 정본 — 가드·게이트·스킬 라우팅 |
-| [docs/adr/](docs/adr/) | 아키텍처 결정 기록 21건 |
+| [docs/db-migrations.md](docs/db-migrations.md) | Flyway 규약 — 버전 기준선·사고 이력·idempotent 패턴·회복 절차 |
+| [docs/adr/](docs/adr/) | 아키텍처 결정 기록 24건 |
 | [docs/plan/prd/](docs/plan/prd/) | 서비스별 역산 PRD |
 | [docs/plan/runbook/](docs/plan/runbook/) | 온콜 러너북 |
 | [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md) | 빌드·실행 커맨드, 인프라 |
@@ -296,7 +305,8 @@ node scripts/harness/guard.mjs --list changed.txt
 ## 이름에 대하여
 
 자바 패키지 루트는 `github.lms.lemuel` 이고 컨테이너 이름에도 `lemuel-` 접두사가 남아 있다.
-이 저장소는 더 큰 플랫폼에서 커머스·운영 두 축을 떼어 낸 것이라, 이름을 바꾸면 마이그레이션 이력과
+이 저장소는 더 큰 플랫폼에서 커머스·운영 두 축을 떼어 내며 출발했고(마케팅·파트너는 그 뒤에 붙었다),
+이름을 바꾸면 마이그레이션 이력과
 이벤트 계약(토픽명 `lemuel.*`)까지 함께 흔들린다. **토픽명은 외부 계약이므로 바꾸지 않는다** —
 이름은 유래로 남기고, 경계는 코드와 게이트로 말한다.
 

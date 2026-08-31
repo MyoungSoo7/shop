@@ -115,7 +115,10 @@ shop/                             # Gradle 멀티 모듈 루트
 ## 코딩 컨벤션
 
 - 헥사고날(Ports & Adapters), 도메인 순수 POJO, in/out 포트 분리.
-- **DB 마이그레이션**: Flyway, 신규는 `V{timestamp}__` 명명 권장(예: `V20260825200000__`).
+- **DB 마이그레이션**: Flyway. 신규는 **반드시** `V{YYYYMMDDhhmmss}__`(예: `V20260825200000__`).
+  정수 번호는 서비스별 기준선(order V50 · operation V4 · marketing V5 · partner V2)에서 닫혔다 —
+  기준선 위의 정수는 빈 DB(CI)에서만 통과하고 이력이 있는 배포 DB 에서 out-of-order 로 깨진다.
+  `migration-version-gate` 가 강제한다. 배경·회복 절차 → [docs/db-migrations.md](docs/db-migrations.md).
 - **테스트**: 도메인 → 서비스 → 컨트롤러 → 통합 순. 통합은 Testcontainers(Docker 필요 — 없으면 skip).
 - **커버리지 게이트**: JaCoCo CI **LINE 최소 90%**, 핵심 도메인 패키지 INSTRUCTION 80% 강제(`build.gradle.kts`).
   adapter in/out 서브패키지는 게이트 제외(통합 테스트로 별도 검증). 측정은 게이트 태스크가 정답.
