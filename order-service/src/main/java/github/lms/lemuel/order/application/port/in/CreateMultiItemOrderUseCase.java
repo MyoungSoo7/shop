@@ -5,6 +5,7 @@ import github.lms.lemuel.order.domain.ShippingAddressSnapshot;
 import github.lms.lemuel.order.domain.exception.OrderInvariantViolationException;
 
 import java.util.List;
+import java.util.Map;
 
 public interface CreateMultiItemOrderUseCase {
 
@@ -73,11 +74,21 @@ public interface CreateMultiItemOrderUseCase {
      * @param productId  상품 ID (필수)
      * @param variantId  옵션(SKU) 사용 시 지정. 없으면 null — 단일 상품
      * @param quantity   수량 (양수)
+     * @param optionTexts 자유입력(TEXT) 축의 값 — 축코드 → 구매자가 적은 문구. 없으면 빈 맵
      */
-    record Line(Long productId, Long variantId, int quantity) {
+    record Line(Long productId, Long variantId, int quantity, Map<String, String> optionTexts) {
+
+        /** 자유입력이 없는 종래 호출부를 그대로 두기 위한 생성자. */
+        public Line(Long productId, Long variantId, int quantity) {
+            this(productId, variantId, quantity, Map.of());
+        }
+
         public Line {
             if (productId == null) throw new OrderInvariantViolationException("productId 필수");
             if (quantity <= 0) throw new OrderInvariantViolationException("quantity 는 양수");
+            // 자유입력은 SKU 를 만들지 않는다 — 그래서 variantId 가 없는 라인에도 붙을 수 있다.
+            // (각인만 있고 색상·사이즈가 없는 상품이 그렇다.)
+            optionTexts = optionTexts == null ? Map.of() : Map.copyOf(optionTexts);
         }
     }
 }

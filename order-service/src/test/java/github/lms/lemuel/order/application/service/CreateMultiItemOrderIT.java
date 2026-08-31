@@ -151,7 +151,11 @@ class CreateMultiItemOrderIT {
                 (orderId, address) -> createdShipments.add(orderId + ":" + address.recipientName()),
                 // 이 IT 는 동의 없이(consent=null) 주문하므로 불리지 않는다. 그래도 불린다면
                 // 그건 "동의를 안 받는 경로"가 조용히 바뀐 것이므로 여기서 터지는 편이 낫다.
-                command -> { throw new AssertionError("동의를 받지 않는 경로에서 동의 기록이 불렸다"); });
+                command -> { throw new AssertionError("동의를 받지 않는 경로에서 동의 기록이 불렸다"); },
+                // 자유입력(TEXT) 축 검사도 진짜 경로로 돈다 — 어댑터가 여기 다 있으므로 스텁을
+                // 끼울 이유가 없고, 끼우면 "축이 없는데 문구가 들어왔다"를 못 잡는다.
+                new github.lms.lemuel.product.application.service.DescribeProductOptionsService(
+                        productAdapter, optionCatalogAdapter, variantAdapter, variantOptionMappingAdapter));
     }
 
     @Test

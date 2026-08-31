@@ -29,6 +29,9 @@ import { isStaleTermsError } from '@/api/privacyConsent';
 import { apiErrorMessage, errorDetail } from '@/lib/apiError';
 
 const PRODUCTS_PER_PAGE = 5;
+/** 자유입력 상품은 장바구니를 못 거친다 — 서버 장바구니에 문구를 담을 칸이 없다. */
+const TEXT_AXIS_CART_BLOCK =
+  '직접 입력하는 옵션이 있는 상품은 장바구니에 담을 수 없습니다. 아래에서 바로 주문해주세요.';
 const TOSS_CLIENT_KEY = import.meta.env.VITE_TOSS_CLIENT_KEY as string;
 
 /**
@@ -106,6 +109,13 @@ const OrderFormTab: React.FC = () => {
    * 불러 받는다. 미리 받아 두면 그 사이에 SKU 가 바뀌어도 화면은 옛 id 로 주문한다.
    */
   const [optionSelection, setOptionSelection] = useState<Record<string, string>>({});
+  /*
+   * 자유입력 축(각인 문구 등) — 축코드 → 구매자가 적은 문장.
+   *
+   * 선택형과 저장소를 나눈 이유는 담기는 것이 값 <b>코드</b>가 아니라 문장이기 때문이다.
+   * 이 값은 SKU 를 만들지 않으므로 resolve 에 보내지 않고, 주문 라인에 그대로 실어 보낸다.
+   */
+  const [optionTexts, setOptionTexts] = useState<Record<string, string>>({});
   const [optionsReady, setOptionsReady] = useState(true);
 
   // 상품 리뷰 미리보기
@@ -142,6 +152,7 @@ const OrderFormTab: React.FC = () => {
   // 이전 상품의 선택이 새 상품의 조합 판정에 섞인다.
   useEffect(() => {
     setOptionSelection({});
+    setOptionTexts({});
     setOptionsReady(true);
   }, [selectedProduct]);
 
@@ -186,6 +197,24 @@ const OrderFormTab: React.FC = () => {
     return variant.id;
   };
 
+  /**
+   * 실제로 적힌 자유입력만 추린다. 공백뿐인 값은 키째 뺀다 — 빈 문자열을 보내면 서버가
+   * "필수인데 비었다"로 볼지 "안 적었다"로 볼지 애매해진다.
+   */
+  const filledTexts = (): Record<string, string> =>
+    Object.fromEntries(
+      Object.entries(optionTexts).filter(([, text]) => text.trim().length > 0)
+    );
+
+  /**
+   * 라인에 얹을 자유입력 조각. 적힌 것이 하나도 없으면 <b>키 자체를 만들지 않는다</b> —
+   * 자유입력이 없는 상품(대부분)의 주문 라인에 빈 맵이 붙어 다닐 이유가 없다.
+   */
+  const optionTextsFragment = (): { optionTexts?: Record<string, string> } => {
+    const texts = filledTexts();
+    return Object.keys(texts).length > 0 ? { optionTexts: texts } : {};
+  };
+
   /** 사람이 읽는 옵션 라벨 — 장바구니 줄을 구분해 보여주기 위한 표시값이다. */
   const optionLabel = (): string | null => {
     const chosen = Object.values(optionSelection).filter(Boolean);
@@ -208,7 +237,8 @@ const OrderFormTab: React.FC = () => {
       // couponApi.use 를 부르지 않는다. 부르면 두 번 소진된다).
       const orderRes = await orderApi.createMultiItemOrder(
         userId,
-        [{ productId: selectedProduct.id, variantId, quantity: 1 }],
+        // 자유입력 문구는 SKU 가 아니라 이 라인의 속성이다 — 그래서 variantId 와 나란히 간다.
+        [{ productId: selectedProduct.id, variantId, quantity: 1, ...optionTextsFragment() }],
         shippingAddress,
         consent.acceptances,
         appliedCouponCode ?? null,
@@ -319,6 +349,7 @@ const OrderFormTab: React.FC = () => {
 
     if (selectedProduct?.id === product.id && Object.keys(optionSelection).length > 0) {
       if (!optionsReady) { setError('옵션을 선택해주세요.'); return; }
+      if (Object.keys(filledTexts()).length > 0) { setError(TEXT_AXIS_CART_BLOCK); return; }
       try {
         const variantId = await resolveVariantId(product.id);
         addItem(product, variantId, optionLabel());
@@ -330,11 +361,22 @@ const OrderFormTab: React.FC = () => {
     }
 
     let hasOptions: boolean;
+    let hasTextAxis = false;
     try {
       const options = await productOptionApi.describe(product.id);
       hasOptions = options.axes.some((a) => a.values.length > 0);
+      hasTextAxis = options.axes.some((a) => a.textMaxLength != null);
     } catch {
       hasOptions = false;
+    }
+
+    // 자유입력이 있는 상품은 장바구니를 거치지 못한다 — 서버 장바구니가 담는 것은
+    // (상품, SKU, 수량) 뿐이라 문구를 실어 둘 칸이 없다. 통과시키면 각인을 적어 담은 뒤
+    // 빈 각인으로 주문되므로, 조용히 잃는 대신 여기서 막고 바로 주문으로 보낸다.
+    if (hasTextAxis) {
+      setSelectedProduct(product);
+      setError(TEXT_AXIS_CART_BLOCK);
+      return;
     }
 
     if (hasOptions) {
@@ -516,6 +558,8 @@ const OrderFormTab: React.FC = () => {
                 productId={selectedProduct.id}
                 selection={optionSelection}
                 onChange={setOptionSelection}
+                texts={optionTexts}
+                onTextsChange={setOptionTexts}
                 onReadyChange={setOptionsReady}
               />
             )}

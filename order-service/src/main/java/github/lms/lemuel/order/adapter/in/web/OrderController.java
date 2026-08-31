@@ -88,7 +88,8 @@ public class OrderController {
         // 남의 userId 로 주문하면 그 사람의 1회용 쿠폰까지 소진된다(쿠폰 검증·사용이 userId 기준).
         ResourceOwnership.requireSelfOrAdmin(request.userId());
         List<CreateMultiItemOrderUseCase.Line> lines = request.lines().stream()
-                .map(l -> new CreateMultiItemOrderUseCase.Line(l.productId(), l.variantId(), l.quantity()))
+                .map(l -> new CreateMultiItemOrderUseCase.Line(l.productId(), l.variantId(),
+                        l.quantity(), l.optionTexts()))
                 .toList();
         // 배송지는 이 경로에서 필수다. 요청 레코드에서 @NotNull 로 막지 않는 이유는 같은 레코드를
         // /coupon-preview 가 쓰기 때문이다 — 할인액만 계산하는 조회에 배송지를 요구할 이유가 없다.
@@ -168,7 +169,8 @@ public class OrderController {
         // 남의 쿠폰 보유 여부를 캐볼 수 없게 본인(또는 관리자)만 조회한다.
         ResourceOwnership.requireSelfOrAdmin(request.userId());
         List<CreateMultiItemOrderUseCase.Line> lines = request.lines().stream()
-                .map(l -> new CreateMultiItemOrderUseCase.Line(l.productId(), l.variantId(), l.quantity()))
+                .map(l -> new CreateMultiItemOrderUseCase.Line(l.productId(), l.variantId(),
+                        l.quantity(), l.optionTexts()))
                 .toList();
         return ResponseEntity.ok(
                 previewCouponUseCase.preview(request.userId(), request.couponCode(), lines));
@@ -219,7 +221,25 @@ public class OrderController {
     public record LineRequest(
             @jakarta.validation.constraints.NotNull Long productId,
             Long variantId,
-            @jakarta.validation.constraints.Min(1) int quantity) {}
+            @jakarta.validation.constraints.Min(1) int quantity,
+            /**
+             * 자유입력(TEXT) 축의 값 — 축코드 → 구매자가 적은 문구. 각인 문구가 여기로 들어온다.
+             *
+             * <p>variantId 와 별개다. 자유입력은 SKU 를 만들지 않으므로(같은 SKU 를 두 사람이
+             * 다른 문구로 사면 재고는 같은 칸에서 빠진다) 옵션 없는 상품에도 붙을 수 있다.
+             * 길이·필수 여부·상품이 그 축을 갖는지는 전부 서버가 다시 검사한다.
+             */
+            java.util.Map<String, String> optionTexts) {
+
+        /** 자유입력 없이 보내던 종래 요청 본문을 그대로 받기 위한 생성자. */
+        public LineRequest(Long productId, Long variantId, int quantity) {
+            this(productId, variantId, quantity, java.util.Map.of());
+        }
+
+        public LineRequest {
+            optionTexts = optionTexts == null ? java.util.Map.of() : java.util.Map.copyOf(optionTexts);
+        }
+    }
 
     /**
      * 주문 시점 배송지. 주문 생성(POST /orders/multi)에서는 필수이고, 같은 레코드를 쓰는

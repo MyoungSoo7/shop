@@ -10,6 +10,7 @@ import github.lms.lemuel.order.application.port.out.LoadUserForOrderPort;
 import github.lms.lemuel.order.application.port.out.SaveOrderPort;
 import github.lms.lemuel.order.application.port.out.SendOrderNotificationPort;
 import github.lms.lemuel.order.domain.Order;
+import github.lms.lemuel.order.domain.exception.OrderInvariantViolationException;
 import github.lms.lemuel.order.domain.exception.UserNotExistsException;
 import github.lms.lemuel.product.application.port.in.DecreaseProductStockUseCase;
 import github.lms.lemuel.product.application.port.in.DecreaseVariantStockUseCase;
@@ -48,6 +49,7 @@ class CreateMultiItemOrderServiceTest {
     @Mock github.lms.lemuel.order.application.port.out.PublishOrderEventPort publishOrderEventPort;
     @Mock CouponUseCase couponUseCase;
     @Mock github.lms.lemuel.product.application.port.in.DescribeVariantOptionsUseCase describeVariantOptionsUseCase;
+    @Mock github.lms.lemuel.product.application.port.in.DescribeProductOptionsUseCase describeProductOptionsUseCase;
     @Mock github.lms.lemuel.shipping.application.port.in.AssessShippingFeeUseCase assessShippingFeeUseCase;
     @Mock github.lms.lemuel.order.application.port.out.CreateShipmentPort createShipmentPort;
     @InjectMocks CreateMultiItemOrderService service;
@@ -56,6 +58,11 @@ class CreateMultiItemOrderServiceTest {
     void noShippingFeeByDefault() {
         when(assessShippingFeeUseCase.assess(any()))
                 .thenReturn(github.lms.lemuel.shipping.domain.ShippingFeeAssessment.none());
+        // 기본은 자유입력 축이 없는 상품이다. 이 스텁이 빠지면 describe() 가 null 을 주고,
+        // 주문 생성 전체가 옵션과 무관한 NPE 로 죽는다.
+        when(describeProductOptionsUseCase.describe(any()))
+                .thenReturn(new github.lms.lemuel.product.application.port.in
+                        .DescribeProductOptionsUseCase.ProductOptions(1L, List.of(), List.of()));
     }
 
     /**
@@ -297,5 +304,102 @@ class CreateMultiItemOrderServiceTest {
 
         assertThat(result.getShippingAddress()).isNull();
         verifyNoInteractions(createShipmentPort);
+    }
+
+    /* ─────────────────────────────────────────
+       자유입력(TEXT) 축 — 각인 문구처럼 구매자가 직접 적는 옵션.
+       SKU 를 만들지 않으므로 재고·조합에는 안 끼고 주문 라인에만 남는다.
+       ───────────────────────────────────────── */
+
+    /** 자유입력 축 하나를 가진 상품의 옵션 트리. required 는 호출자가 정한다. */
+    private void givenTextAxis(String code, String name, int maxLength, boolean required) {
+        var axis = new github.lms.lemuel.product.application.port.in
+                .DescribeProductOptionsUseCase.Axis(
+                        0, code, name, github.lms.lemuel.product.domain.OptionInputType.TEXT,
+                        required, List.of(), maxLength);
+        when(describeProductOptionsUseCase.describe(any()))
+                .thenReturn(new github.lms.lemuel.product.application.port.in
+                        .DescribeProductOptionsUseCase.ProductOptions(10L, List.of(axis), List.of()));
+    }
+
+    private void givenSellableProduct() {
+        when(loadUserPort.findEmailById(1L)).thenReturn(Optional.of("user@test.com"));
+        // mockProduct 는 안에서 다시 stub 한다 — thenReturn 인자 자리에서 부르면
+        // Mockito 가 스터빙 중첩으로 보고 UnfinishedStubbing 을 던진다. 먼저 만들어 둔다.
+        Product product = mockProduct(10L, "상품A", new BigDecimal("10000"));
+        when(loadProductPort.findById(10L)).thenReturn(Optional.of(product));
+        when(saveOrderPort.save(any())).thenAnswer(inv -> inv.getArgument(0));
+    }
+
+    @Test @DisplayName("create: 적어 보낸 문구가 라인 옵션 스냅샷으로 남는다")
+    void create_snapshotsFreeText() {
+        givenSellableProduct();
+        givenTextAxis("ENGRAVING", "각인 문구", 10, false);
+
+        Order result = service.create(1L, List.of(new CreateMultiItemOrderUseCase.Line(
+                10L, null, 1, java.util.Map.of("ENGRAVING", "민수에게"))));
+
+        var options = result.getItems().get(0).getOptions();
+        assertThat(options).hasSize(1);
+        assertThat(options.get(0).isFreeText()).isTrue();
+        assertThat(options.get(0).getTextValue()).isEqualTo("민수에게");
+        // 문구는 재고 단위를 가르지 않는다 — SKU 차감 경로로 새지 않아야 한다.
+        verify(decreaseStockUseCase, never()).decrease(any(), anyInt());
+    }
+
+    /*
+     * 화면이 maxlength 를 걸어도 요청을 직접 만들면 그 속성은 없는 것이다.
+     * 그래서 축이 정한 상한을 주문 시점에 다시 센다.
+     */
+    @Test @DisplayName("create: 축 상한을 넘는 문구는 주문을 거절한다")
+    void create_rejectsOverlongText() {
+        givenSellableProduct();
+        givenTextAxis("ENGRAVING", "각인 문구", 5, false);
+
+        assertThatThrownBy(() -> service.create(1L, List.of(new CreateMultiItemOrderUseCase.Line(
+                10L, null, 1, java.util.Map.of("ENGRAVING", "일이삼사오육")))))
+                .isInstanceOf(OrderInvariantViolationException.class);
+        verify(saveOrderPort, never()).save(any());
+    }
+
+    /*
+     * 조용히 버리면 구매자는 각인을 적었다고 믿고 결제하는데 주문서엔 아무것도 없다.
+     * 그 차이는 물건이 도착해서야 드러난다.
+     */
+    @Test @DisplayName("create: 상품에 없는 자유입력 축 코드는 거절한다 — 조용히 버리지 않는다")
+    void create_rejectsUnknownTextAxis() {
+        givenSellableProduct();
+        givenTextAxis("ENGRAVING", "각인 문구", 10, false);
+
+        assertThatThrownBy(() -> service.create(1L, List.of(new CreateMultiItemOrderUseCase.Line(
+                10L, null, 1, java.util.Map.of("GIFT_NOTE", "축하해")))))
+                .isInstanceOf(OrderInvariantViolationException.class);
+        verify(saveOrderPort, never()).save(any());
+    }
+
+    /*
+     * 필수 여부는 상품이 정한 것이다. 화면이 칸을 안 그려줬다는 이유로 통과시키면
+     * required 의 뜻이 사라진다 — 그래서 키를 아예 안 보낸 경우까지 여기서 막는다.
+     */
+    @Test @DisplayName("create: 필수 자유입력을 빼먹으면 거절한다")
+    void create_rejectsMissingRequiredText() {
+        givenSellableProduct();
+        givenTextAxis("ENGRAVING", "각인 문구", 10, true);
+
+        assertThatThrownBy(() -> service.create(1L,
+                List.of(new CreateMultiItemOrderUseCase.Line(10L, null, 1))))
+                .isInstanceOf(OrderInvariantViolationException.class);
+        verify(saveOrderPort, never()).save(any());
+    }
+
+    @Test @DisplayName("create: 선택 자유입력을 비워 두면 스냅샷 없이 통과한다")
+    void create_allowsBlankOptionalText() {
+        givenSellableProduct();
+        givenTextAxis("ENGRAVING", "각인 문구", 10, false);
+
+        Order result = service.create(1L,
+                List.of(new CreateMultiItemOrderUseCase.Line(10L, null, 1)));
+
+        assertThat(result.getItems().get(0).getOptions()).isEmpty();
     }
 }

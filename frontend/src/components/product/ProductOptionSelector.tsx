@@ -11,6 +11,9 @@ interface Props {
   /** 축코드 → 값코드. 부모가 들고 있어야 장바구니·주문이 같은 선택을 쓴다. */
   selection: Record<string, string>;
   onChange: (selection: Record<string, string>) => void;
+  /** 자유입력 축코드 → 구매자가 적은 문구. 선택형과 저장소를 나눈다(코드가 아니라 문장이라서). */
+  texts?: Record<string, string>;
+  onTextsChange?: (texts: Record<string, string>) => void;
   /** 필수 축을 모두 골랐는지 + 그 조합이 실제로 살 수 있는지. 부모의 버튼 활성 조건. */
   onReadyChange?: (ready: boolean) => void;
 }
@@ -28,11 +31,18 @@ interface Props {
  *   <li>지금 선택과 함께 살 수 있는 조합이 없는 값은 회색으로 죽인다. 이건 <b>표시</b> 판정이라
  *       틀려도 서버가 막는다. 실제 SKU 해석은 주문 시점에 resolve 가 다시 한다.</li>
  *   <li>이미 고른 값은 다시 눌러 끌 수 있다 — 아니면 조합을 바꿀 길이 막힌다.</li>
- *   <li>TEXT 축(각인 문구처럼 직접 입력하는 축)은 아직 값 목록이 없어 그리지 않는다. 그 경로는
- *       스키마·주문 스냅샷까지 함께 열어야 성립한다.</li>
+ *   <li>TEXT 축(각인 문구처럼 직접 적는 축)은 입력칸으로 그린다. 이 축은 <b>SKU 를 만들지 않으므로</b>
+ *       조합 판정(품절·추가금)에 끼지 않는다 — 문구가 달라도 재고는 같은 칸에서 빠진다.</li>
  * </ul>
  */
-const ProductOptionSelector: React.FC<Props> = ({ productId, selection, onChange, onReadyChange }) => {
+const ProductOptionSelector: React.FC<Props> = ({
+  productId,
+  selection,
+  onChange,
+  texts = {},
+  onTextsChange,
+  onReadyChange,
+}) => {
   const [options, setOptions] = useState<ProductOptions | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -57,9 +67,14 @@ const ProductOptionSelector: React.FC<Props> = ({ productId, selection, onChange
     };
   }, [productId]);
 
-  // 값 목록이 있는 축만 고를 수 있다. TEXT 축은 values 가 비어 오므로 자연히 빠진다.
+  // 선택형(칩) 축과 자유입력(입력칸) 축은 그리는 법도, 준비됐는지 따지는 법도 다르다.
+  // 자유입력 축은 값 목록이 비어 오므로 textMaxLength 로 가른다.
   const axes = useMemo(
     () => (options?.axes ?? []).filter((a) => a.values.length > 0),
+    [options]
+  );
+  const textAxes = useMemo(
+    () => (options?.axes ?? []).filter((a) => a.textMaxLength != null),
     [options]
   );
 
@@ -73,7 +88,11 @@ const ProductOptionSelector: React.FC<Props> = ({ productId, selection, onChange
     [options, axes, selection]
   );
 
-  const ready = axes.length === 0 ? true : matched?.available === true;
+  // 필수 자유입력은 비어 있으면 안 된다. 서버도 같은 것을 검사하지만, 결제까지 간 뒤
+  // 거절당하는 것보다 버튼이 안 눌리는 편이 낫다.
+  const textsReady = textAxes.every((a) => !a.required || (texts[a.code] ?? '').trim().length > 0);
+  const selectionReady = axes.length === 0 ? true : matched?.available === true;
+  const ready = selectionReady && textsReady;
 
   useEffect(() => {
     onReadyChange?.(ready);
@@ -85,7 +104,7 @@ const ProductOptionSelector: React.FC<Props> = ({ productId, selection, onChange
   if (error) {
     return <p className="text-xs text-red-500">{error}</p>;
   }
-  if (axes.length === 0) {
+  if (axes.length === 0 && textAxes.length === 0) {
     return null; // 옵션 없는 상품 — 고를 것이 없으면 칸도 내지 않는다
   }
 
@@ -99,7 +118,10 @@ const ProductOptionSelector: React.FC<Props> = ({ productId, selection, onChange
     onChange(next);
   };
 
-  const missing = axes.filter((a) => a.required && !selection[a.code]).map((a) => a.name);
+  const missing = [
+    ...axes.filter((a) => a.required && !selection[a.code]),
+    ...textAxes.filter((a) => a.required && (texts[a.code] ?? '').trim().length === 0),
+  ].map((a) => a.name);
 
   return (
     <section aria-label="옵션 선택" className="border border-gray-200 rounded-lg p-4 space-y-4">
@@ -147,9 +169,36 @@ const ProductOptionSelector: React.FC<Props> = ({ productId, selection, onChange
         </fieldset>
       ))}
 
+      {textAxes.map((axis) => {
+        const value = texts[axis.code] ?? '';
+        const limit = axis.textMaxLength ?? 200;
+        return (
+          <div key={axis.code} className="space-y-1.5">
+            <label htmlFor={`opt-text-${axis.code}`} className="block text-xs font-medium text-gray-600">
+              {axis.name}
+              {axis.required && <span className="ml-1 text-red-500">*</span>}
+            </label>
+            <input
+              id={`opt-text-${axis.code}`}
+              type="text"
+              value={value}
+              maxLength={limit}
+              placeholder={`${limit}자까지 입력할 수 있습니다`}
+              onChange={(e) => onTextsChange?.({ ...texts, [axis.code]: e.target.value })}
+              className="w-full px-3 py-2 rounded-lg border border-gray-300 text-sm focus:border-blue-400 focus:outline-none"
+            />
+            <p className="text-xs text-gray-400 text-right">
+              {value.length} / {limit}
+            </p>
+          </div>
+        );
+      })}
+
+      {/* 조합 판정은 선택형 축이 있을 때만 뜻이 있다. 자유입력만 있는 상품은 고를 조합이
+          없으므로 matched 가 늘 undefined 인데, 그걸 "판매하지 않는 조합"으로 읽으면 안 된다. */}
       {missing.length > 0 ? (
         <p className="text-xs text-gray-500">선택이 필요합니다: {missing.join(', ')}</p>
-      ) : matched === undefined ? (
+      ) : axes.length === 0 ? null : matched === undefined ? (
         <p className="text-xs text-amber-600">판매하지 않는 조합입니다.</p>
       ) : !matched.available ? (
         <p className="text-xs text-amber-600">품절된 조합입니다.</p>

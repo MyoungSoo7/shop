@@ -160,4 +160,84 @@ class OrderItemOptionTest {
                     .isInstanceOf(UnsupportedOperationException.class);
         }
     }
+
+    /**
+     * 자유입력(TEXT) 축 — 각인 문구처럼 구매자가 직접 적는 옵션.
+     *
+     * <p>선택형과 다른 점은 하나다: <b>카탈로그에 없던 문장</b>이라 값 코드가 없다. 그래서
+     * 검사할 것도 다르다 — 코드가 비었는가가 아니라, 길이가 축이 정한 상한을 넘지 않는가다.
+     */
+    @Nested
+    @DisplayName("자유입력 스냅샷")
+    class TextSnapshot {
+
+        @Test
+        @DisplayName("문구를 담고 값 코드는 비운다 — 없던 코드를 지어내지 않는다")
+        void keepsTextWithoutValueCode() {
+            OrderItemOption option = OrderItemOption.textSnapshot(0, "ENGRAVING", "각인 문구", "민수에게", 10);
+
+            assertThat(option.isFreeText()).isTrue();
+            assertThat(option.getTextValue()).isEqualTo("민수에게");
+            assertThat(option.getValueCode()).isNull();
+            assertThat(option.getValueName()).isNull();
+            assertThat(option.describe()).isEqualTo("각인 문구: 민수에게");
+        }
+
+        @Test
+        @DisplayName("앞뒤 공백은 저장 전에 깎는다")
+        void trimsSurroundingWhitespace() {
+            OrderItemOption option = OrderItemOption.textSnapshot(0, "ENGRAVING", "각인", "  민수  ", 10);
+
+            assertThat(option.getTextValue()).isEqualTo("민수");
+        }
+
+        @Test
+        @DisplayName("빈 문구는 거절한다 — 적지 않은 것과 빈 각인은 다르지 않다")
+        void rejectsBlankText() {
+            assertThatThrownBy(() -> OrderItemOption.textSnapshot(0, "ENGRAVING", "각인", "   ", 10))
+                    .isInstanceOf(OrderInvariantViolationException.class);
+        }
+
+        /*
+         * 화면의 maxlength 는 요청을 직접 만들면 그냥 없는 것이다. 그래서 주문 시점에 한 번 더 센다.
+         */
+        @Test
+        @DisplayName("축이 정한 상한을 넘으면 거절한다 — 화면 속성은 방어선이 아니다")
+        void rejectsTextOverAxisLimit() {
+            assertThatThrownBy(() ->
+                    OrderItemOption.textSnapshot(0, "ENGRAVING", "각인", "일이삼사오육칠팔구십일", 10))
+                    .isInstanceOf(OrderInvariantViolationException.class)
+                    .hasMessageContaining("10자 이하");
+        }
+
+        @Test
+        @DisplayName("상한 자체가 컬럼 폭(200)을 넘으면 거절한다")
+        void rejectsAbsurdLimit() {
+            assertThatThrownBy(() -> OrderItemOption.textSnapshot(0, "E", "각인", "가", 201))
+                    .isInstanceOf(OrderInvariantViolationException.class);
+        }
+
+        /*
+         * 동일성이 축까지만 보는 이유 — "각인=A" 와 "각인=B" 를 다른 줄로 보면
+         * 같은 차수가 두 번 들어오는 것을 막지 못한다. 문구가 달라도 각인 축은 하나다.
+         */
+        @Test
+        @DisplayName("문구가 달라도 같은 축이면 같은 줄로 본다")
+        void identityIsAxisScoped() {
+            OrderItemOption a = OrderItemOption.textSnapshot(0, "ENGRAVING", "각인", "민수", 10);
+            OrderItemOption b = OrderItemOption.textSnapshot(0, "ENGRAVING", "각인", "영희", 10);
+
+            assertThat(a).isEqualTo(b);
+            assertThat(a).hasSameHashCodeAs(b);
+        }
+
+        @Test
+        @DisplayName("선택형과 자유입력은 서로 다른 줄이다")
+        void freeTextDiffersFromSelected() {
+            OrderItemOption text = OrderItemOption.textSnapshot(0, "AXIS", "축", "문구", 10);
+            OrderItemOption selected = OrderItemOption.snapshot(0, "AXIS", "축", "RED", "빨강");
+
+            assertThat(text).isNotEqualTo(selected);
+        }
+    }
 }

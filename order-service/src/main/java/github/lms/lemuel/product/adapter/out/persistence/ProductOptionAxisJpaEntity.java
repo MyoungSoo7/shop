@@ -30,6 +30,10 @@ public class ProductOptionAxisJpaEntity {
     @Column(name = "is_required", nullable = false)
     private boolean required;
 
+    /** TEXT 축에서 받을 최대 글자 수. NULL 이면 기본값을 쓴다 — 기존 축을 건드리지 않고 도입하기 위해서다. */
+    @Column(name = "text_max_length")
+    private Integer textMaxLength;
+
     @Column(name = "created_at", nullable = false, updatable = false)
     private LocalDateTime createdAt;
 
@@ -37,6 +41,12 @@ public class ProductOptionAxisJpaEntity {
 
     public ProductOptionAxisJpaEntity(Long id, Long productId, Long axisId,
                                       int sortOrder, boolean required) {
+        this(id, productId, axisId, sortOrder, required, null);
+    }
+
+    public ProductOptionAxisJpaEntity(Long id, Long productId, Long axisId,
+                                      int sortOrder, boolean required, Integer textMaxLength) {
+        this.textMaxLength = textMaxLength;
         this.id = id;
         this.productId = productId;
         this.axisId = axisId;
@@ -49,6 +59,11 @@ public class ProductOptionAxisJpaEntity {
         if (createdAt == null) createdAt = LocalDateTime.now();
     }
 
+    public void applyDomainState(int sortOrder, boolean required, Integer textMaxLength) {
+        this.textMaxLength = textMaxLength;
+        applyDomainState(sortOrder, required);
+    }
+
     public void applyDomainState(int sortOrder, boolean required) {
         this.sortOrder = sortOrder;
         this.required = required;
@@ -59,5 +74,6 @@ public class ProductOptionAxisJpaEntity {
     public Long getAxisId() { return axisId; }
     public int getSortOrder() { return sortOrder; }
     public boolean isRequired() { return required; }
+    public Integer getTextMaxLength() { return textMaxLength; }
     public LocalDateTime getCreatedAt() { return createdAt; }
 }

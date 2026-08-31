@@ -13,6 +13,8 @@ import github.lms.lemuel.order.application.port.out.SendOrderNotificationPort;
 import github.lms.lemuel.order.domain.Order;
 import github.lms.lemuel.order.domain.OrderItem;
 import github.lms.lemuel.order.domain.OrderItemOption;
+import github.lms.lemuel.order.domain.exception.OrderInvariantViolationException;
+import github.lms.lemuel.product.application.port.in.DescribeProductOptionsUseCase;
 import github.lms.lemuel.order.domain.ShippingAddressSnapshot;
 import github.lms.lemuel.order.domain.exception.UserNotExistsException;
 import github.lms.lemuel.product.application.port.in.DecreaseProductStockUseCase;
@@ -34,6 +36,8 @@ import java.math.BigDecimal;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
+import java.util.stream.Collectors;
+import java.util.Set;
 import java.util.Map;
 
 /**
@@ -75,6 +79,7 @@ public class CreateMultiItemOrderService implements CreateMultiItemOrderUseCase 
     private final AssessShippingFeeUseCase assessShippingFeeUseCase;
     private final CreateShipmentPort createShipmentPort;
     private final RecordOrderConsentUseCase recordOrderConsentUseCase;
+    private final DescribeProductOptionsUseCase describeProductOptionsUseCase;
 
     public CreateMultiItemOrderService(LoadUserForOrderPort loadUserPort,
                                        LoadProductPort loadProductPort,
@@ -88,7 +93,9 @@ public class CreateMultiItemOrderService implements CreateMultiItemOrderUseCase 
                                        DescribeVariantOptionsUseCase describeVariantOptionsUseCase,
                                        AssessShippingFeeUseCase assessShippingFeeUseCase,
                                        CreateShipmentPort createShipmentPort,
-                                       RecordOrderConsentUseCase recordOrderConsentUseCase) {
+                                       RecordOrderConsentUseCase recordOrderConsentUseCase,
+                                       DescribeProductOptionsUseCase describeProductOptionsUseCase) {
+        this.describeProductOptionsUseCase = describeProductOptionsUseCase;
         this.loadUserPort = loadUserPort;
         this.loadProductPort = loadProductPort;
         this.loadVariantPort = loadVariantPort;
@@ -150,6 +157,16 @@ public class CreateMultiItemOrderService implements CreateMultiItemOrderUseCase 
                 // 옵션 없는 일반 상품: products.stock_quantity 를 원자적 조건부 UPDATE 로 차감.
                 // 같은 트랜잭션이므로 이후 단계(쿠폰·결제) 실패 시 재고도 함께 롤백된다.
                 decreaseProductStockUseCase.decrease(line.productId(), line.quantity());
+            }
+
+            // 자유입력(TEXT) 축은 SKU 를 만들지 않으므로 variant 스냅샷에 없다. 별도로 붙인다.
+            // 붙이지 않으면 각인 문구가 주문서 어디에도 남지 않아, 만들기는 만들었는데
+            // 무엇을 새길지 아무도 모르는 주문이 된다.
+            List<OrderItemOption> textOptions = snapshotTextOptions(product.getId(), line.optionTexts());
+            if (!textOptions.isEmpty()) {
+                List<OrderItemOption> merged = new ArrayList<>(options);
+                merged.addAll(textOptions);
+                options = List.copyOf(merged);
             }
 
             items.add(OrderItem.newItem(line.productId(), line.variantId(), sku,
@@ -255,5 +272,47 @@ public class CreateMultiItemOrderService implements CreateMultiItemOrderUseCase 
         public CouponApplicationException(String message) {
             super("쿠폰 적용 실패: " + message);
         }
+    }
+
+    /**
+     * 자유입력(TEXT) 축의 스냅샷을 만든다 — 상품이 실제로 그 축을 갖고 있을 때만.
+     *
+     * <p>상품이 선언하지 않은 축 코드가 들어오면 조용히 버리지 않고 거절한다. 조용히 버리면
+     * 구매자는 각인을 적었다고 믿고 결제하는데 주문서에는 아무것도 없는 상태가 되고,
+     * 그 차이는 물건이 도착해서야 드러난다.
+     *
+     * <p>필수인 TEXT 축을 비워 보낸 경우도 여기서 막는다. 축이 required 인지 아닌지는
+     * 상품이 정한 것이고, 화면이 안 그려줬다는 이유로 넘어가면 필수의 뜻이 사라진다.
+     */
+    private List<OrderItemOption> snapshotTextOptions(Long productId, Map<String, String> texts) {
+        Map<String, String> given = texts == null ? Map.of() : texts;
+        List<DescribeProductOptionsUseCase.Axis> textAxes =
+                describeProductOptionsUseCase.describe(productId).axes().stream()
+                        .filter(a -> a.textMaxLength() != null)
+                        .toList();
+
+        Set<String> known = textAxes.stream()
+                .map(DescribeProductOptionsUseCase.Axis::code)
+                .collect(Collectors.toSet());
+        for (String code : given.keySet()) {
+            if (!known.contains(code)) {
+                throw new OrderInvariantViolationException(
+                        "이 상품에 없는 자유입력 옵션입니다: " + code);
+            }
+        }
+
+        List<OrderItemOption> snapshots = new ArrayList<>();
+        for (DescribeProductOptionsUseCase.Axis axis : textAxes) {
+            String text = given.get(axis.code());
+            if (text == null || text.isBlank()) {
+                if (axis.required()) {
+                    throw new OrderInvariantViolationException(axis.name() + " 은(는) 필수 입력입니다");
+                }
+                continue;
+            }
+            snapshots.add(OrderItemOption.textSnapshot(
+                    axis.sortOrder(), axis.code(), axis.name(), text, axis.textMaxLength()));
+        }
+        return List.copyOf(snapshots);
     }
 }

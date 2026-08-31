@@ -109,6 +109,12 @@ export interface OrderLineRequest {
   productId: number;
   variantId?: number | null;
   quantity: number;
+  /**
+   * 자유입력(TEXT) 축코드 → 구매자가 적은 문구. 이 값은 SKU 를 만들지 않으므로 variantId 와
+   * 별개로 실려 가고, 주문 라인의 옵션 스냅샷에 그대로 남는다. 쿠폰 미리보기에는 보내지 않는다
+   * — 문구는 금액을 바꾸지 않는다.
+   */
+  optionTexts?: Record<string, string>;
 }
 
 /** 다건 주문의 라인 결과. allocatedDiscount 는 이 라인이 짊어진 할인 몫(부분취소 환불 단위). */

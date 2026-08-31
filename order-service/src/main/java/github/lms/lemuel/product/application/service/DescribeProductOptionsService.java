@@ -94,8 +94,14 @@ public class DescribeProductOptionsService implements DescribeProductOptionsUseC
             }
             values.sort(Comparator.comparingInt(Value::sortOrder));
 
+            // 자유입력 상한은 TEXT 축에서만 뜻이 있다. 선택형 축에 실어 보내면 화면이
+            // "여기도 적을 수 있나" 하고 헷갈릴 자리를 만든다.
+            Integer textMaxLength = axis.get().getInputType().hasEnumeratedValues()
+                    ? null
+                    : productAxis.effectiveTextMaxLength();
             axes.add(new Axis(productAxis.getSortOrder(), axis.get().getCode(), axis.get().getName(),
-                    axis.get().getInputType(), productAxis.isRequired(), List.copyOf(values)));
+                    axis.get().getInputType(), productAxis.isRequired(), List.copyOf(values),
+                    textMaxLength));
         }
         axes.sort(Comparator.comparingInt(Axis::sortOrder));
 
