@@ -142,12 +142,12 @@ public class OptionCatalogPersistenceAdapter
         ProductOptionAxisJpaEntity entity;
         if (axis.getId() == null) {
             entity = new ProductOptionAxisJpaEntity(null, axis.getProductId(), axis.getAxisId(),
-                    axis.getSortOrder(), axis.isRequired());
+                    axis.getSortOrder(), axis.isRequired(), axis.getTextMaxLength());
         } else {
             entity = productAxisRepository.findById(axis.getId())
                     .orElseThrow(() -> new IllegalStateException(
                             "ProductOptionAxis 사라짐 (id=" + axis.getId() + ")"));
-            entity.applyDomainState(axis.getSortOrder(), axis.isRequired());
+            entity.applyDomainState(axis.getSortOrder(), axis.isRequired(), axis.getTextMaxLength());
         }
         return toDomain(productAxisRepository.save(entity));
     }
@@ -179,7 +179,7 @@ public class OptionCatalogPersistenceAdapter
 
     private static ProductOptionAxis toDomain(ProductOptionAxisJpaEntity e) {
         return ProductOptionAxis.rehydrate(e.getId(), e.getProductId(), e.getAxisId(),
-                e.getSortOrder(), e.isRequired());
+                e.getSortOrder(), e.isRequired(), e.getTextMaxLength());
     }
 
     private static ProductOptionValue toDomain(ProductOptionValueJpaEntity e) {

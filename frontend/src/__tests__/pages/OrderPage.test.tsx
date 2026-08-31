@@ -8,6 +8,8 @@ import { paymentApi } from '@/api/payment';
 import { reviewApi } from '@/api/review';
 import { couponApi } from '@/api/coupon';
 import { facetApi } from '@/api/facet';
+import { productOptionApi } from '@/api/productOptions';
+import { productVariantApi } from '@/api/productVariant';
 import { privacyConsentApi, type PrivacyConsentTerms } from '@/api/privacyConsent';
 
 const addItem = vi.fn();
@@ -75,6 +77,10 @@ const mockedReview = vi.mocked(reviewApi);
 const mockedCoupon = vi.mocked(couponApi);
 const mockedFacet = vi.mocked(facetApi);
 const mockedConsentTerms = vi.mocked(privacyConsentApi.terms);
+const mockedOptions = vi.mocked(productOptionApi);
+
+/** 옵션이 없는 상품의 응답 — 이 파일 대부분이 전제하는 기본값이다. */
+const NO_OPTIONS = { productId: 1, axes: [], combinations: [] };
 
 /** 결제 화면이 받아 오는 동의 문안. 필수 하나 + 선택 하나 — 둘의 취급이 다르다. */
 const REQUIRED_TERMS: PrivacyConsentTerms = {
@@ -152,6 +158,9 @@ beforeEach(() => {
   mockedFacet.search.mockResolvedValue({ products: [], facets: [] } as never);
   mockedReview.getProductReviews.mockResolvedValue([] as never);
   mockedConsentTerms.mockResolvedValue([REQUIRED_TERMS, OPTIONAL_TERMS]);
+  // clearAllMocks 는 호출 기록만 지우고 구현은 남긴다. 한 케이스가 옵션 응답을 바꾸면
+  // 그 뒤 케이스들이 계속 그 옵션을 보게 되므로 매번 기본값으로 되돌린다.
+  mockedOptions.describe.mockResolvedValue(NO_OPTIONS as never);
 });
 
 afterEach(() => {
@@ -618,5 +627,104 @@ describe('OrderPage — 옵션 파셋', () => {
     render(<OrderPage />);
 
     expect(await screen.findByText('티셔츠')).toBeInTheDocument();
+  });
+});
+
+/**
+ * 자유입력(TEXT) 축 — 각인 문구처럼 구매자가 직접 적는 옵션.
+ *
+ * <p>이 축은 <b>SKU 를 만들지 않는다.</b> "각인=민수" 를 따로 쌓아두는 창고가 없으므로
+ * 조합(variant)에 끼지 않고, 문구는 주문 라인의 속성으로만 남는다. 그래서 검사할 것이
+ * 선택형과 다르다 — resolve 에 안 실리는가, 라인에는 실리는가, 비면 막히는가.
+ */
+describe('OrderPage — 자유입력 옵션', () => {
+  const TEXT_OPTIONS = {
+    productId: 1,
+    axes: [
+      {
+        sortOrder: 0,
+        code: 'ENGRAVING',
+        name: '각인 문구',
+        inputType: 'TEXT',
+        required: true,
+        values: [],
+        textMaxLength: 10,
+      },
+    ],
+    combinations: [],
+  };
+
+  const selectTextProduct = async () => {
+    mockedOptions.describe.mockResolvedValue(TEXT_OPTIONS as never);
+    await selectProduct();
+    return screen.findByLabelText(/각인 문구/);
+  };
+
+  it('입력칸을 그리고 축이 정한 길이로 제한한다', async () => {
+    const input = await selectTextProduct();
+
+    expect(input).toHaveAttribute('maxlength', '10');
+  });
+
+  it('필수 문구가 비면 주문을 내보내지 않는다', async () => {
+    await selectTextProduct();
+
+    await userEvent.click(screen.getByRole('button', { name: '주문하기' }));
+
+    expect(await screen.findByText('옵션을 선택해주세요.')).toBeInTheDocument();
+    expect(mockedOrder.createMultiItemOrder).not.toHaveBeenCalled();
+  });
+
+  it('적은 문구를 주문 라인에 실어 보낸다 — SKU 해석에는 쓰지 않는다', async () => {
+    mockedOrder.createMultiItemOrder.mockResolvedValue(order());
+    const input = await selectTextProduct();
+
+    await userEvent.type(input, '민수에게');
+    await userEvent.click(screen.getByRole('button', { name: '주문하기' }));
+
+    await waitFor(() =>
+      expect(mockedOrder.createMultiItemOrder).toHaveBeenCalledWith(
+        7,
+        [{ productId: 1, variantId: null, quantity: 1, optionTexts: { ENGRAVING: '민수에게' } }],
+        FILLED_ADDRESS, AGREED_ACCEPTANCES, null, expect.any(String),
+      ),
+    );
+    // 문구는 재고 단위를 가르지 않는다. resolve 를 부르면 없는 조합을 찾다 실패한다.
+    expect(vi.mocked(productVariantApi).resolve).not.toHaveBeenCalled();
+  });
+
+  it('공백만 친 문구는 키째 빠진다', async () => {
+    mockedOrder.createMultiItemOrder.mockResolvedValue(order());
+    const options = {
+      ...TEXT_OPTIONS,
+      axes: [{ ...TEXT_OPTIONS.axes[0], required: false }],
+    };
+    mockedOptions.describe.mockResolvedValue(options as never);
+    await selectProduct();
+
+    await userEvent.type(await screen.findByLabelText(/각인 문구/), '   ');
+    await userEvent.click(screen.getByRole('button', { name: '주문하기' }));
+
+    await waitFor(() =>
+      expect(mockedOrder.createMultiItemOrder).toHaveBeenCalledWith(
+        7, [{ productId: 1, variantId: null, quantity: 1 }],
+        FILLED_ADDRESS, AGREED_ACCEPTANCES, null, expect.any(String),
+      ),
+    );
+  });
+
+  /*
+   * 서버 장바구니가 담는 것은 (상품, SKU, 수량) 뿐이라 문구를 실어 둘 칸이 없다.
+   * 그냥 통과시키면 각인을 적어 담은 뒤 빈 각인으로 주문되므로 — 조용히 잃는 대신 막는다.
+   */
+  it('자유입력 상품은 장바구니에 담기지 않고 이유를 말한다', async () => {
+    mockedOptions.describe.mockResolvedValue(TEXT_OPTIONS as never);
+    render(<OrderPage />);
+    await screen.findByText('티셔츠');
+
+    await userEvent.click(screen.getByRole('button', { name: '장바구니 담기' }));
+
+    expect(await screen.findByText(/장바구니에 담을 수 없습니다/)).toBeInTheDocument();
+    expect(addItem).not.toHaveBeenCalled();
   });
 });

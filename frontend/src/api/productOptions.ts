@@ -33,6 +33,13 @@ export interface ProductOptionAxis {
   inputType: OptionInputType;
   required: boolean;
   values: ProductOptionValue[];
+  /**
+   * TEXT 축에 적을 수 있는 최대 글자 수. 선택형 축에서는 null 이다.
+   *
+   * <p>maxlength 를 걸어 주기 위한 안내값일 뿐이다 — 요청을 직접 만들면 이 속성은
+   * 그냥 없는 것이므로, 길이·필수 여부는 주문 시점에 서버가 다시 검사한다.
+   */
+  textMaxLength: number | null;
 }
 
 /** 실제로 존재하는 SKU 하나에 대응하는 조합. 재고 수량 대신 `available` 한 비트만 온다. */

@@ -36,7 +36,14 @@ public interface DescribeProductOptionsUseCase {
                 String name,
                 OptionInputType inputType,
                 boolean required,
-                List<Value> values) {}
+                List<Value> values,
+                /**
+                 * TEXT 축에 적을 수 있는 최대 글자 수. 선택형 축에서는 null 이다.
+                 *
+                 * <p>화면이 maxlength 를 걸 수 있게 실어 보내지만, 이건 안내일 뿐이다 —
+                 * 요청을 직접 만들면 속성은 그냥 없는 것이므로 주문 시점에 서버가 다시 검사한다.
+                 */
+                Integer textMaxLength) {}
 
     record Value(String code, String name, String swatchHex, int sortOrder) {}
 

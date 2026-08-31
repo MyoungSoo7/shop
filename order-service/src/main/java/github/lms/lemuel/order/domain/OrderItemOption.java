@@ -18,6 +18,8 @@ public final class OrderItemOption {
 
     private static final int MAX_CODE_LENGTH = 50;
     private static final int MAX_NAME_LENGTH = 100;
+    /** 자유입력의 절대 상한 — 컬럼 폭과 같다. 축별 상한은 이보다 짧을 수 있다. */
+    public static final int MAX_TEXT_LENGTH = 200;
 
     private Long id;
     private Long orderItemId;
@@ -26,9 +28,10 @@ public final class OrderItemOption {
     private final String axisName;
     private final String valueCode;
     private final String valueName;
+    private final String textValue;
 
     private OrderItemOption(Long id, Long orderItemId, int axisSortOrder, String axisCode,
-                            String axisName, String valueCode, String valueName) {
+                            String axisName, String valueCode, String valueName, String textValue) {
         this.id = id;
         this.orderItemId = orderItemId;
         this.axisSortOrder = axisSortOrder;
@@ -36,23 +39,64 @@ public final class OrderItemOption {
         this.axisName = axisName;
         this.valueCode = valueCode;
         this.valueName = valueName;
+        this.textValue = textValue;
     }
 
     public static OrderItemOption snapshot(int axisSortOrder, String axisCode, String axisName,
                                            String valueCode, String valueName) {
-        if (axisSortOrder < 0) {
-            throw new OrderInvariantViolationException("옵션 차수는 0 이상");
+        requireDepth(axisSortOrder);
+        return new OrderItemOption(null, null, axisSortOrder,
+                requireCode(axisCode, "축 코드"), requireName(axisName, "축 이름"),
+                requireCode(valueCode, "값 코드"), requireName(valueName, "값 이름"), null);
+    }
+
+    /**
+     * 자유입력 축(TEXT)의 스냅샷 — "각인: 민수에게".
+     *
+     * <p>선택형과 달리 값 코드가 없다. 카탈로그에 없던 문장이므로 코드를 지어낼 수 없고,
+     * 지어내면 그 코드로 집계하거나 값 목록과 대조할 수 있는 것처럼 보여 더 나쁘다.
+     *
+     * <p>{@code maxLength} 는 축이 정한 상한이다. 상한 검사를 주문 시점에 한 번 더 하는 이유는,
+     * 화면의 maxlength 속성은 요청을 직접 만들면 그냥 없는 것이기 때문이다.
+     */
+    public static OrderItemOption textSnapshot(int axisSortOrder, String axisCode, String axisName,
+                                                String text, int maxLength) {
+        requireDepth(axisSortOrder);
+        if (maxLength < 1 || maxLength > MAX_TEXT_LENGTH) {
+            throw new OrderInvariantViolationException(
+                    "자유입력 상한은 1~" + MAX_TEXT_LENGTH + "자: " + maxLength);
+        }
+        if (text == null || text.isBlank()) {
+            throw new OrderInvariantViolationException("자유입력 값은 필수");
+        }
+        String trimmed = text.trim();
+        if (trimmed.length() > maxLength) {
+            throw new OrderInvariantViolationException(
+                    axisName + " 은 " + maxLength + "자 이하 (" + trimmed.length() + "자 들어옴)");
         }
         return new OrderItemOption(null, null, axisSortOrder,
                 requireCode(axisCode, "축 코드"), requireName(axisName, "축 이름"),
-                requireCode(valueCode, "값 코드"), requireName(valueName, "값 이름"));
+                null, null, trimmed);
     }
 
     public static OrderItemOption rehydrate(Long id, Long orderItemId, int axisSortOrder,
                                             String axisCode, String axisName,
                                             String valueCode, String valueName) {
+        return rehydrate(id, orderItemId, axisSortOrder, axisCode, axisName,
+                valueCode, valueName, null);
+    }
+
+    public static OrderItemOption rehydrate(Long id, Long orderItemId, int axisSortOrder,
+                                            String axisCode, String axisName,
+                                            String valueCode, String valueName, String textValue) {
         return new OrderItemOption(id, orderItemId, axisSortOrder, axisCode, axisName,
-                valueCode, valueName);
+                valueCode, valueName, textValue);
+    }
+
+    private static void requireDepth(int axisSortOrder) {
+        if (axisSortOrder < 0) {
+            throw new OrderInvariantViolationException("옵션 차수는 0 이상");
+        }
     }
 
     private static String requireCode(String value, String what) {
@@ -91,9 +135,14 @@ public final class OrderItemOption {
         this.id = id;
     }
 
-    /** 주문서 표시용 한 줄 — "색상: 빨강". */
+    /** 자유입력 축인가 — 값 코드 없이 문구만 남은 줄. */
+    public boolean isFreeText() {
+        return textValue != null;
+    }
+
+    /** 주문서 표시용 한 줄 — "색상: 빨강", "각인: 민수에게". */
     public String describe() {
-        return axisName + ": " + valueName;
+        return axisName + ": " + (isFreeText() ? textValue : valueName);
     }
 
     public Long getId() { return id; }
@@ -103,14 +152,21 @@ public final class OrderItemOption {
     public String getAxisName() { return axisName; }
     public String getValueCode() { return valueCode; }
     public String getValueName() { return valueName; }
+    public String getTextValue() { return textValue; }
 
+    /**
+     * 동일성은 <b>축 하나에 값 하나</b> 라는 불변식을 지키기 위한 것이다 — 그래서 축까지만 본다.
+     *
+     * <p>자유입력을 동일성에 넣으면 "각인=A" 와 "각인=B" 가 서로 다른 줄이 되어 같은 차수가
+     * 두 번 들어오는 것을 막지 못한다. 문구가 달라도 각인 축은 여전히 하나다.
+     */
     @Override
     public boolean equals(Object o) {
         if (this == o) return true;
         if (!(o instanceof OrderItemOption other)) return false;
         return axisSortOrder == other.axisSortOrder
                 && axisCode.equals(other.axisCode)
-                && valueCode.equals(other.valueCode);
+                && Objects.equals(valueCode, other.valueCode);
     }
 
     @Override

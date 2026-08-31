@@ -13,31 +13,64 @@ import java.util.Objects;
  */
 public final class ProductOptionAxis {
 
+    /** 자유입력(TEXT 축)의 기본 상한 — 축이 따로 정하지 않았을 때 쓴다. 컬럼 폭과 같다. */
+    public static final int DEFAULT_TEXT_MAX_LENGTH = 200;
+
     private Long id;
     private final Long productId;
     private final Long axisId;
     private int sortOrder;
     private boolean required;
+    /** TEXT 축에서 받을 최대 글자 수. null 이면 {@link #DEFAULT_TEXT_MAX_LENGTH}. 선택형 축에서는 의미 없다. */
+    private final Integer textMaxLength;
 
-    private ProductOptionAxis(Long id, Long productId, Long axisId, int sortOrder, boolean required) {
+    private ProductOptionAxis(Long id, Long productId, Long axisId, int sortOrder, boolean required,
+                              Integer textMaxLength) {
         this.id = id;
         this.productId = productId;
         this.axisId = axisId;
         this.sortOrder = sortOrder;
         this.required = required;
+        this.textMaxLength = textMaxLength;
     }
 
     public static ProductOptionAxis create(Long productId, Long axisId, int sortOrder, boolean required) {
+        return create(productId, axisId, sortOrder, required, null);
+    }
+
+    public static ProductOptionAxis create(Long productId, Long axisId, int sortOrder, boolean required,
+                                           Integer textMaxLength) {
         Objects.requireNonNull(productId, "productId");
         Objects.requireNonNull(axisId, "axisId");
         validateSortOrder(sortOrder);
-        return new ProductOptionAxis(null, productId, axisId, sortOrder, required);
+        validateTextMaxLength(textMaxLength);
+        return new ProductOptionAxis(null, productId, axisId, sortOrder, required, textMaxLength);
     }
 
     public static ProductOptionAxis rehydrate(Long id, Long productId, Long axisId,
                                               int sortOrder, boolean required) {
-        return new ProductOptionAxis(id, productId, axisId, sortOrder, required);
+        return rehydrate(id, productId, axisId, sortOrder, required, null);
     }
+
+    public static ProductOptionAxis rehydrate(Long id, Long productId, Long axisId,
+                                              int sortOrder, boolean required,
+                                              Integer textMaxLength) {
+        return new ProductOptionAxis(id, productId, axisId, sortOrder, required, textMaxLength);
+    }
+
+    private static void validateTextMaxLength(Integer value) {
+        if (value != null && (value < 1 || value > DEFAULT_TEXT_MAX_LENGTH)) {
+            throw new ProductInvariantViolationException(
+                    "자유입력 상한은 1~" + DEFAULT_TEXT_MAX_LENGTH + "자여야 합니다: " + value);
+        }
+    }
+
+    /** 실제로 적용할 자유입력 상한 — 축이 정하지 않았으면 기본값. */
+    public int effectiveTextMaxLength() {
+        return textMaxLength == null ? DEFAULT_TEXT_MAX_LENGTH : textMaxLength;
+    }
+
+    public Integer getTextMaxLength() { return textMaxLength; }
 
     private static void validateSortOrder(int sortOrder) {
         if (sortOrder < 0) {

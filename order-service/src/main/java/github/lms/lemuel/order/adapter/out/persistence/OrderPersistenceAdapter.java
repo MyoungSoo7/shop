@@ -249,7 +249,8 @@ public class OrderPersistenceAdapter
         for (OrderItemOption option : item.getOptions()) {
             orderItemOptionRepository.save(new OrderItemOptionJpaEntity(
                     null, orderItemId, option.getAxisSortOrder(), option.getAxisCode(),
-                    option.getAxisName(), option.getValueCode(), option.getValueName()));
+                    option.getAxisName(), option.getValueCode(), option.getValueName(),
+                    option.getTextValue()));
         }
     }
 
@@ -259,7 +260,7 @@ public class OrderPersistenceAdapter
                 .stream()
                 .map(o -> OrderItemOption.rehydrate(o.getId(), o.getOrderItemId(),
                         o.getAxisSortOrder(), o.getAxisCode(), o.getAxisName(),
-                        o.getValueCode(), o.getValueName()))
+                        o.getValueCode(), o.getValueName(), o.getTextValue()))
                 .toList();
         return OrderItem.rehydrate(
                 e.getId(), e.getOrderId(), e.getProductId(), e.getVariantId(),
