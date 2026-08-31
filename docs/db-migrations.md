@@ -1,15 +1,16 @@
 # DB 마이그레이션 규약 (Flyway)
 
-마이그레이션을 가진 서비스는 **4개**다. 각자 자기 스키마를 가지며, 서로의 테이블을 건드리지 않는다.
+마이그레이션을 가진 서비스는 **5개**다. 각자 자기 스키마를 가지며, 서로의 테이블을 건드리지 않는다.
 
 | 서비스 | 스키마 | 마이그레이션 |
 | --- | --- | --- |
-| `order-service` | `opslab` | 182 |
+| `order-service` | `opslab` | 184 |
 | `operation-service` | `opslab` | 24 |
 | `marketing-service` | `marketing` | 5 |
 | `partner-service` | `partner` | 2 |
+| `seller-service` | `seller` | 2 |
 
-*(2026-08-31 실측 — `git ls-files '*/src/main/resources/db/migration/*.sql' | wc -l`)*
+*(2026-09-01 실측 — `git ls-files '*/src/main/resources/db/migration/*.sql' | wc -l`)*
 
 ---
 
@@ -33,6 +34,7 @@ touch "marketing-service/src/main/resources/db/migration/V${TS}__add_campaign_no
 | `operation-service` | `V1` ~ **`V4`** | `V20260715130000` 부터 |
 | `marketing-service` | `V1` ~ **`V5`** | 아직 없음 — 다음 것부터 타임스탬프 |
 | `partner-service` | `V1` ~ **`V2`** | 아직 없음 — 다음 것부터 타임스탬프 |
+| `seller-service` | `V1` ~ **`V2`** | 아직 없음 — 다음 것부터 타임스탬프 |
 
 이 숫자는 **올라가지 않는다.** 올리고 싶다는 것은 정수 버전을 새로 만들었다는 뜻이고, 그게 정확히
 막으려는 것이다. 이미 배포된 DB 의 `flyway_schema_history` 에 기록이 남아 있어 rename 도 못 한다.

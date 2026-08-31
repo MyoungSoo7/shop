@@ -1,0 +1,14 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "lemuel.product.registered",
+  "description": "셀러 신청서가 카탈로그에 실렸다는 회신. seller-service 가 이걸 받아 신청서에 productId 를 붙인다. lemuel.product.changed(사본 동기화용 브로드캐스트)와 다른 토픽인 이유는 수신자가 다르고, 이 이벤트에만 submissionId 가 있기 때문이다. 수정 신청이면 productId 는 새로 만들어진 번호가 아니라 원래 상품의 번호다.",
+  "type": "object",
+  "properties": {
+    "productId": { "type": "integer" },
+    "name": { "type": ["string", "null"] },
+    "submissionId": { "type": "integer" },
+    "sellerId": { "type": "integer" }
+  },
+  "required": ["productId", "submissionId", "sellerId"],
+  "additionalProperties": true
+}

@@ -121,6 +121,11 @@ export const FALLBACK_MENUS: FallbackMenuNode[] = [
       // 맨 뒤다. 등급은 ADMIN 만 — 재고 차감이 주문 없이 재고를 줄이고 되돌릴 수 없어서다.
       { id: -127, name: '상품 옵션', path: '/admin/system/product-variants', icon: '🧩', description: '상품별 SKU 재고 · 추가금 · 조합 해석', area: 'SYSTEM', type: 'ITEM', roles: ['ADMIN'] },
       { id: -128, name: '이벤트 프로모션', path: '/admin/system/promotions', icon: '🎉', description: '출석체크 · 럭키박스 캠페인 등록 · 여닫기 · 경품', area: 'SYSTEM', type: 'ITEM', roles: ['ADMIN'] },
+      // 상품 심사 — 셀러가 올린 신청서를 운영자가 승인·반려한다(seller-service 가 서빙).
+      // 셀러 콘솔 그룹이 아니라 여기 있는 이유: 대상이 "내 조직"이 아니라 전체 신청서라
+      // 스코프로 좁힐 수 없다. 셀러 콘솔에 넣으면 그 그룹 roles 가 USER+ADMIN 이 되어야 하는데,
+      // 그러면 운영자에게 자기가 403 을 받는 링크(/seller/products)가 함께 그려진다.
+      { id: -129, name: '상품 심사', path: '/admin/system/product-submissions', icon: '🔍', description: '셀러 상품 등록 신청 승인 · 반려', area: 'SYSTEM', type: 'ITEM', roles: ['ADMIN'] },
     ],
   },
   {
@@ -205,6 +210,24 @@ export const FALLBACK_MENUS: FallbackMenuNode[] = [
     children: [
       { id: -22, name: '매출 대시보드', path: '/partner', icon: '📈', description: '기간별 매출 · 일자별 추이 · 인기 상품', area: 'CORP', type: 'ITEM', roles: ['USER'] },
       { id: -23, name: '주문 내역', path: '/partner/orders', icon: '🧾', description: '결제 건별 조회 · CSV 내려받기', area: 'CORP', type: 'ITEM', roles: ['USER'] },
+    ],
+  },
+  {
+    // 셀러 콘솔 — 파는 쪽이 자기 상품을 올리고 자기 주문을 처리하는 자리다. SELLER 영역에
+    // 처음 들어오는 줄이다(enum 에는 있었는데 행이 하나도 없었다).
+    //
+    // roles 가 ['USER'] 인 것은 파트너 콘솔과 같은 이유다 — 이 저장소의 메뉴 역할 어휘에
+    // SELLER 가 없고, 없는 역할을 적으면 아무도 막지 못하는데 원장에는 통제가 있는 것처럼
+    // 남는다. 차단 지점은 하나(서버)다: 셀러 조직이 아니면 403 NOT_A_SELLER_MEMBER,
+    // 조직은 맞는데 파는 쪽이 아니면 422 NOT_A_SELLER_ORG 이고 화면이 그 문구를 그린다.
+    //
+    // 심사 화면은 여기 없다 — 위 '시스템 관리'의 자식이다(-129). 이유는 그 줄에 적었다.
+    id: -20, name: '셀러 콘솔', shortName: '셀러', path: '/seller/products', icon: '🏪',
+    description: '셀러 상품 등록 · 주문 출고',
+    area: 'SELLER', type: 'GROUP', roles: ['USER'],
+    children: [
+      { id: -24, name: '상품 등록', path: '/seller/products', icon: '📦', description: '상품 등록 신청서 작성 · 수정 · 심사 요청', area: 'SELLER', type: 'ITEM', roles: ['USER'] },
+      { id: -25, name: '주문 · 출고', path: '/seller/orders', icon: '🚚', description: '내 상품 주문 조회 · 송장 등록', area: 'SELLER', type: 'ITEM', roles: ['USER'] },
     ],
   },
 ];

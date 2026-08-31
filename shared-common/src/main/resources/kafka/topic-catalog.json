@@ -210,6 +210,33 @@
       "replicas": 1,
       "retentionDays": 7,
       "$comment": "출석·럭키박스 보상 지급 요청 — marketing 은 원장을 갖지 않는다. order 의 포인트 원장이 이걸 듣고 적립하고, 그 결과인 lemuel.point.granted 를 marketing 이 되받아 보상을 CONFIRMED 로 닫는다. 정렬키가 memberRef 가 아니라 rewardId 인 이유: 한 회원의 보상은 서로 순서 의존이 없는데 회원으로 묶으면 헤비유저 한 명이 파티션 하나를 막는다(head-of-line blocking)."
+    },
+    {
+      "name": "lemuel.seller.product_approved",
+      "owner": "seller-service",
+      "orderingKey": "submissionId",
+      "partitions": 3,
+      "replicas": 1,
+      "retentionDays": 7,
+      "$comment": "심사를 통과한 셀러 상품 신청서 — order 의 카탈로그가 이걸 듣고 상품을 만들고 lemuel.product.registered 로 되답한다. 정렬키가 sellerId 가 아니라 submissionId 인 이유: 신청서끼리는 순서 의존이 없는데 셀러로 묶으면 대형 셀러의 등재가 한 파티션에 줄을 선다. 페이로드에 내용 전부를 싣는다(신청서 번호만 보내고 되묻게 하면 서비스 간 동기 호출이 생긴다)."
+    },
+    {
+      "name": "lemuel.seller.shipment_registered",
+      "owner": "seller-service",
+      "orderingKey": "orderId",
+      "partitions": 3,
+      "replicas": 1,
+      "retentionDays": 7,
+      "$comment": "셀러가 등록한 송장 — order 의 배송이 이걸 듣고 출고 처리한다. 주문에는 셀러 컬럼이 없으므로 소유 확인은 발행 측(seller-service)이 자기 사본으로 끝낸 상태다. sellerId 는 추적용으로만 싣는다."
+    },
+    {
+      "name": "lemuel.product.registered",
+      "owner": "order-service",
+      "orderingKey": "productId",
+      "partitions": 3,
+      "replicas": 1,
+      "retentionDays": 7,
+      "$comment": "셀러 신청서가 카탈로그에 실렸다는 회신 — seller-service 가 이걸 받아 신청서에 상품번호를 붙인다. lemuel.product.changed 와 합치지 않은 이유는 수신자가 다르기 때문이다: 저쪽은 사본 동기화용 브로드캐스트라 submissionId 를 채울 값이 없고, 합치면 '있으면 회신' 이라는 암묵 규칙이 생긴다."
     }
   ]
 }

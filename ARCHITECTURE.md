@@ -6,16 +6,20 @@
 
 ---
 
-## 1. 서비스 인벤토리 — 3개 (+ 플랫폼 라이브러리)
+## 1. 서비스 인벤토리 — 5개 (+ 게이트웨이 · 플랫폼 라이브러리)
 
 | 서비스 | 포트 | DB | 책임 | shared-common |
 | --- | --- | --- | --- | --- |
 | `order-service` | 8088 | `inter` (스키마 `opslab`) | 커머스 코어 — 회원·상품·장바구니·주문·결제·환불·포인트·기프트카드·쿠폰·리뷰·배송·대량주문·셀러등급·조직/멤버십·관리자 백오피스 | 전역 스캔 |
 | `operation-service` | 8092 | `lemuel_operation` | 운영 — 관제(인시던트·신호·이상탐지)·알림(팬아웃/SSE)·게시판·교육 | 제한 스캔(`@Import`) |
+| `marketing-service` | 8096 | `lemuel_marketing` | 마케팅 — 출석체크·럭키박스·캠페인. 포인트 원장을 갖지 않고 보상은 Kafka 로 order 에 요청한다 (ADR 0045) | 전역 스캔 |
+| `partner-service` | 8100 | `lemuel_partner` | 파트너 — 입점사 콘솔. 원장 0, 쓰기 매핑 0. 전 데이터가 이벤트 사본이다 | 전역 스캔 |
+| `seller-service` | 8104 | `lemuel_seller` | 셀러 — 상품 등록 심사(`product_submissions` 원장)와 자기 주문 출고. 카탈로그에 직접 쓰지 않고 승인 이벤트로 order 에 등록을 맡긴다 | 전역 스캔 |
 | `gateway-service` | 8080 | — | API Gateway (Spring Cloud Gateway, WebFlux). 라우팅만 | 미의존 |
 | `shared-common` | — | — | Outbox 발행 머시너리 · JWT · 감사 · RateLimit · PDF · 이벤트 계약 픽스처 | (본체) |
 
-- **DB-per-service**: order 와 operation 은 물리적으로 다른 PostgreSQL 인스턴스를 쓴다.
+- **DB-per-service**: 다섯 서비스가 각각 다른 PostgreSQL 인스턴스를 쓴다
+  (로컬 기본 포트 — order 5432 · operation 5439 · marketing 5441 · partner 5442 · seller 5443).
   order 만 DB 명이 환경별로 갈린다 — compose `inter` / 로컬 기본 `opslab`. "opslab" 은 전 환경 공통 **스키마**명이다.
 - **서비스 간 연계는 Kafka 이벤트로만.** 코드 의존 0, DB 조인 0, 서비스 간 HTTP 호출 0(실측).
 - `shared-common` 은 **composite build** 로 합성되는 버전드 내부 라이브러리다

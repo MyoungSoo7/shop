@@ -1,0 +1,13 @@
+{
+  "submissionId": 1,
+  "sellerId": 777,
+  "submissionType": "NEW",
+  "baseProductId": null,
+  "name": "사과 1kg",
+  "description": "당도 선별 부사",
+  "price": "12900",
+  "stock": 10,
+  "category": "식품",
+  "imageUrl": null,
+  "displayVisible": true
+}

@@ -42,9 +42,14 @@ const REPO_ROOT = join(dirname(fileURLToPath(import.meta.url)), '..', '..', '..'
  * 컨트롤러가 부채로 잡히지도 않는다 — 그 상태가 이 게이트가 막으려던 바로 그 상태다.
  * partner-service 도 같은 선례로 신설과 동시에 넣었다(ADR 0046). 컨트롤러 3개가 전부
  * 화면 두 개에 물려 있어 예산은 0 그대로다.
+ *
+ * seller-service 도 같다. 컨트롤러 4개 중 셋은 셀러 화면 두 개(/seller/products,
+ * /seller/orders)가 받고, 심사 컨트롤러는 운영자 화면 하나(/admin/system/product-submissions)가
+ * 받는다. 신설과 동시에 넣지 않으면 새 서비스만 이 게이트 밖에 있게 되는데, 그건 예산 0 을
+ * 지킨 게 아니라 세지 않은 것이다.
  */
 const SERVICES = [
-  'order-service', 'operation-service', 'marketing-service', 'partner-service',
+  'order-service', 'operation-service', 'marketing-service', 'partner-service', 'seller-service',
 ];
 
 /**

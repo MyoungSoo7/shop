@@ -34,7 +34,7 @@ const TIMESTAMP_FLOOR = 20_000_000_000_000n;
 /**
  * 서비스별 정수 블록의 마지막 번호 — **닫힌 기준선**.
  *
- * order/operation 은 이미 타임스탬프로 넘어갔다. marketing/partner 는 아직 정수만 쓰지만
+ * order/operation 은 이미 타임스탬프로 넘어갔다. marketing/partner/seller 는 아직 정수만 쓰지만
  * 여기서 같이 닫는다 — 넘어간 *뒤에* 정수를 하나 더 붙이는 게 위 사고의 전개이고, 넘어가기
  * 전에 닫아 두면 그 전개 자체가 생기지 않는다.
  */
@@ -43,6 +43,10 @@ const SEQUENTIAL_BASELINE = {
   'operation-service': 4,
   'marketing-service': 5,
   'partner-service': 2,
+  // seller-service 는 신설이라 배포된 DB 에 이력이 없다. 그래서 V1/V2 로 시작하는 것 자체는
+  // 안전하다 — 위험한 건 "이력이 생긴 뒤에 정수를 더 붙이는 것"이다. 여기서 바로 닫아 두면
+  // 그 시점이 오지 않는다. 다음 마이그레이션부터 타임스탬프다.
+  'seller-service': 2,
 };
 
 /** `V<digits>__<summary>.sql` 에서 버전을 뽑는다. 형식이 아니면 null. */

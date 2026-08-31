@@ -47,6 +47,36 @@ public class OutboxBackedProductEventPublisher implements PublishProductEventPor
         writeOutbox(productId, "ProductChanged", payload);
     }
 
+    /**
+     * 셀러 신청서의 카탈로그 등재 회신 — {@code lemuel.product.registered}.
+     *
+     * <p>{@link #writeOutbox} 헬퍼를 쓰지 않고 여기서 {@code OutboxEvent.pending(...)} 을 직접 부른다.
+     * eventType 을 파라미터로 넘기면 {@code kafka-publisher-gate} 가 호출부에서 토픽을 계산하지 못해
+     * 이 발행이 "미해석" 으로 세어지고, 그러면 계약 카탈로그와 코드가 어긋나도 게이트가 침묵한다.
+     * (기존 {@code ProductChanged} 가 그 상태다 — 새로 추가하는 것까지 사각지대에 넣지는 않는다.)
+     *
+     * <p>파티션 키가 {@code productId} 인 것도 카탈로그의 {@code orderingKey} 와 대조된다.
+     * 신청서 번호로 묶으면 같은 상품에 대한 등재와 이후 변경이 다른 파티션으로 흩어진다.
+     */
+    @Override
+    public void publishSellerProductRegistered(Long productId, String name, long submissionId, long sellerId) {
+        Map<String, Object> payload = new LinkedHashMap<>();
+        payload.put("productId", productId);
+        payload.put("name", name);
+        payload.put("submissionId", submissionId);
+        payload.put("sellerId", sellerId);
+        String json;
+        try {
+            json = objectMapper.writeValueAsString(payload);
+        } catch (JsonProcessingException e) {
+            throw new IllegalStateException("Failed to serialize ProductRegistered payload", e);
+        }
+        OutboxEvent event = OutboxEvent.pending(AGGREGATE_TYPE, String.valueOf(productId),
+                "ProductRegistered", json, traceContextCapture.captureCurrentTraceParent());
+        saveOutboxEventPort.save(event);
+        log.debug("Outbox write: type=ProductRegistered, productId={}, submissionId={}", productId, submissionId);
+    }
+
     private void writeOutbox(Long productId, String eventType, Map<String, Object> payload) {
         String json;
         try {

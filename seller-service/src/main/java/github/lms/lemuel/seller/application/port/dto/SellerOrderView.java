@@ -1,0 +1,37 @@
+package github.lms.lemuel.seller.application.port.dto;
+
+import java.math.BigDecimal;
+import java.time.LocalDateTime;
+import java.time.OffsetDateTime;
+
+/**
+ * 내 상품이 주문된 한 건(정확히는 <b>결제</b> 한 건).
+ *
+ * <p>행의 기준이 결제인 이유는 이 서비스가 셀러를 아는 유일한 경로가 {@code payment.captured}
+ * 이기 때문이다(ADR 0020). 결제되지 않은 주문은 여기에 나타나지 않는다 — 계약의 한계이고,
+ * 화면에도 그렇게 적는다.
+ *
+ * @param orderStatus {@code order.created} 가 실어 온 주문 상태. 아직 안 왔으면 null 이다.
+ *                    "CREATED" 로 기본값을 넣지 않는 이유는, 모르는 상태를 아는 척하면 취소된
+ *                    주문이 정상으로 보이기 때문이다.
+ * @param capturedAtEstimated 결제시각이 이벤트에 없어 수신 시각으로 대체된 행. 여기서는 이 값이
+ *                    파트너 콘솔보다 무겁다 — 셀러는 이 날짜로 출고 기한을 센다.
+ * @param shipmentRegistered 송장이 등록됐는지. 등록된 건은 이 화면에서 더 할 일이 없다.
+ */
+public record SellerOrderView(
+        long orderId,
+        long paymentId,
+        LocalDateTime capturedAt,
+        boolean capturedAtEstimated,
+        BigDecimal amount,
+        BigDecimal refundedAmount,
+        BigDecimal netAmount,
+        String paymentMethod,
+        String orderStatus,
+        Long productId,
+        String productName,
+        boolean shipmentRegistered,
+        String carrier,
+        String trackingNumber,
+        OffsetDateTime shipmentRequestedAt) {
+}

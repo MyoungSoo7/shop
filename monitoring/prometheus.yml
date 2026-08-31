@@ -67,6 +67,19 @@ scrape_configs:
           application: 'lemuel-partner'
           environment: 'production'
 
+  # seller-service — 셀러가 상품을 올리고 자기 주문을 처리하는 콘솔. partner 와 달리 이쪽은
+  # 원장을 하나 쥔다(product_submissions). 그래서 여기가 멈추면 화면만 비는 게 아니라 승인된
+  # 신청서가 카탈로그로 나가지 못하고, 셀러가 등록한 송장이 출고로 이어지지 않는다.
+  # 두 발행(product_approved·shipment_registered)이 outbox 에 쌓이기만 하는 상태를
+  # 밖에서 알아채는 유일한 경로가 이 잡의 outbox 지표다.
+  - job_name: 'seller'
+    metrics_path: '/actuator/prometheus'
+    static_configs:
+      - targets: ['seller-service:8080']
+        labels:
+          application: 'lemuel-seller'
+          environment: 'production'
+
   # gateway-service — 모든 외부 요청이 지나는 자리. 여기가 죽으면 뒤가 전부 멀쩡해도 사용자에겐
   # 사이트 전체가 죽은 것이다. 백엔드 지표만 보고 "다 초록" 이라고 읽는 상태를 막는다.
   #

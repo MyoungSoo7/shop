@@ -110,6 +110,31 @@ services:
       timeout: 3s
       retries: 10
 
+  # ★ DB-per-service: seller-service 전용 PostgreSQL (셀러 백오피스 — 상품 등록 신청서 원본 + 주문 사본)
+  # partner DB 와 달리 여기에는 **원본**이 있다: 셀러가 쓴 상품 등록 신청서다. 카탈로그에 실리기
+  # 전의 초안·반려 사유·재제출 이력은 order-service 어디에도 없고 여기서만 산다. 그래서 이 볼륨은
+  # 지우면 복구되지 않는다 — 나머지 사본 테이블과 성격이 다르다.
+  seller-postgres:
+    image: postgres:17-alpine
+    container_name: lemuel-seller-db
+    env_file:
+      - path: .env
+        required: false
+    environment:
+      POSTGRES_DB: lemuel_seller
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+    ports:
+      - "127.0.0.1:5443:5432"
+    volumes:
+      - seller-postgres-data:/var/lib/postgresql/data
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB"]
+      interval: 10s
+      timeout: 3s
+      retries: 10
+
   elasticsearch:
     image: docker.elastic.co/elasticsearch/elasticsearch:8.17.0
     container_name: lemuel-elasticsearch
@@ -433,6 +458,55 @@ services:
       redpanda:
         condition: service_healthy
 
+  seller-service:
+    build:
+      context: .
+      args:
+        MODULE: seller-service
+    image: ghcr.io/myoungsoo7/shop-seller:latest
+    container_name: lemuel-seller
+    env_file:
+      - path: .env
+        required: false
+    environment:
+      SPRING_PROFILES_ACTIVE: prod
+      # 자체 DB(lemuel_seller) — 상품 등록 신청서(원본) + 조직·주문 프로젝션(사본).
+      SPRING_DATASOURCE_URL: jdbc:postgresql://seller-postgres:5432/lemuel_seller?reWriteBatchedInserts=true
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      # JWT 시크릿은 order-service 와 동일해야 한다. 어느 셀러의 신청서인지 판정하는 근거가
+      # 토큰의 회원번호 하나뿐이라, 검증이 안 되면 소유 판정 자체가 성립하지 않는다.
+      JWT_ISSUER: ${JWT_ISSUER}
+      JWT_SECRET: ${JWT_SECRET}
+      JWT_TTL_SECONDS: ${JWT_TTL_SECONDS}
+      # partner-service 와 달리 Kafka 가 꺼지면 화면이 낡는 것으로 끝나지 않는다 — 승인된
+      # 신청서가 카탈로그에 실리지 않고, 등록한 송장이 실제 출고로 이어지지 않는다. outbox 에는
+      # 남으므로 유실은 아니지만, 셀러 화면은 "승인됨"이고 몰에는 상품이 없는 상태가 된다.
+      APP_KAFKA_ENABLED: "true"
+      SPRING_KAFKA_BOOTSTRAP_SERVERS: redpanda:29092
+      CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost:3000}
+      JAVA_OPTS: "-XX:+UseContainerSupport -XX:MaxRAMPercentage=75.0 -XX:InitialRAMPercentage=50.0"
+      SERVER_PORT: 8080
+      MANAGEMENT_SERVER_PORT: 8080
+    ports:
+      - "127.0.0.1:8104:8080"
+    restart: unless-stopped
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "curl -fsS http://localhost:8080/actuator/health || exit 1",
+        ]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+      start_period: 60s
+    depends_on:
+      seller-postgres:
+        condition: service_healthy
+      redpanda:
+        condition: service_healthy
+
   gateway-service:
     build:
       context: .
@@ -449,6 +523,7 @@ services:
       OPERATION_SERVICE_URI: http://operation-service:8080
       MARKETING_SERVICE_URI: http://marketing-service:8080
       PARTNER_SERVICE_URI: http://partner-service:8080
+      SELLER_SERVICE_URI: http://seller-service:8080
       JAVA_OPTS: "-XX:+UseContainerSupport -XX:MaxRAMPercentage=75.0 -XX:InitialRAMPercentage=50.0"
     ports:
       - "127.0.0.1:8080:8080"
@@ -603,6 +678,7 @@ volumes:
   board-attachment-data:
   marketing-postgres-data:
   partner-postgres-data:
+  seller-postgres-data:
   elasticsearch-data:
   redpanda-data:
   redis-data:

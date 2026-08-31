@@ -65,6 +65,9 @@ class EventContractFixtureTest {
             "lemuel.point.revoked",
             "lemuel.point.used",
             "lemuel.product.changed",
+            "lemuel.product.registered",
+            "lemuel.seller.product_approved",
+            "lemuel.seller.shipment_registered",
             "lemuel.seller.tier_changed",
             "lemuel.user.registered");
 
@@ -90,6 +93,9 @@ class EventContractFixtureTest {
             "lemuel.point.revoked",
             "lemuel.point.used",
             "lemuel.product.changed",
+            "lemuel.product.registered",
+            "lemuel.seller.product_approved",
+            "lemuel.seller.shipment_registered",
             "lemuel.seller.tier_changed",
             "lemuel.user.registered"
     })

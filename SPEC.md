@@ -306,7 +306,7 @@ Course(교육) : DRAFT → PUBLISHED ⇄ HIDDEN → CLOSED  (삭제 없음 — �
 
 ## 5. 이벤트 카탈로그
 
-계약 스키마·정본 샘플: `shared-common/src/testFixtures/resources/contracts/events/` — **22개 토픽**(ADR 0024).
+계약 스키마·정본 샘플: `shared-common/src/testFixtures/resources/contracts/events/` — **25개 토픽**(ADR 0024).
 전송 속성(파티션·보존·순서키) 정본은 별도다 — `kafka/topic-catalog.json` 등재 **22건**(§2.2, ADR 0035).
 둘은 1:1 이다. 2026-08-26 이전에는 `lemuel.education.course_published` 만 계약 스키마가 없어
 카탈로그가 하나 더 많았고, 그 사실이 여기 각주로만 적혀 있었다 — 각주는 결함을 설명할 뿐 막지 않는다.

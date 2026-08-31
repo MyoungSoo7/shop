@@ -55,6 +55,17 @@ spring:
               # 게이트웨이에 뚫린 경로와 서버가 막는 경로가 눈으로 대조된다.
               predicates:
                 - Path=/api/partner/**
+            - id: seller-service
+              uri: ${SELLER_SERVICE_URI:http://localhost:8104}
+              # 셀러 백오피스 — 입점 셀러가 자기 상품을 등록하고 자기 주문을 출고한다. 파트너 콘솔과
+              # 달리 쓰기 매핑이 있다: 등록 신청서 작성/제출과 송장 등록이다.
+              #
+              # 쓰기가 있어도 카탈로그 상품과 배송 원본은 여기 없다 — 이 서비스가 하는 쓰기는
+              # 전부 자기 신청서에 대한 것이고, 실제 반영은 order-service 가 이벤트를 받아 한다.
+              # 접두어를 /api/seller 하나로 묶은 이유는 파트너 콘솔과 같다(securityMatcher 한 줄과
+              # 눈으로 대조되게).
+              predicates:
+                - Path=/api/seller/**
             - id: notification-stream
               uri: ${OPERATION_SERVICE_URI:http://localhost:8092}
               # 알림 푸시 SSE — 스트림 하나만 노출한다. operation-service 의 notification 슬라이스가 서빙한다.

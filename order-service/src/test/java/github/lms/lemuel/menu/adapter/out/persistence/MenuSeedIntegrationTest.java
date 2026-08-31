@@ -79,17 +79,21 @@ class MenuSeedIntegrationTest {
     }
 
     @Test
-    @DisplayName("시드 총 53행 — 커머스 + 운영 + 파트너 범위")
-    void seedsExactlyFiftyThree() {
+    @DisplayName("시드 총 57행 — 커머스 + 운영 + 파트너 + 셀러 범위")
+    void seedsExactlyFiftySeven() {
         // 50 → 53 은 V20260828210000 의 세 행이다: '파트너 콘솔' GROUP 하나와
         // 그 자식 '매출 대시보드' · '주문 내역'. 이 숫자를 고정해 두는 이유는 시드가
         // 조용히 늘어나는 걸 잡기 위해서다 — 늘어난 이유를 여기 적지 않으면 다음 사람은
         // 숫자만 고쳐 통과시키고, 그러면 이 검사는 아무것도 지키지 않게 된다.
-        assertThat(adapter.findAll()).hasSize(53);
+        //
+        // 53 → 57 은 V20260901100000 의 네 행이다: '셀러 콘솔' GROUP 하나와 그 자식
+        // '상품 등록' · '주문 · 출고', 그리고 '시스템 관리' 아래의 '상품 심사'. 심사가
+        // 셀러 콘솔 밖에 있는 이유는 systemChildren() 쪽에 적었다.
+        assertThat(adapter.findAll()).hasSize(57);
     }
 
     @Test
-    @DisplayName("최상위 20개가 상단 네비 순서대로 들어간다")
+    @DisplayName("최상위 21개가 상단 네비 순서대로 들어간다")
     void rootsInOrder() {
         List<Menu> roots = adapter.findAll().stream()
                 .filter(m -> m.getParentId() == null)
@@ -137,7 +141,14 @@ class MenuSeedIntegrationTest {
                 // 모르는 값이라 아무도 안 걸리는데 원장에는 통제가 있는 것처럼 남는다. 진짜 차단은
                 // partner-service 한 곳에서만 한다 — 토큰의 회원번호로 조직을 못 찾으면 403.
                 // 그래서 이 행이 늘린 것은 권한이 아니라 노출이다.
-                "파트너 콘솔");
+                "파트너 콘솔",
+                // 셀러 콘솔(75, V20260901100000)이 그 뒤다. area 는 SELLER — enum 에는 있었는데
+                // 행이 하나도 없던 영역의 첫 행이다. 파는 쪽(SELLER)과 사는 기업(CORP)을 같은
+                // 영역에 넣지 않는 것이 목적이고, 표시 여부와는 무관하다.
+                // required_role 'USER' 도 파트너와 같은 이유다 — SELLER 라는 역할 어휘가 없다.
+                // 진짜 차단은 seller-service 한 곳: 조직을 못 찾으면 403 NOT_A_SELLER_MEMBER,
+                // 조직은 맞는데 파는 쪽이 아니면 422 NOT_A_SELLER_ORG.
+                "셀러 콘솔");
     }
 
     @Test
@@ -168,7 +179,7 @@ class MenuSeedIntegrationTest {
     }
 
     @Test
-    @DisplayName("시스템 사이드바 29개 — 앞 3개와 게시판 관리가 RBAC permission 과 짝지어진다")
+    @DisplayName("시스템 사이드바 30개 — 앞 3개와 게시판 관리가 RBAC permission 과 짝지어진다")
     void systemChildren() {
         List<Menu> children = childrenOf("시스템 관리");
 
@@ -198,12 +209,20 @@ class MenuSeedIntegrationTest {
                 // 이벤트 프로모션(V20260828190000)도 맨 뒤다. 이 그룹에서 유일하게 부르는 API 가
                 // order-service 것이 아니다 — marketing-service(8096) 다(ADR 0045). 그래도 행이
                 // 여기 있는 것은 메뉴 원장이 order-service 의 menus 한 벌뿐이기 때문이다.
-                "수강 신청", "강사 관리", "팝업 관리", "댓글 관리", "동의 이력", "상품 옵션", "이벤트 프로모션");
+                // 상품 심사(V20260901100000)도 맨 뒤다. 이 그룹에서 두 번째로 부르는 API 가
+                // order-service 것이 아닌 행이다 — seller-service(8104) 다. 셀러 콘솔 그룹이
+                // 아니라 여기 있는 이유는 대상이 "내 조직"이 아니라 전체 신청서여서다. 셀러
+                // 콘솔에 넣으면 그 그룹의 required_role 이 'USER,ADMIN' 이 되어야 하는데,
+                // Menu.isAccessibleBy 는 정확 일치라서 운영자에게 자기가 403 을 받는 링크
+                // (/seller/products)가 함께 그려진다. 환불 운영·셀러 등급도 같은 이유로 여기 있다.
+                "수강 신청", "강사 관리", "팝업 관리", "댓글 관리", "동의 이력", "상품 옵션", "이벤트 프로모션",
+                "상품 심사");
         assertThat(children).extracting(Menu::getRequiredPermission).containsExactly(
                 "SYSTEM_MENU_MANAGE", "SYSTEM_CODE_MANAGE", "SYSTEM_RBAC_MANAGE",
                 null, null, null, null, "SYSTEM_BOARD_MANAGE", null, null, null,
                 null, null, null, null, null, null, null,
-                null, null, null, null, null, null, null, null, null, null, null);
+                null, null, null, null, null, null, null, null, null, null, null,
+                null);
         // 환불은 ADMIN·MANAGER — 서버가 /admin/refunds/** 를 그 등급으로 막는다(조회 전용 표면).
         // 시스템 그룹 안에서 유일하게 등급이 낮은 항목이라 명시적으로 못 박는다.
         assertThat(children.stream().filter(m -> m.getName().equals("환불 운영"))

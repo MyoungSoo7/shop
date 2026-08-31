@@ -1,0 +1,14 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "lemuel.seller.shipment_registered",
+  "description": "셀러가 자기 주문에 송장을 등록한 사실. 수신 측(order-service)은 이걸 그대로 출고 처리한다 — 주문에 셀러 컬럼이 없어 소유 확인을 다시 할 수 없고, 확인은 발행 측이 자기 사본으로 이미 끝냈다. sellerId 는 추적용이다. carrier·trackingNumber 는 발행 전에 다듬어져(trim) 컬럼 상한 안에 든 값이다.",
+  "type": "object",
+  "properties": {
+    "orderId": { "type": "integer" },
+    "sellerId": { "type": "integer" },
+    "carrier": { "type": "string", "maxLength": 50 },
+    "trackingNumber": { "type": "string", "maxLength": 100 }
+  },
+  "required": ["orderId", "sellerId", "carrier", "trackingNumber"],
+  "additionalProperties": true
+}

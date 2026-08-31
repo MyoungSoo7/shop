@@ -1,6 +1,6 @@
 # Shop — 이커머스 쇼핑몰 MSA
 
-> 커머스·운영·마케팅·파트너 네 축을 **4개 마이크로서비스 + API Gateway** 로 나눈 헥사고날 백엔드.
+> 커머스·운영·마케팅·파트너·셀러 다섯 축을 **5개 마이크로서비스 + API Gateway** 로 나눈 헥사고날 백엔드.
 > 서비스 간 연계는 **Kafka 이벤트로만** — 코드·DB 직접 의존이 0 이다.
 > 규칙은 문서가 아니라 **빌드를 깨는 게이트**로 강제한다.
 >
@@ -24,20 +24,21 @@
 | **운영** | `operation-service` (8092) | 관제(인시던트·신호 버킷·이상탐지) · 알림 팬아웃(다채널 + SSE 푸시) · 게시판(공지·FAQ·Q&A) · 교육 과정 관리 |
 | **마케팅** | `marketing-service` (8096) | 이벤트 프로모션 — 출석체크 · 럭키박스(가중치 추첨·수량 예약) · 캠페인 운영. **포인트 원장을 갖지 않는다** — 보상은 Kafka 로 order 에 요청하고 결과를 되받아 확정한다 ([ADR 0045](docs/adr/0045-marketing-service-extracted-from-legacy.md)) |
 | **파트너** | `partner-service` (8100) | 입점사 콘솔 — 자기 조직의 매출·주문만 보는 **읽기 전용** 백오피스. 데이터는 전부 다른 서비스의 이벤트로 받은 사본이고 쓰기 매핑이 하나도 없다 |
+| **셀러** | `seller-service` (8104) | 셀러 콘솔 — 자기 상품을 올리고 자기 주문을 출고한다. partner 와 달리 **원장을 하나 쥔다**(`product_submissions`): 카탈로그에 직접 쓰지 않고 DRAFT→SUBMITTED→APPROVED/REJECTED 심사를 거친 뒤 이벤트로 order 에 등록을 맡긴다 |
 | **관문** | `gateway-service` (8080) | 경로 라우팅만 — 자체 인증 필터 없음(인가는 각 서비스가 강제) |
 | **공용** | `shared-common` | Outbox 발행 머시너리 · JWT · 감사로그 · RateLimit · PDF · **이벤트 계약 픽스처** (`includeBuild` 로 합성되는 버전드 내부 라이브러리, [ADR 0021](docs/adr/0021-shared-common-as-platform-library.md)) |
 | **화면** | `frontend` | React 19 + Vite + TypeScript. 구매자 화면 + 관리자 콘솔 |
 
-### 규모 (2026-08-31 실측)
+### 규모 (2026-09-01 실측)
 
 | | |
 | --- | --- |
-| Java 소스 | main **1,646** · test **575** |
-| HTTP 표면 | 컨트롤러 **84** · 매핑 **482** |
-| Flyway 마이그레이션 | order **182** · operation **24** · marketing **5** · partner **2** |
-| Kafka | 토픽 **22** · 계약 픽스처 **22** (1:1 강제) |
-| 프론트엔드 | TS/TSX **368** · 테스트 파일 **170** |
-| 저장소 규율 게이트 | **423건** / 60 스위트 · 실시간 가드 규칙 **18종** |
+| Java 소스 | main **1,733** · test **583** |
+| HTTP 표면 | 컨트롤러 **88** · 매핑 **499** |
+| Flyway 마이그레이션 | order **184** · operation **24** · marketing **5** · partner **2** · seller **2** |
+| Kafka | 토픽 **25** · 계약 픽스처 **25** (1:1 강제) |
+| 프론트엔드 | TS/TSX **373** · 테스트 파일 **170** |
+| 저장소 규율 게이트 | **427건** / 61 스위트 · 실시간 가드 규칙 **18종** |
 | 결정 기록 | ADR **24건** |
 
 수치는 주장이 아니라 재현 가능한 카운트다 — 확인 커맨드는 [검증](#검증-definition-of-done) 절에 있다.
@@ -96,7 +97,7 @@ DB tx 안에서 outbox_events INSERT
 
 ### 4. "컴파일러가 못 보는 공백"을 게이트가 본다
 
-`node --test "scripts/harness/test/*.test.mjs"` — 게이트 **423건**이 돈다. 잡는 것은 타입 오류가
+`node --test "scripts/harness/test/*.test.mjs"` — 게이트 **427건**이 돈다. 잡는 것은 타입 오류가
 아니라 **층 사이의 빈틈**이다.
 
 | 게이트 | 잡는 것 |
@@ -151,8 +152,8 @@ docker compose up -d
 `frontend/dist` 는 git 에 추적되지 않는다(빌드 산출물). 빌드를 건너뛰면 마운트가 빈 디렉터리가 되어
 nginx 가 404 만 낸다 — 프로덕션은 `frontend/Dockerfile` 이 이미지 안에서 빌드하므로 영향이 없다.
 
-compose 서비스 **21개**: PostgreSQL **4종**(서비스마다 자기 DB — order/operation/marketing/partner) ·
-pgbouncer · Elasticsearch · Redpanda · Redis · 앱 **5개**(백엔드 4 + gateway) · frontend ·
+compose 서비스 **23개**: PostgreSQL **5종**(서비스마다 자기 DB — order/operation/marketing/partner/seller) ·
+pgbouncer · Elasticsearch · Redpanda · Redis · 앱 **6개**(백엔드 5 + gateway) · frontend ·
 관측 7종(exporter 3 + prometheus + alertmanager + tempo + grafana). 관측 7종은
 `docker compose up -d postgres … frontend` 로 골라 띄우면 빼도 된다. 발행 포트는 전부 `127.0.0.1`
 바인딩이라 기본값으로는 LAN 에 노출되지 않는다.
@@ -174,6 +175,7 @@ docker compose -f docker-compose.yml -f deploy/david/docker-compose.override.yml
 ./gradlew :operation-service:bootRun    # 8092
 ./gradlew :marketing-service:bootRun    # 8096
 ./gradlew :partner-service:bootRun      # 8100
+./gradlew :seller-service:bootRun       # 8104
 ./gradlew :gateway-service:bootRun      # 8080
 ```
 
@@ -197,11 +199,12 @@ npm run build && npm run preview     # /admin 직접진입은 이쪽에서만 �
 ./gradlew :operation-service:test :operation-service:jacocoTestCoverageVerification
 ./gradlew :marketing-service:test :marketing-service:jacocoTestCoverageVerification
 ./gradlew :partner-service:test :partner-service:jacocoTestCoverageVerification
+./gradlew :seller-service:test :seller-service:jacocoTestCoverageVerification
 
 # 프론트엔드 — 타입체크 + 테스트(커버리지 임계 lines/statements 90)
 cd frontend && npx tsc -p tsconfig.app.json --noEmit && npx vitest run
 
-# 저장소 규율 게이트 423건
+# 저장소 규율 게이트 427건
 node --test "scripts/harness/test/*.test.mjs"
 
 # 변경 파일 가드(실시간 훅과 같은 규칙 18종)
@@ -249,6 +252,7 @@ node scripts/harness/guard.mjs --list changed.txt
 | `/api/notifications/stream` | operation-service (SSE 푸시) |
 | `/api/promotions/**` `/admin/promotions/**` | marketing-service |
 | `/api/partner/**` | partner-service (전 경로 인증 필수 · 읽기 전용) |
+| `/api/seller/**` | seller-service (전 경로 인증 필수 · `/api/seller/admin/**` 은 ADMIN 심사 표면) |
 
 내부 발송 경로(`/internal/notifications/**`)는 **게이트웨이에 올리지 않는다** — 인증 없이 발송하는
 경로라 와일드카드로 노출하면 그대로 공개 API 가 된다.

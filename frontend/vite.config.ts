@@ -103,6 +103,11 @@ export default defineConfig({
         target: 'http://localhost:8100',
         changeOrigin: true,
       },
+      // 셀러 백오피스는 seller-service(8104)가 서빙한다(ADR 0047) — 같은 이유로 '/api' 앞이다.
+      '/api/seller': {
+        target: 'http://localhost:8104',
+        changeOrigin: true,
+      },
       '/api': {
         target: 'http://localhost:8088',
         changeOrigin: true,

@@ -168,6 +168,7 @@ jobs:
             operation-service: ['operation-service/**']
             marketing-service: ['marketing-service/**']
             partner-service: ['partner-service/**']
+            seller-service: ['seller-service/**']
 
       - name: Compute image build matrix (changed services only)
         id: setmatrix
@@ -181,7 +182,8 @@ jobs:
             "gateway-service":"-gateway",
             "operation-service":"-operation",
             "marketing-service":"-marketing",
-            "partner-service":"-partner"
+            "partner-service":"-partner",
+            "seller-service":"-seller"
           }'
           if echo "$CHANGED" | jq -e 'index("shared")' >/dev/null; then
             # 공용 변경 → 전 서비스 재빌드
@@ -736,6 +738,7 @@ jobs:
     #   operation-service    → ghcr.io/myoungsoo7/shop-operation
     #   marketing-service    → ghcr.io/myoungsoo7/shop-marketing
     #   partner-service      → ghcr.io/myoungsoo7/shop-partner
+    #   seller-service       → ghcr.io/myoungsoo7/shop-seller
     # (board·education·notification 은 operation 슬라이스, organization 은 order 슬라이스라
     #  별도 이미지가 없다.)
     # shared-common·루트 빌드파일·Dockerfile·ci.yml 변경 시엔 changes 잡이 위 매핑 전부를 매트릭스에 담는다.

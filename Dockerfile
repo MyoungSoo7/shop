@@ -5,6 +5,7 @@
 #   docker build --build-arg MODULE=gateway-service .
 #   docker build --build-arg MODULE=marketing-service .
 #   docker build --build-arg MODULE=partner-service .
+#   docker build --build-arg MODULE=seller-service .
 ############################
 FROM gradle:9.7.0-jdk25 AS builder
 ARG MODULE
@@ -22,6 +23,7 @@ COPY gateway-service/build.gradle.kts ./gateway-service/
 # 못 만드는 게 아니라 설정 단계가 통째로 죽어 **모든 모듈의 이미지 빌드**가 같이 실패한다.
 COPY marketing-service/build.gradle.kts ./marketing-service/
 COPY partner-service/build.gradle.kts ./partner-service/
+COPY seller-service/build.gradle.kts ./seller-service/
 
 # 캐시 id 를 모듈별로 가른다(id=gradle-${MODULE}).
 #
@@ -40,6 +42,7 @@ COPY operation-service ./operation-service
 COPY gateway-service ./gateway-service
 COPY marketing-service ./marketing-service
 COPY partner-service ./partner-service
+COPY seller-service ./seller-service
 
 RUN --mount=type=cache,id=gradle-${MODULE},target=/home/gradle/.gradle \
     gradle --no-daemon :${MODULE}:bootJar -x test

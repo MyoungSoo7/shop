@@ -76,11 +76,17 @@ const OperationConsolePage = lazy(() => import('./pages/operation/OperationConso
 const PartnerConsolePage = lazy(() => import('./pages/partner/PartnerConsolePage'));
 const PartnerOrdersPage = lazy(() => import('./pages/partner/PartnerOrdersPage'));
 
+// 셀러 콘솔 — seller-service. 셀러가 자기 상품을 올리고 자기 주문을 처리한다.
+// 파트너와 달리 원장을 하나 쥔다(상품 등록 신청서). 심사는 운영자 몫이라 여기 없다.
+const SellerProductsPage = lazy(() => import('./pages/seller/SellerProductsPage'));
+const SellerOrdersPage = lazy(() => import('./pages/seller/SellerOrdersPage'));
+
 // 시스템 관리 (최고 관리자 전용, 좌측 사이드바)
 const MenuManagementPage = lazy(() => import('./pages/system/MenuManagementPage'));
 const CommonCodeManagementPage = lazy(() => import('./pages/system/CommonCodeManagementPage'));
 const RbacManagementPage = lazy(() => import('./pages/system/RbacManagementPage'));
 const BoardAdminPage = lazy(() => import('./pages/system/BoardAdminPage'));
+const ProductSubmissionReviewPage = lazy(() => import('./pages/system/ProductSubmissionReviewPage'));
 const BoardPage = lazy(() => import('./pages/board/BoardPage'));
 const BoardPostPage = lazy(() => import('./pages/board/BoardPostPage'));
 
@@ -176,6 +182,13 @@ function App() {
                 실제 차단은 서버가 토큰의 회원번호로 조직을 찾아 403 NOT_A_PARTNER 로 한다. */}
             <Route path="/partner"        element={<ProtectedRoute><PartnerConsolePage /></ProtectedRoute>} />
             <Route path="/partner/orders" element={<ProtectedRoute><PartnerOrdersPage /></ProtectedRoute>} />
+            {/* 셀러 콘솔 — 셀러가 자기 상품을 올리고 자기 주문을 처리한다. 파트너 콘솔과 같은 이유로
+                /admin 아래가 아니고, seller 도 nginx 두 벌의 API 세그먼트 목록에 없어 새로고침에
+                JSON 이 뜨지 않는다. 등급 게이트를 ProtectedRoute 까지만 두는 것도 같다 — 메뉴 역할
+                어휘에 SELLER 가 없어서 없는 역할을 지어내면 서버가 못 막는 통제가 하나 생길 뿐이다.
+                실제 차단은 서버가 토큰의 회원번호로 조직을 찾아 403/422 로 한다. */}
+            <Route path="/seller/products" element={<ProtectedRoute><SellerProductsPage /></ProtectedRoute>} />
+            <Route path="/seller/orders"   element={<ProtectedRoute><SellerOrdersPage /></ProtectedRoute>} />
             {/* 찜 — 장바구니와 다른 목록이다("지금 살 것" 대 "언젠가 살 것"). 경로도 섞지 않는다. */}
             <Route path="/wishlist"    element={<ProtectedRoute><WishlistPage /></ProtectedRoute>} />
             {/* 알림 푸시 SSE 구독 — 수신함이 아니라 스트림이다(서버가 알림을 저장하지 않는다). */}
@@ -307,6 +320,11 @@ function App() {
                 쪽이 MANAGER 이므로 라우트도 그에 맞춘다. */}
             <Route path="/admin/system/order-queues"
               element={<AdminManagerRoute><SideNavLayout><OrderQueuePage /></SideNavLayout></AdminManagerRoute>} />
+            {/* 상품 심사 — seller-service 의 /api/seller/admin/** 가 ADMIN 전용이라 라우트도 같은 등급.
+                셀러 콘솔(/seller/**) 과 달리 대상이 "내 조직" 이 아니라 전체 신청서라서, 스코프로
+                좁힐 수 없고 경로 자체를 권한으로 막는다. */}
+            <Route path="/admin/system/product-submissions"
+              element={<AdminOnlyRoute><SideNavLayout><ProductSubmissionReviewPage /></SideNavLayout></AdminOnlyRoute>} />
 
           </Routes>
           </Suspense>
