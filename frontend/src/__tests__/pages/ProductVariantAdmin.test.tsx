@@ -31,16 +31,33 @@ vi.mock('@/api/productVariant', async () => {
       decreaseStock: vi.fn(),
       resolve: vi.fn(),
     },
+    variantCostApi: {
+      list: vi.fn(),
+      setPurchasePrice: vi.fn(),
+    },
   };
 });
 
 const { productApi } = await import('@/api/product');
-const { productVariantApi } = await import('@/api/productVariant');
+const { productVariantApi, variantCostApi } = await import('@/api/productVariant');
 const { ToastProvider } = await import('@/contexts/ToastContext');
 const { default: ProductVariantAdmin } = await import('@/pages/ProductVariantAdmin');
 
 const products = vi.mocked(productApi.getAllProducts);
 const variants = vi.mocked(productVariantApi);
+const costs = vi.mocked(variantCostApi);
+
+const cost = (over: Record<string, unknown> = {}) => ({
+  variantId: 7,
+  sku: 'SKU-RED-L',
+  optionName: '빨강/L',
+  stockQuantity: 3,
+  sellingPrice: 12000,
+  purchasePrice: 7000,
+  marginAmount: 5000,
+  marginRate: 41.67,
+  ...over,
+});
 
 const PRODUCT = {
   id: 1,
@@ -81,6 +98,7 @@ describe('ProductVariantAdmin', () => {
     vi.resetAllMocks();
     products.mockResolvedValue([PRODUCT] as never);
     variants.list.mockResolvedValue([variant()] as never);
+    costs.list.mockResolvedValue([cost()] as never);
   });
 
   it('상품을 고르기 전에는 옵션을 부르지 않는다', async () => {
@@ -279,5 +297,102 @@ describe('ProductVariantAdmin', () => {
     await user.selectOptions(await screen.findByTestId('variant-product'), '1');
 
     expect(await screen.findByRole('alert')).toBeInTheDocument();
+  });
+
+  describe('매입가·마진', () => {
+    it('매입가를 모르는 SKU 는 0%가 아니라 빈칸으로 남는다', async () => {
+      costs.list.mockResolvedValue([
+        cost({ purchasePrice: null, marginAmount: null, marginRate: null }),
+      ] as never);
+      const user = userEvent.setup();
+      renderPage();
+      await pickProduct(user);
+
+      const row = await screen.findByTestId('variant-cost-row-SKU-RED-L');
+      // 0원·0% 로 그리면 "원가 0 에 다 남는 장사"라는 거짓이 표에 남는다.
+      expect(within(row).queryByText('0원')).not.toBeInTheDocument();
+      expect(within(row).queryByText('0.00%')).not.toBeInTheDocument();
+      expect(within(row).getAllByText('—')).toHaveLength(2);
+    });
+
+    it('마진과 마진율을 그대로 그린다', async () => {
+      const user = userEvent.setup();
+      renderPage();
+      await pickProduct(user);
+
+      const row = await screen.findByTestId('variant-cost-row-SKU-RED-L');
+      expect(within(row).getByText('5,000원')).toBeInTheDocument();
+      expect(within(row).getByText('41.67%')).toBeInTheDocument();
+    });
+
+    it('역마진은 감추지 않는다 — 음수 그대로 적는다', async () => {
+      costs.list.mockResolvedValue([
+        cost({ purchasePrice: 15000, marginAmount: -3000, marginRate: -25 }),
+      ] as never);
+      const user = userEvent.setup();
+      renderPage();
+      await pickProduct(user);
+
+      const row = await screen.findByTestId('variant-cost-row-SKU-RED-L');
+      expect(within(row).getByText('-3,000원')).toBeInTheDocument();
+      expect(within(row).getByText('-25.00%')).toBeInTheDocument();
+    });
+
+    it('빈 칸으로 저장하면 0 이 아니라 null 을 보낸다 — 지우기와 0원 매입은 다른 사실이다', async () => {
+      costs.setPurchasePrice.mockResolvedValue(
+        cost({ purchasePrice: null, marginAmount: null, marginRate: null }) as never,
+      );
+      const user = userEvent.setup();
+      renderPage();
+      await pickProduct(user);
+
+      await user.clear(await screen.findByTestId('variant-cost-input-SKU-RED-L'));
+      await user.click(screen.getByTestId('variant-cost-save-SKU-RED-L'));
+
+      await waitFor(() =>
+        expect(costs.setPurchasePrice).toHaveBeenCalledWith(1, 7, null));
+    });
+
+    it('입력한 매입가를 저장하고 돌아온 마진으로 표를 갱신한다', async () => {
+      costs.setPurchasePrice.mockResolvedValue(
+        cost({ purchasePrice: 9000, marginAmount: 3000, marginRate: 25 }) as never,
+      );
+      const user = userEvent.setup();
+      renderPage();
+      await pickProduct(user);
+
+      const input = await screen.findByTestId('variant-cost-input-SKU-RED-L');
+      await user.clear(input);
+      await user.type(input, '9000');
+      await user.click(screen.getByTestId('variant-cost-save-SKU-RED-L'));
+
+      await waitFor(() =>
+        expect(costs.setPurchasePrice).toHaveBeenCalledWith(1, 7, 9000));
+      const row = await screen.findByTestId('variant-cost-row-SKU-RED-L');
+      await waitFor(() => expect(within(row).getByText('25.00%')).toBeInTheDocument());
+    });
+
+    it('음수 매입가는 서버까지 가지 않는다', async () => {
+      const user = userEvent.setup();
+      renderPage();
+      await pickProduct(user);
+
+      const input = await screen.findByTestId('variant-cost-input-SKU-RED-L');
+      await user.clear(input);
+      await user.type(input, '-100');
+      await user.click(screen.getByTestId('variant-cost-save-SKU-RED-L'));
+
+      expect(costs.setPurchasePrice).not.toHaveBeenCalled();
+    });
+
+    it('매입가 조회가 막혀도 옵션 목록은 그대로 보인다', async () => {
+      costs.list.mockRejectedValue(new Error('forbidden'));
+      const user = userEvent.setup();
+      renderPage();
+      await pickProduct(user);
+
+      expect(await screen.findByTestId('variant-cost-error')).toBeInTheDocument();
+      expect(await screen.findByTestId('variant-row-SKU-RED-L')).toBeInTheDocument();
+    });
   });
 });

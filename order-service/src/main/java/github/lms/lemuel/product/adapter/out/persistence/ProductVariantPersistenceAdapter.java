@@ -75,6 +75,7 @@ public class ProductVariantPersistenceAdapter
             );
             entity.applyOptionSignature(variant.getOptionSignature());
         }
+        entity.applyPurchasePrice(variant.getPurchasePrice());
         ProductVariantJpaEntity saved = repository.save(entity);
         return toDomain(saved);
     }
@@ -93,7 +94,7 @@ public class ProductVariantPersistenceAdapter
         return ProductVariant.rehydrate(
                 e.getId(), e.getProductId(), e.getSku(), e.getOptionName(),
                 e.getAdditionalPrice(), e.getDiscountPrice(), e.getDiscountRate(),
-                e.getStockQuantity(), e.getVersion(),
+                e.getPurchasePrice(), e.getStockQuantity(), e.getVersion(),
                 e.getStatus(), e.getOptionSignature(), e.getCreatedAt(), e.getUpdatedAt()
         );
     }

@@ -32,6 +32,8 @@ public class ProductVariant {
     private BigDecimal additionalPrice;
     private BigDecimal discountPrice;
     private BigDecimal discountRate;
+    /** 이 SKU 를 사 오는 값. null 은 "아직 모른다"이고 0원 매입이 아니다. */
+    private BigDecimal purchasePrice;
     private int stockQuantity;
     private long version;
     private ProductVariantStatus status;
@@ -78,9 +80,20 @@ public class ProductVariant {
                                             BigDecimal discountRate, int stockQuantity, long version,
                                             ProductVariantStatus status, String optionSignature,
                                             LocalDateTime createdAt, LocalDateTime updatedAt) {
+        return rehydrate(id, productId, sku, optionName, additionalPrice, discountPrice, discountRate,
+                null, stockQuantity, version, status, optionSignature, createdAt, updatedAt);
+    }
+
+    public static ProductVariant rehydrate(Long id, Long productId, String sku, String optionName,
+                                            BigDecimal additionalPrice, BigDecimal discountPrice,
+                                            BigDecimal discountRate, BigDecimal purchasePrice,
+                                            int stockQuantity, long version,
+                                            ProductVariantStatus status, String optionSignature,
+                                            LocalDateTime createdAt, LocalDateTime updatedAt) {
         ProductVariant variant = new ProductVariant(id, productId, sku, optionName, additionalPrice,
                 discountPrice, discountRate, stockQuantity, version, status, createdAt, updatedAt);
         variant.optionSignature = optionSignature;
+        variant.purchasePrice = purchasePrice;
         return variant;
     }
 
@@ -150,6 +163,69 @@ public class ProductVariant {
         return price.signum() < 0 ? BigDecimal.ZERO : price;
     }
 
+    /**
+     * 매입가를 정하거나 고친다. {@code null} 을 넣으면 "모른다"로 되돌린다 — 잘못 넣은 값을
+     * 0 으로 덮는 것과 지우는 것은 다른 일이라, 지울 길을 막아 두면 0원 매입이라는 거짓이 남는다.
+     *
+     * @throws ProductInvariantViolationException 음수를 넣은 경우. 역마진은 허용하지만
+     *         (그건 판매가와의 관계이지 이 값의 문제가 아니다) 음수 매입가는 입력 사고다.
+     */
+    public void changePurchasePrice(BigDecimal newPurchasePrice) {
+        if (newPurchasePrice != null && newPurchasePrice.signum() < 0) {
+            throw new ProductInvariantViolationException("매입가는 0 이상이어야 합니다: " + newPurchasePrice);
+        }
+        this.purchasePrice = newPurchasePrice;
+        this.updatedAt = LocalDateTime.now();
+    }
+
+    public boolean hasPurchasePrice() {
+        return purchasePrice != null;
+    }
+
+    /**
+     * 이 SKU 1 개를 팔았을 때 남는 금액 = 판매가 - 매입가.
+     *
+     * <p>판매가는 {@link #effectiveUnitPrice(BigDecimal)} 로 <b>그때그때 계산한</b> 값을 쓴다.
+     * 기준가·추가금·할인 중 무엇이 바뀌어도 이 값이 따라 움직여야 하기 때문이다. 마진을 컬럼으로
+     * 굳혀 두지 않은 이유가 여기 있다 — 굳힌 값은 넷 중 하나만 바뀌어도 조용히 거짓이 된다.
+     *
+     * <p>매입가를 모르면 {@code null} 이다. 0 이 아니다. 모르는 것을 0 으로 답하면 마진이
+     * 판매가 전액으로 잡혀 리포트가 통째로 부풀어 오른다.
+     *
+     * <p>결과는 음수일 수 있다(역마진). 깎지 않는다 — 손해 보고 파는 SKU 는 가려야 할 것이 아니라
+     * 눈에 띄어야 하는 것이다.
+     */
+    public BigDecimal marginAmount(BigDecimal basePrice) {
+        if (purchasePrice == null) {
+            return null;
+        }
+        return effectiveUnitPrice(basePrice).subtract(purchasePrice);
+    }
+
+    /**
+     * 마진율(%) = 마진액 / 판매가 × 100. 소수점 둘째 자리에서 반올림한다.
+     *
+     * <p>분모는 매입가가 아니라 <b>판매가</b>다. 즉 "판 값의 몇 %가 남았나"(매출 총이익률)이지
+     * "산 값 대비 몇 % 붙였나"(마크업)가 아니다. 두 숫자는 같은 거래에서도 다르게 나온다 —
+     * 1000원에 사서 2000원에 팔면 이익률 50%, 마크업 100%. 어느 쪽인지 적어 두지 않으면
+     * 보는 사람마다 다르게 읽는다.
+     *
+     * <p>매입가를 모르거나 판매가가 0 이면 {@code null} 이다. 0 으로 나눌 수 없고, 0원에 판
+     * 물건의 이익률은 정의되지 않는다(무료 증정이 마진 -∞ 로 리포트에 찍히면 곤란하다).
+     */
+    public BigDecimal marginRate(BigDecimal basePrice) {
+        BigDecimal margin = marginAmount(basePrice);
+        if (margin == null) {
+            return null;
+        }
+        BigDecimal sellingPrice = effectiveUnitPrice(basePrice);
+        if (sellingPrice.signum() == 0) {
+            return null;
+        }
+        return margin.multiply(BigDecimal.valueOf(100))
+                .divide(sellingPrice, 2, RoundingMode.HALF_UP);
+    }
+
     public void increaseStock(int quantity) {
         if (quantity <= 0) {
             throw new ProductInvariantViolationException("증가 수량은 양수여야 합니다");
@@ -198,6 +274,7 @@ public class ProductVariant {
     public BigDecimal getAdditionalPrice() { return additionalPrice; }
     public BigDecimal getDiscountPrice() { return discountPrice; }
     public BigDecimal getDiscountRate() { return discountRate; }
+    public BigDecimal getPurchasePrice() { return purchasePrice; }
     public int getStockQuantity() { return stockQuantity; }
     public long getVersion() { return version; }
     public ProductVariantStatus getStatus() { return status; }

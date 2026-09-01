@@ -32,6 +32,13 @@ public class ProductVariantJpaEntity {
     @Column(name = "discount_rate", precision = 5, scale = 2)
     private BigDecimal discountRate;
 
+    /**
+     * 매입가. NULL 은 미입력이며 0원 매입이 아니다 — 그래서 기본값도 nullable=false 도 두지 않는다.
+     * 마진율에 해당하는 컬럼은 없다. 판매가가 계산식이라 굳혀 두면 조용히 낡기 때문이다.
+     */
+    @Column(name = "purchase_price", precision = 12, scale = 2)
+    private BigDecimal purchasePrice;
+
     @Column(name = "stock_quantity", nullable = false)
     private int stockQuantity;
 
@@ -115,6 +122,7 @@ public class ProductVariantJpaEntity {
     public BigDecimal getAdditionalPrice() { return additionalPrice; }
     public BigDecimal getDiscountPrice() { return discountPrice; }
     public BigDecimal getDiscountRate() { return discountRate; }
+    public BigDecimal getPurchasePrice() { return purchasePrice; }
     public int getStockQuantity() { return stockQuantity; }
     public long getVersion() { return version; }
     public ProductVariantStatus getStatus() { return status; }
@@ -140,5 +148,14 @@ public class ProductVariantJpaEntity {
         if (optionSignature != null) {
             this.optionSignature = optionSignature;
         }
+    }
+
+    /**
+     * 매입가 반영. 서명과 달리 null 을 건너뛰지 않는다 — 여기서 null 은 "아직 백필 안 됨" 이 아니라
+     * "매입가를 지운다" 라는 관리자의 뜻이고, 건너뛰면 한 번 넣은 원가를 영영 못 지운다.
+     * 도메인이 항상 DB 값을 싣고 다니므로(rehydrate) 그대로 옮겨 적어도 값이 유실되지 않는다.
+     */
+    public void applyPurchasePrice(BigDecimal purchasePrice) {
+        this.purchasePrice = purchasePrice;
     }
 }

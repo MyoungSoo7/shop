@@ -93,6 +93,49 @@ export const productVariantApi = {
 };
 
 /**
+ * SKU 한 줄의 원가와 마진 — order-service {@code AdminVariantCostController}.
+ *
+ * <p><b>왜 위 {@link ProductVariant} 에 필드로 붙이지 않았나.</b> 그 타입은 구매자가 부르는
+ * {@code POST /products/{id}/variants/resolve} 의 응답이기도 하다. 거기에 원가를 얹으면
+ * 로그인한 아무나 원가를 본다. 서버가 응답을 갈라 놓았으므로 화면 타입도 갈라 둔다 —
+ * 한쪽으로 합치는 순간 그 사실이 보이지 않게 된다.
+ *
+ * <p>{@code marginAmount}·{@code marginRate} 가 {@code null} 인 것은 마진이 0 이라는 뜻이
+ * 아니라 <b>매입가를 아직 모른다</b>는 뜻이다. 화면은 이 둘을 다르게 그려야 한다.
+ */
+export interface VariantCost {
+  variantId: number;
+  sku: string;
+  optionName: string;
+  stockQuantity: number;
+  /** 저장된 값이 아니라 기준가+추가금-할인으로 서버가 계산한 값. */
+  sellingPrice: number;
+  /** null 은 미입력. 0 은 "0원에 샀다"로 다른 뜻이다. */
+  purchasePrice: number | null;
+  /** 판매가 - 매입가. 역마진이면 음수 그대로 온다. */
+  marginAmount: number | null;
+  /** 판매가 대비 마진율(매출총이익률, %). 매입가 대비 가산율이 아니다. */
+  marginRate: number | null;
+}
+
+export const variantCostApi = {
+  /** GET — 그 상품 SKU 들의 원가·마진. 관리자 전용 경로다. */
+  list: async (productId: number): Promise<VariantCost[]> =>
+    (await api.get<VariantCost[]>(`/admin/products/${productId}/variants/costs`)).data,
+
+  /** PUT — 매입가 설정. null 을 보내면 "모른다"로 되돌린다(0 으로 덮는 것과 다르다). */
+  setPurchasePrice: async (
+    productId: number,
+    variantId: number,
+    purchasePrice: number | null,
+  ): Promise<VariantCost> =>
+    (await api.put<VariantCost>(
+      `/admin/products/${productId}/variants/${variantId}/purchase-price`,
+      { purchasePrice },
+    )).data,
+};
+
+/**
  * 화면에 보일 판매가 — 기본가 + 추가금, 할인가가 있으면 그것.
  *
  * <p>할인가는 "기본가에서 얼마를 뺀 값"이 아니라 <b>확정된 판매가</b>다. 그래서 있으면

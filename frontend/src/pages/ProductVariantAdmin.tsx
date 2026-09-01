@@ -2,8 +2,10 @@ import React, { useCallback, useEffect, useState } from 'react';
 import {
   effectivePrice,
   productVariantApi,
+  variantCostApi,
   type OptionSelection,
   type ProductVariant,
+  type VariantCost,
 } from '@/api/productVariant';
 import { productApi } from '@/api/product';
 import { apiErrorMessage } from '@/lib/apiError';
@@ -27,10 +29,19 @@ import type { ProductResponse } from '@/types';
  * <p><b>옵션 해석 도구를 같이 둔다.</b> 주문이 선택 경로를 SKU 로 바꾸는 바로 그 경로를
  * 운영자가 눌러 볼 수 있어야, "고객이 빨강/L 을 고르면 무엇이 나가는가"를 주문을 넣어 보지
  * 않고 확인할 수 있다. 읽기만 하는 조회라 확인 단계가 없다.
+ *
+ * <p><b>매입가·마진은 별도 표에 둔다.</b> 위 옵션 목록은 구매자 화면과 같은 응답
+ * ({@code VariantResponse})을 그리는데, 원가는 그 응답에 실리지 않는다 — 실으면 구매자가
+ * 주문할 때 부르는 해석 경로로도 함께 나간다. 서버가 응답을 갈라 놓았으므로 화면도 표를 나눈다.
+ * 한 표에 합치면 "이 숫자는 구매자에게 안 나간다"는 사실이 화면에서 사라진다.
  */
 
 const formatMoney = (value: number | null | undefined) =>
   value == null ? '—' : `${Number(value).toLocaleString('ko-KR')}원`;
+
+/** 마진율은 0 도 의미 있는 값이라 {@code ??} 가 아니라 null 비교로 갈라야 한다. */
+const formatRate = (value: number | null | undefined) =>
+  value == null ? '—' : `${Number(value).toFixed(2)}%`;
 
 interface CreateForm {
   sku: string;
@@ -58,6 +69,11 @@ const ProductVariantAdmin: React.FC = () => {
   // 재고 차감 — 확인 대기 중인 대상과 수량.
   const [decreaseTarget, setDecreaseTarget] = useState<ProductVariant | null>(null);
   const [decreaseQty, setDecreaseQty] = useState('1');
+
+  // 매입가·마진. 입력칸은 SKU 별로 따로 들고 있어야 한 줄을 고치는 동안 다른 줄이 흔들리지 않는다.
+  const [costs, setCosts] = useState<VariantCost[]>([]);
+  const [costError, setCostError] = useState<string | null>(null);
+  const [costDrafts, setCostDrafts] = useState<Record<number, string>>({});
 
   // 옵션 해석 도구.
   const [selections, setSelections] = useState<OptionSelection[]>([{ name: '', value: '' }]);
@@ -94,13 +110,29 @@ const ProductVariantAdmin: React.FC = () => {
     }
   }, []);
 
+  /**
+   * 원가 표는 옵션 목록과 별개로 읽는다. 경로가 다르고(관리자 전용) 권한도 다르다 —
+   * 원가 조회가 막혀도 옵션 목록은 보여야 하므로 실패를 서로 옮기지 않는다.
+   */
+  const loadCosts = useCallback(async (target: number) => {
+    setCostError(null);
+    try {
+      setCosts(await variantCostApi.list(target));
+    } catch (err) {
+      setCostError(apiErrorMessage(err, '매입가를 불러오지 못했습니다.'));
+      setCosts([]);
+    }
+  }, []);
+
   useEffect(() => {
-    if (productId === null) { setVariants([]); return; }
+    if (productId === null) { setVariants([]); setCosts([]); return; }
     void loadVariants(productId);
+    void loadCosts(productId);
     setDecreaseTarget(null);
     setResolved(null);
     setResolveError(null);
-  }, [productId, loadVariants]);
+    setCostDrafts({});
+  }, [productId, loadVariants, loadCosts]);
 
   const stock = Number(form.initialStock);
   const canCreate = productId !== null
@@ -143,6 +175,40 @@ const ProductVariantAdmin: React.FC = () => {
       showToast(`${updated.sku} 재고를 ${quantity}개 줄였습니다.`, 'success');
     } catch (err) {
       showToast(apiErrorMessage(err, '재고를 줄이지 못했습니다.'), 'error');
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  /**
+   * 매입가 저장. 빈 칸은 0 이 아니라 {@code null} — "지운다"와 "0원에 샀다"는 다른 사실이고,
+   * 빈 칸을 0 으로 보내면 마진 100% 짜리 SKU 가 조용히 생긴다.
+   */
+  const saveCost = async (cost: VariantCost) => {
+    if (productId === null || busy) return;
+    const raw = (costDrafts[cost.variantId] ?? '').trim();
+    if (raw !== '' && !(Number.isFinite(Number(raw)) && Number(raw) >= 0)) {
+      showToast('매입가는 0 이상의 숫자여야 합니다.', 'error');
+      return;
+    }
+    const next = raw === '' ? null : Number(raw);
+    setBusy(true);
+    try {
+      const updated = await variantCostApi.setPurchasePrice(productId, cost.variantId, next);
+      setCosts((prev) => prev.map((c) => (c.variantId === updated.variantId ? updated : c)));
+      setCostDrafts((prev) => {
+        const rest = { ...prev };
+        delete rest[cost.variantId];
+        return rest;
+      });
+      showToast(
+        next === null
+          ? `${updated.sku} 매입가를 지웠습니다.`
+          : `${updated.sku} 매입가를 저장했습니다.`,
+        'success',
+      );
+    } catch (err) {
+      showToast(apiErrorMessage(err, '매입가를 저장하지 못했습니다.'), 'error');
     } finally {
       setBusy(false);
     }
@@ -305,6 +371,77 @@ const ProductVariantAdmin: React.FC = () => {
               </div>
             </section>
           )}
+
+          <section className="space-y-3" data-testid="variant-cost-section">
+            <h2 className="font-semibold">매입가 · 마진</h2>
+            <p className="text-sm text-gray-500">
+              여기 숫자는 관리자만 봅니다 — 구매자 화면과 주문 경로의 응답에는 실리지 않습니다.
+              마진율은 판매가 대비(매출총이익률)이며, 매입가를 넣지 않은 SKU 는 0%가 아니라
+              빈칸(—)으로 남습니다. 비워서 저장하면 매입가를 지웁니다.
+            </p>
+            {costError !== null && (
+              <p role="alert" className="text-red-600" data-testid="variant-cost-error">
+                {costError}
+              </p>
+            )}
+            {costs.length === 0 ? (
+              <p className="text-gray-500" data-testid="variant-cost-empty">
+                매입가를 넣을 옵션이 없습니다.
+              </p>
+            ) : (
+              <table className="w-full text-sm" data-testid="variant-cost-table">
+                <thead>
+                  <tr className="border-b text-left text-gray-600">
+                    <th className="py-1">SKU</th>
+                    <th>판매가</th>
+                    <th>매입가</th>
+                    <th>마진</th>
+                    <th>마진율</th>
+                    <th />
+                  </tr>
+                </thead>
+                <tbody>
+                  {costs.map((cost) => (
+                    <tr key={cost.variantId} className="border-b" data-testid={`variant-cost-row-${cost.sku}`}>
+                      <td className="py-1 font-mono">{cost.sku}</td>
+                      <td>{formatMoney(cost.sellingPrice)}</td>
+                      <td>
+                        <input
+                          type="number"
+                          min={0}
+                          step={1}
+                          placeholder="비우면 미입력"
+                          value={costDrafts[cost.variantId] ?? (cost.purchasePrice ?? '')}
+                          onChange={(e) =>
+                            setCostDrafts((prev) => ({ ...prev, [cost.variantId]: e.target.value }))}
+                          data-testid={`variant-cost-input-${cost.sku}`}
+                          className="w-32 rounded border px-2 py-1"
+                        />
+                      </td>
+                      {/* 역마진은 빨갛게 드러낸다. 0 으로 깎아 감추면 손해 보는 SKU 가 안 보인다. */}
+                      <td className={cost.marginAmount != null && cost.marginAmount < 0 ? 'text-red-600' : ''}>
+                        {formatMoney(cost.marginAmount)}
+                      </td>
+                      <td className={cost.marginRate != null && cost.marginRate < 0 ? 'text-red-600' : ''}>
+                        {formatRate(cost.marginRate)}
+                      </td>
+                      <td className="text-right">
+                        <button
+                          type="button"
+                          onClick={() => void saveCost(cost)}
+                          disabled={busy}
+                          data-testid={`variant-cost-save-${cost.sku}`}
+                          className="rounded border px-2 py-1"
+                        >
+                          저장
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            )}
+          </section>
 
           <section className="rounded border p-4 space-y-3">
             <h2 className="font-semibold">옵션 추가</h2>
