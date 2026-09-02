@@ -144,6 +144,7 @@ cd frontend && npx tsc -p tsconfig.app.json --noEmit && npx vitest run
 | `spa-fallback-gate` | 화면 URL 이 백엔드 API 와 겹쳐 새로고침 때 JSON 이 렌더된다 |
 | `menu-route-gate` | 메뉴 시드 ↔ 프론트 폴백 ↔ App.tsx 라우트 3자 드리프트 |
 | `api-screen-gate` | 부르는 화면이 없는 컨트롤러 — 부채 예산은 내려가기만 한다 |
+| `frontend-call-gate` | 화면이 부르는데 게이트웨이·nginx 어디에도 없어 안 닿는 경로 (위 셋의 반대 방향) |
 | `kafka-topic-gate` · `kafka-publisher-gate` | 카탈로그 미등재 토픽 · 발행부↔카탈로그 드리프트 |
 | `topic-consumer-gate` | 발행만 하고 아무도 듣지 않는 토픽 (PUBLISH_ONLY 미등록) |
 | `outbox-poller-gate` | 컨슈머가 있는데 DLT 배선이 없다 / 폴러 스캔이 안 닿는다 |

@@ -106,6 +106,7 @@ DB tx 안에서 outbox_events INSERT
 | `menu-route-gate` | 메뉴 시드 ↔ 프론트 폴백 ↔ `App.tsx` 라우트 3자 드리프트 (죽은 링크·유령 화면) |
 | `spa-fallback-gate` | 화면 URL 이 백엔드 API 와 겹쳐 새로고침 때 JSON 이 렌더된다 |
 | `api-screen-gate` | 부르는 화면이 없는 컨트롤러 — 부채로 등록하지 않으면 FAIL |
+| `frontend-call-gate` | 화면이 부르는데 어떤 배선에도 없어 안 닿는 경로 — 위 셋이 못 보는 반대 방향 |
 | `topic-consumer-gate` | 발행만 하고 아무도 듣지 않는 토픽 |
 | `kafka-topic-gate` | 토픽 파티션 수가 코드 밖에서 정해진다 (카탈로그 미등재 토픽) |
 | `outbox-poller-gate` | 컨슈머가 있는데 DLT 배선이 없다 / 폴러 스캔이 안 닿는다 |
