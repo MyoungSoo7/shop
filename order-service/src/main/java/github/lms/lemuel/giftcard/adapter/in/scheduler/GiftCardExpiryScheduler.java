@@ -1,5 +1,9 @@
 package github.lms.lemuel.giftcard.adapter.in.scheduler;
 
+import github.lms.lemuel.batch.application.BatchRunRecorder;
+import github.lms.lemuel.batch.application.port.in.RerunnableBatch;
+import github.lms.lemuel.batch.application.port.in.BatchRunOutcome;
+import github.lms.lemuel.batch.application.port.in.BatchTargetDate;
 import github.lms.lemuel.giftcard.application.port.in.ExpireGiftCardsUseCase;
 import github.lms.lemuel.giftcard.application.port.in.ExpireGiftCardsUseCase.ExpireGiftCardsCommand;
 import github.lms.lemuel.giftcard.application.port.in.ExpireGiftCardsUseCase.ExpireGiftCardsResult;
@@ -10,6 +14,7 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 
+import java.time.LocalDate;
 import java.time.OffsetDateTime;
 
 /**
@@ -20,18 +25,27 @@ import java.time.OffsetDateTime;
  * 기존 이름들과 겹치지 않는다.
  *
  * <p>포인트 소멸(03:40)과 시각을 어긋나게 잡는다 — 같은 시각에 두 배치가 같은 DB 를 훑을 이유가 없다.
+ *
+ * <p>실행 결과는 {@code batch_run_history} 에 남고,
+ * {@code POST /admin/batch-runs/gift-card-expiry/rerun} 으로 날짜분을 다시 돌린다.
  */
 @Component
-public class GiftCardExpiryScheduler {
+public class GiftCardExpiryScheduler implements RerunnableBatch {
 
     private static final Logger log = LoggerFactory.getLogger(GiftCardExpiryScheduler.class);
 
+    /** 원장·재실행 API 의 키. */
+    public static final String BATCH_NAME = "gift-card-expiry";
+
     private final ExpireGiftCardsUseCase useCase;
+    private final BatchRunRecorder recorder;
     private final int batchSize;
 
     public GiftCardExpiryScheduler(ExpireGiftCardsUseCase useCase,
+                                   BatchRunRecorder recorder,
                                    @Value("${app.gift-card.expiry.batch-size:500}") int batchSize) {
         this.useCase = useCase;
+        this.recorder = recorder;
         this.batchSize = batchSize;
     }
 
@@ -39,15 +53,37 @@ public class GiftCardExpiryScheduler {
     @SchedulerLock(name = "order-gift-card-expiry", lockAtMostFor = "PT30M")
     public void expire() {
         try {
-            ExpireGiftCardsResult result = useCase.expire(
-                    new ExpireGiftCardsCommand(OffsetDateTime.now(), batchSize, false, "scheduler"));
-            if (result.cardCount() > 0) {
-                log.info("기프트카드 소멸 배치: cards={}, 소멸액={}",
-                        result.cardCount(), result.forfeitedTotal());
-            }
+            recorder.recordScheduled(BATCH_NAME,
+                    () -> expireAsOf(OffsetDateTime.now(), false, BatchRunRecorder.TRIGGERED_BY_SCHEDULER));
         } catch (RuntimeException exception) {
             // 스케줄러 밖으로 예외가 새면 이후 주기가 멈출 수 있다 — 남기되 스레드는 지킨다.
             log.error("기프트카드 소멸 배치 실패 — 다음 주기에 재시도한다", exception);
         }
+    }
+
+    @Override
+    public String batchName() {
+        return BATCH_NAME;
+    }
+
+    @Override
+    public String description() {
+        return "기프트카드 소멸 — 유효기간이 지난 카드의 잔액을 소멸시킨다";
+    }
+
+    @Override
+    public BatchRunOutcome rerun(LocalDate targetDate, boolean dryRun) {
+        return BatchRunOutcome.succeeded(
+                expireAsOf(BatchTargetDate.endOfWithOffset(targetDate), dryRun, "rerun"));
+    }
+
+    private int expireAsOf(OffsetDateTime asOf, boolean dryRun, String actor) {
+        ExpireGiftCardsResult result =
+                useCase.expire(new ExpireGiftCardsCommand(asOf, batchSize, dryRun, actor));
+        if (result.cardCount() > 0) {
+            log.info("기프트카드 소멸 배치: asOf={}, dryRun={}, cards={}, 소멸액={}",
+                    asOf, dryRun, result.cardCount(), result.forfeitedTotal());
+        }
+        return result.cardCount();
     }
 }

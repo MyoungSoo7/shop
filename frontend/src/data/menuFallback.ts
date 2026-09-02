@@ -126,6 +126,11 @@ export const FALLBACK_MENUS: FallbackMenuNode[] = [
       // 스코프로 좁힐 수 없다. 셀러 콘솔에 넣으면 그 그룹 roles 가 USER+ADMIN 이 되어야 하는데,
       // 그러면 운영자에게 자기가 403 을 받는 링크(/seller/products)가 함께 그려진다.
       { id: -129, name: '상품 심사', path: '/admin/system/product-submissions', icon: '🔍', description: '셀러 상품 등록 신청 승인 · 반려', area: 'SYSTEM', type: 'ITEM', roles: ['ADMIN'] },
+      // 배치 실행 원장 — 조회까지 ADMIN 인 이유는 이 표가 실패 사유 문자열을 그대로 담기 때문이다.
+      { id: -130, name: '배치 실행 원장', path: '/admin/system/batch-runs', icon: '🗓️', description: '배치별 마지막 성공 · 실행 이력 · 놓친 날짜분 재실행', area: 'SYSTEM', type: 'ITEM', roles: ['ADMIN'] },
+      // roles 는 서버 /orders/admin/** 매처(ADMIN·MANAGER)를 그대로 적는다. 동의 이력과 같은 상태로,
+      // '시스템 관리' 그룹 자체가 ADMIN 전용이라 지금은 MANAGER 에게 이 줄이 그려지지 않는다.
+      { id: -131, name: '주문 상태 이력', path: '/admin/system/order-status-history', icon: '🧭', description: '주문 한 건의 상태 전이 · 체류 시간 · 이력 누락 대조', area: 'SYSTEM', type: 'ITEM', roles: ['ADMIN', 'MANAGER'] },
     ],
   },
   {

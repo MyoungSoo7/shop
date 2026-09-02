@@ -16,12 +16,15 @@ import static org.mockito.Mockito.when;
 @ExtendWith(MockitoExtension.class)
 class PartitionMaintenanceSchedulerTest {
 
+    private final github.lms.lemuel.batch.FakeBatchRunLedger ledger =
+            new github.lms.lemuel.batch.FakeBatchRunLedger();
+
     @Mock
     JdbcTemplate jdbcTemplate;
 
     @Test
     void ensureMonthly_는_스키마_한정_ensure_함수에_위임한다() {
-        var scheduler = new PartitionMaintenanceScheduler(jdbcTemplate, "opslab", 3);
+        var scheduler = new PartitionMaintenanceScheduler(jdbcTemplate, ledger.recorder(), "opslab", 3);
 
         scheduler.ensureMonthly();
 
@@ -30,7 +33,7 @@ class PartitionMaintenanceSchedulerTest {
 
     @Test
     void ensureOnStartup_도_동일_함수에_위임한다() {
-        var scheduler = new PartitionMaintenanceScheduler(jdbcTemplate, "opslab", 6);
+        var scheduler = new PartitionMaintenanceScheduler(jdbcTemplate, ledger.recorder(), "opslab", 6);
 
         scheduler.ensureOnStartup();
 
@@ -41,7 +44,7 @@ class PartitionMaintenanceSchedulerTest {
     void 함수가_없어_예외가_나도_삼켜서_부팅_스케줄을_막지_않는다() {
         when(jdbcTemplate.queryForObject(anyString(), eq(Integer.class), any()))
                 .thenThrow(new RuntimeException("function ensure_audit_log_partition does not exist"));
-        var scheduler = new PartitionMaintenanceScheduler(jdbcTemplate, "opslab", 3);
+        var scheduler = new PartitionMaintenanceScheduler(jdbcTemplate, ledger.recorder(), "opslab", 3);
 
         assertDoesNotThrow(scheduler::ensureMonthly);
         assertDoesNotThrow(scheduler::ensureOnStartup);

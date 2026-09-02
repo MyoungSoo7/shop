@@ -41,6 +41,9 @@ import static org.mockito.Mockito.when;
 @ExtendWith(MockitoExtension.class)
 class StockReclaimDelayScannerTest {
 
+    private final github.lms.lemuel.batch.FakeBatchRunLedger ledger =
+            new github.lms.lemuel.batch.FakeBatchRunLedger();
+
     private static final Duration THRESHOLD = Duration.ofDays(14);
     private static final Duration INTERVAL = Duration.ofHours(6);
 
@@ -51,7 +54,7 @@ class StockReclaimDelayScannerTest {
 
     @BeforeEach
     void setUp() {
-        scanner = new StockReclaimDelayScanner(loadPort, opsSignalPort, THRESHOLD, INTERVAL, 200);
+        scanner = new StockReclaimDelayScanner(loadPort, opsSignalPort, ledger.recorder(), THRESHOLD, INTERVAL, 200);
     }
 
     private Order awaiting(Long id, LocalDateTime terminalAt, int qty) {

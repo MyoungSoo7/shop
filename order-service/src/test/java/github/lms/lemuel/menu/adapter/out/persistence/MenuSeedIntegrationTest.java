@@ -79,8 +79,8 @@ class MenuSeedIntegrationTest {
     }
 
     @Test
-    @DisplayName("시드 총 57행 — 커머스 + 운영 + 파트너 + 셀러 범위")
-    void seedsExactlyFiftySeven() {
+    @DisplayName("시드 총 59행 — 커머스 + 운영 + 파트너 + 셀러 + 배치 범위")
+    void seedsExactlyFiftyNine() {
         // 50 → 53 은 V20260828210000 의 세 행이다: '파트너 콘솔' GROUP 하나와
         // 그 자식 '매출 대시보드' · '주문 내역'. 이 숫자를 고정해 두는 이유는 시드가
         // 조용히 늘어나는 걸 잡기 위해서다 — 늘어난 이유를 여기 적지 않으면 다음 사람은
@@ -89,7 +89,11 @@ class MenuSeedIntegrationTest {
         // 53 → 57 은 V20260901100000 의 네 행이다: '셀러 콘솔' GROUP 하나와 그 자식
         // '상품 등록' · '주문 · 출고', 그리고 '시스템 관리' 아래의 '상품 심사'. 심사가
         // 셀러 콘솔 밖에 있는 이유는 systemChildren() 쪽에 적었다.
-        assertThat(adapter.findAll()).hasSize(57);
+        //
+        // 57 → 59 는 V20260903060000 의 두 행이다: '시스템 관리' 아래 '배치 실행 원장' 과
+        // '주문 상태 이력'. 둘 다 새 그룹을 만들지 않고 시스템 그룹 끝에 붙였다 — 화면이
+        // 두 개뿐이라 그룹을 세우면 항목보다 껍데기가 많아진다.
+        assertThat(adapter.findAll()).hasSize(59);
     }
 
     @Test
@@ -179,7 +183,7 @@ class MenuSeedIntegrationTest {
     }
 
     @Test
-    @DisplayName("시스템 사이드바 30개 — 앞 3개와 게시판 관리가 RBAC permission 과 짝지어진다")
+    @DisplayName("시스템 사이드바 32개 — 앞 3개와 게시판 관리가 RBAC permission 과 짝지어진다")
     void systemChildren() {
         List<Menu> children = childrenOf("시스템 관리");
 
@@ -216,13 +220,18 @@ class MenuSeedIntegrationTest {
                 // Menu.isAccessibleBy 는 정확 일치라서 운영자에게 자기가 403 을 받는 링크
                 // (/seller/products)가 함께 그려진다. 환불 운영·셀러 등급도 같은 이유로 여기 있다.
                 "수강 신청", "강사 관리", "팝업 관리", "댓글 관리", "동의 이력", "상품 옵션", "이벤트 프로모션",
-                "상품 심사");
+                "상품 심사",
+                // 배치 실행 원장·주문 상태 이력(V20260903060000)도 맨 뒤다 — 이유는 위와 같다.
+                // 이 그룹의 sort_order 는 빈틈없이 차 있어 중간에 끼우면 그 자리의 항목과 겹친다.
+                // 둘은 성격이 다르다: 원장은 "배치가 돌았나"(운영자용), 이력은 "이 주문이 어디서
+                // 얼마나 멈췄나"(CS·MANAGER 용)라 required_role 도 다르다 — 아래에서 못 박는다.
+                "배치 실행 원장", "주문 상태 이력");
         assertThat(children).extracting(Menu::getRequiredPermission).containsExactly(
                 "SYSTEM_MENU_MANAGE", "SYSTEM_CODE_MANAGE", "SYSTEM_RBAC_MANAGE",
                 null, null, null, null, "SYSTEM_BOARD_MANAGE", null, null, null,
                 null, null, null, null, null, null, null,
                 null, null, null, null, null, null, null, null, null, null, null,
-                null);
+                null, null, null);
         // 환불은 ADMIN·MANAGER — 서버가 /admin/refunds/** 를 그 등급으로 막는다(조회 전용 표면).
         // 시스템 그룹 안에서 유일하게 등급이 낮은 항목이라 명시적으로 못 박는다.
         assertThat(children.stream().filter(m -> m.getName().equals("환불 운영"))
@@ -232,6 +241,17 @@ class MenuSeedIntegrationTest {
         assertThat(children.stream().filter(m -> m.getName().equals("셀러 등급"))
                 .findFirst().orElseThrow().allowedRoles())
                 .containsExactly("ADMIN");
+        // 배치 실행 원장은 ADMIN 전용 — 같은 /admin/batch-runs/** 접두사에 재실행(POST)이 걸려 있어
+        // 읽기만 열어 줄 수가 없다. 서버도 그 접두사를 통째로 ADMIN 으로 막는다.
+        assertThat(children.stream().filter(m -> m.getName().equals("배치 실행 원장"))
+                .findFirst().orElseThrow().allowedRoles())
+                .containsExactly("ADMIN");
+        // 주문 상태 이력은 ADMIN·MANAGER — /orders/admin/** 이 그 등급이고, 실제로 이걸 보는 건
+        // "왜 아직 안 왔냐" 를 받는 CS 다. 다만 부모 그룹이 ADMIN 전용이라 MANAGER 트리에는
+        // 이 그룹이 통째로 안 뜬다 — 링크는 열려 있지만 메뉴로는 안 보인다는 뜻이다.
+        assertThat(children.stream().filter(m -> m.getName().equals("주문 상태 이력"))
+                .findFirst().orElseThrow().allowedRoles())
+                .containsExactlyInAnyOrder("ADMIN", "MANAGER");
         // 옮겨 온 두 항목은 경로도 화면 URL 로 바뀌었다 — API 경로와 겹치면 새로고침이 API 응답을 렌더한다.
         assertThat(children.stream().filter(m -> m.getName().equals("환불 운영"))
                 .findFirst().orElseThrow().getPath()).isEqualTo("/admin/system/refunds");

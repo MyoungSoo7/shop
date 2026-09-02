@@ -306,8 +306,8 @@ Course(교육) : DRAFT → PUBLISHED ⇄ HIDDEN → CLOSED  (삭제 없음 — �
 
 ## 5. 이벤트 카탈로그
 
-계약 스키마·정본 샘플: `shared-common/src/testFixtures/resources/contracts/events/` — **25개 토픽**(ADR 0024).
-전송 속성(파티션·보존·순서키) 정본은 별도다 — `kafka/topic-catalog.json` 등재 **22건**(§2.2, ADR 0035).
+계약 스키마·정본 샘플: `shared-common/src/testFixtures/resources/contracts/events/` — **26개 토픽**(ADR 0024).
+전송 속성(파티션·보존·순서키) 정본은 별도다 — `kafka/topic-catalog.json` 등재 **26건**(§2.2, ADR 0035).
 둘은 1:1 이다. 2026-08-26 이전에는 `lemuel.education.course_published` 만 계약 스키마가 없어
 카탈로그가 하나 더 많았고, 그 사실이 여기 각주로만 적혀 있었다 — 각주는 결함을 설명할 뿐 막지 않는다.
 
@@ -331,6 +331,7 @@ Course(교육) : DRAFT → PUBLISHED ⇄ HIDDEN → CLOSED  (삭제 없음 — �
 | `lemuel.organization.created`                                                           | order(organization 슬라이스) | partner(파트너 조직 사본 — 2026-08-28 편입)        |
 | `lemuel.organization.member_joined` / `.member_role_changed` / `.member_removed`         | order(organization 슬라이스) | partner(콘솔 접근 범위 — 2026-08-28 편입). 순서키 `organizationId` |
 | `lemuel.education.course_published`                                                     | operation(education 슬라이스) | 발행 전용 — 과정 공개 통지. 순서키 `courseId`      |
+| `lemuel.expirynotice.upcoming`                                                          | order(expirynotice 슬라이스) | 발행 전용 — **알림 슬라이스가 아직 이 저장소에 없다**. 순서키 `subjectId`(실제 키는 `subjectType:subjectId` 복합키) |
 
 부가(계약 스키마 없음): `lemuel.ops.*`(실패 신호 `*.failed` + `stock.depleted`·`stock.reclaim_delayed`·`shipping.delayed`).
 
@@ -357,6 +358,12 @@ Course(교육) : DRAFT → PUBLISHED ⇄ HIDDEN → CLOSED  (삭제 없음 — �
 > 그린다. 여섯 모두 "소비자는 이 저장소 밖" 이라고 적혀 있었지만, 사실은 **소비자가 아직
 > 저장소 안에 없었을 뿐**이었다. 이 문장과 그 문장은 같은 관측을 설명하면서 전혀 다른 것을
 > 예측한다 — 전자는 "여기 소비자가 생길 리 없다", 후자는 "생기면 편입한다" 다. 그리고 생겼다.
+>
+> 2026-09-03 에 `lemuel.expirynotice.upcoming` 이 들어왔는데, 이것은 **위 둘과 종류가 다른**
+> 발행 전용이다. 앞의 것들은 소비자가 경계 밖(정산·GL)에 있어서 안 붙는 것이고, 이쪽은
+> 붙을 자리가 이 저장소 안인데 **아직 없는** 것이다 — 알림 슬라이스가 생기면 그날 편입 대상이다.
+> 굳이 구분해 적는 이유는, 위 2026-08-28 항목이 보여 준 실패가 정확히 이 둘을 같은 문장으로
+> 덮어 쓴 데서 왔기 때문이다. 같은 칸에 넣으면 다음 사람이 또 "여기 소비자가 생길 리 없다"로 읽는다.
 
 역방향 예약: `lemuel.ops.order.failed` 는 operation 이 구독하지만 emit 지점 미배선
 (OpsSignalCategory 주석 참조).

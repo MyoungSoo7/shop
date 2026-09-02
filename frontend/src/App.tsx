@@ -52,6 +52,8 @@ const MetricTrendPage = lazy(() => import('./pages/system/MetricTrendPage'));
 const SalesStatsPage = lazy(() => import('./pages/system/SalesStatsPage'));
 const OrderQueuePage = lazy(() => import('./pages/system/OrderQueuePage'));
 const PrivacyConsentAdminPage = lazy(() => import('./pages/system/PrivacyConsentAdminPage'));
+const BatchRunConsolePage = lazy(() => import('./pages/system/BatchRunConsolePage'));
+const OrderStatusHistoryPage = lazy(() => import('./pages/system/OrderStatusHistoryPage'));
 
 // 관리자 페이지 (lazy load)
 const ProductPage = lazy(() => import('./pages/ProductPage'));
@@ -325,6 +327,15 @@ function App() {
                 좁힐 수 없고 경로 자체를 권한으로 막는다. */}
             <Route path="/admin/system/product-submissions"
               element={<AdminOnlyRoute><SideNavLayout><ProductSubmissionReviewPage /></SideNavLayout></AdminOnlyRoute>} />
+            {/* 배치 실행 원장 — 서버 /admin/batch-runs/** 가 ADMIN 전용이다(조회까지 같은 등급으로
+                묶은 이유는 이 표가 실패 사유 문자열을 그대로 담기 때문). 화면 URL 을 그 API 와 같게
+                두면 새로고침 때 원장 JSON 이 그대로 브라우저에 뜬다. */}
+            <Route path="/admin/system/batch-runs"
+              element={<AdminOnlyRoute><SideNavLayout><BatchRunConsolePage /></SideNavLayout></AdminOnlyRoute>} />
+            {/* 주문 상태 이력 — 서버 /orders/admin/** 가 ADMIN·MANAGER 다. 실제로 CS 가 여는
+                화면이라 라우트도 그에 맞춘다(작업 큐·환불 운영과 같은 등급). */}
+            <Route path="/admin/system/order-status-history"
+              element={<AdminManagerRoute><SideNavLayout><OrderStatusHistoryPage /></SideNavLayout></AdminManagerRoute>} />
 
           </Routes>
           </Suspense>

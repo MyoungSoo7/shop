@@ -46,6 +46,7 @@ class EventContractFixtureTest {
      */
     private static final List<String> SHIPPED_TOPICS = List.of(
             "lemuel.education.course_published",
+            "lemuel.expirynotice.upcoming",
             "lemuel.giftcard.expired",
             "lemuel.giftcard.registered",
             "lemuel.giftcard.restored",
@@ -74,6 +75,7 @@ class EventContractFixtureTest {
     @ParameterizedTest
     @ValueSource(strings = {
             "lemuel.education.course_published",
+            "lemuel.expirynotice.upcoming",
             "lemuel.giftcard.expired",
             "lemuel.giftcard.registered",
             "lemuel.giftcard.restored",

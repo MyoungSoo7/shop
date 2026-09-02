@@ -32,7 +32,6 @@ import org.springframework.scheduling.annotation.EnableScheduling;
         "github.lms.lemuel.category",
         "github.lms.lemuel.coupon",
         "github.lms.lemuel.review",
-        "github.lms.lemuel.report",
         "github.lms.lemuel.game",
         // 관리자 시스템 (RBAC·메뉴·공통코드) — 스캔 누락으로 컨트롤러 미등록이던 것을 배선
         "github.lms.lemuel.menu",
@@ -63,11 +62,21 @@ import org.springframework.scheduling.annotation.EnableScheduling;
         // 배송지 주소록 — 위 둘과 같은 이유로 빠지면 /users/*/shipping-addresses 가 조용히 404 가
         // 된다. 아래 PersistenceConfig 의 @EntityScan·@EnableJpaRepositories 도 함께 고쳐야 한다.
         "github.lms.lemuel.addressbook",
+        // 배치 실행 원장 — 스케줄러 전부가 여기 BatchRunRecorder 를 생성자로 받는다. 이 줄이 빠지면
+        // 404 로 조용히 끝나는 위 것들과 달리 <b>컨텍스트가 아예 안 뜬다</b>(NoSuchBeanDefinition).
+        // 실제로 이 줄을 빠뜨린 채 PersistenceConfig 쪽만 고쳐 통합테스트 9건이 한꺼번에 죽었다 —
+        // 위 inquiry 주석이 경고하는 함정의 <i>반대 방향</i>이다. 두 목록은 언제나 함께 고친다.
+        "github.lms.lemuel.batch",
+        // 만료 예고 알림 — 스케줄러·JDBC 어댑터가 이 스캔에 걸린다. JPA 엔티티가 없어
+        // PersistenceConfig 에는 <b>일부러 넣지 않았다</b>. 두 목록이 항상 같지는 않다는 뜻이다.
+        "github.lms.lemuel.expirynotice",
         "github.lms.lemuel.common",
         // ADR 0020 Phase 5.5 — settlement 분리 완료. settlement/ledger/payout/chargeback/
         // pgreconciliation 코드는 settlement-service 로 이전돼 order 소스에 존재하지 않으므로
         // 과거의 번들 스캔 엔트리(아무 빈도 못 잡던 잔재)를 제거했다. opslab 의 잔여 테이블 정리는
         // docs/runbook/settlement-db-decommission.md 참조.
+        // report 도 같은 이유로 뺐다 — 소스 트리에 그 패키지가 아예 없어 0개를 스캔하던 죽은 줄이다.
+        // 죽은 열거 항목은 무해해 보이지만 "그 기능이 배선돼 있다"는 거짓 신호를 남긴다.
         // reservation 도 reservation-service(독립 MSA, :8083, gateway 라우팅)가 소유한다. order 소스에
         // 레거시 reservation 패키지가 남아있으나 스캔에서 제외한다 — 컴포넌트(Adapter)는 스캔되는데
         // JPA 리포지토리는 PersistenceConfig 의 @EnableJpaRepositories 스코프 밖이라 빈 미생성 →

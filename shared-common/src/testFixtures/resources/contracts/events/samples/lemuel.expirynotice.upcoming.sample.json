@@ -1,0 +1,9 @@
+{
+  "subjectType": "POINT_LOT",
+  "subjectId": 55,
+  "stage": "D7",
+  "userId": 42,
+  "amount": "1000",
+  "expiresAt": "2027-08-26T14:59:59Z",
+  "contactHint": null
+}

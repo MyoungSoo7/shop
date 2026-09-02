@@ -237,6 +237,15 @@
       "replicas": 1,
       "retentionDays": 7,
       "$comment": "셀러 신청서가 카탈로그에 실렸다는 회신 — seller-service 가 이걸 받아 신청서에 상품번호를 붙인다. lemuel.product.changed 와 합치지 않은 이유는 수신자가 다르기 때문이다: 저쪽은 사본 동기화용 브로드캐스트라 submissionId 를 채울 값이 없고, 합치면 '있으면 회신' 이라는 암묵 규칙이 생긴다."
+    },
+    {
+      "name": "lemuel.expirynotice.upcoming",
+      "owner": "order-service",
+      "orderingKey": "subjectId",
+      "partitions": 3,
+      "replicas": 1,
+      "retentionDays": 7,
+      "$comment": "소멸 예고 — 포인트·기프트카드가 만료되기 전에 한 번 알린다. 실제 메시지 키는 subjectType:subjectId 복합키다(POINT 의 42 와 GIFT_CARD 의 42 는 다른 대상이라 subjectId 만으로는 충돌한다). orderingKey 를 subjectId 로 적은 것은 '무엇의 순서를 지키는가' 가 대상 1건이라는 뜻이며, userId 로 묶지 않은 이유는 한 회원의 서로 다른 소멸 건끼리는 순서 의존이 없는데 회원으로 묶으면 보유 건수가 많은 회원 하나가 파티션을 막기 때문이다. 페이로드에 문구가 없다 — 사실(무엇이·얼마가·언제)만 싣고 표현은 알림 슬라이스가 정한다."
     }
   ]
 }

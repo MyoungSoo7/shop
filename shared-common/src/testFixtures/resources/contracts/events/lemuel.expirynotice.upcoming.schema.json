@@ -1,0 +1,47 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "lemuel.expirynotice.upcoming",
+  "description": "곧 만료될 보유물(포인트 로트·기프트카드·선물 수령권)을 사전에 한 번 알린 사실.",
+  "$comment": "참고(계약 아님) — 이 이벤트는 회계 분개를 만들지 않는다. 소멸 자체가 아니라 소멸 *예고*이고, 예고 시점에는 아직 아무 잔액도 움직이지 않는다. 실제 소멸의 분개는 lemuel.point.expired / lemuel.giftcard.expired 쪽 계약에 있다. 문구가 없는 것은 누락이 아니다 — 사실(무엇이·얼마가·언제)만 싣고 표현은 받는 슬라이스가 정한다.",
+  "type": "object",
+  "properties": {
+    "subjectType": {
+      "type": "string",
+      "enum": ["POINT_LOT", "GIFT_CARD", "GIFT_CLAIM"],
+      "$comment": "쿠폰이 없는 것은 누락이 아니다 — 쿠폰은 소멸 배치 없이 사용 시점에 만료를 확인하는 lazy 방식이다."
+    },
+    "subjectId": {
+      "type": "integer",
+      "$comment": "subjectType 별 표에서의 식별자다. POINT_LOT 의 42 와 GIFT_CARD 의 42 는 다른 대상이라, 메시지 키는 subjectType:subjectId 복합키다."
+    },
+    "stage": {
+      "type": "string",
+      "enum": ["D30", "D7", "D1"],
+      "$comment": "단계는 멱등 키의 일부다. 같은 대상에 D30·D7·D1 이 각각 한 번씩 나가야 하는데, 키가 대상뿐이면 하나만 나간다."
+    },
+    "userId": {
+      "type": ["integer", "null"],
+      "$comment": "통보를 받을 회원. GIFT_CLAIM 은 수령자가 회원이 아닐 수 있어 *보낸 사람*이 들어온다."
+    },
+    "amount": {
+      "type": ["string", "null"],
+      "pattern": "^-?[0-9]+(\\.[0-9]+)?$",
+      "$comment": "금액은 BigDecimal.toPlainString 문자열이다(DATA-STANDARD N5). 수치 타입으로 실으면 받는 쪽 파서가 double 로 받아 정밀도를 잃는다. GIFT_CLAIM 처럼 금액 개념이 없는 대상은 null 이다."
+    },
+    "expiresAt": {
+      "type": "string",
+      "$comment": "OffsetDateTime.toString() — 오프셋을 포함한다. 만료는 시각 비교로 판정되므로 로컬시각으로 실으면 경계가 시간대만큼 어긋난다."
+    },
+    "contactHint": {
+      "type": ["string", "null"],
+      "$comment": "회원 식별자로 닿을 수 없는 대상(선물 수령권의 수령자)의 발송 힌트. 없으면 null 이다."
+    }
+  },
+  "required": [
+    "subjectType",
+    "subjectId",
+    "stage",
+    "expiresAt"
+  ],
+  "additionalProperties": true
+}

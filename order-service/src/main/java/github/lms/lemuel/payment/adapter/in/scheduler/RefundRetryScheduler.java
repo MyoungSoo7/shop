@@ -1,5 +1,8 @@
 package github.lms.lemuel.payment.adapter.in.scheduler;
 
+import github.lms.lemuel.batch.application.BatchRunRecorder;
+import github.lms.lemuel.batch.application.port.in.BatchRunOutcome;
+import github.lms.lemuel.batch.application.port.in.BatchTargetDate;
 import github.lms.lemuel.payment.application.port.in.RefundPaymentPort;
 import github.lms.lemuel.payment.application.port.out.LoadRefundPort;
 import github.lms.lemuel.payment.domain.Refund;
@@ -21,22 +24,37 @@ import java.util.List;
  * 않는다(별도 분산 락 불필요). 재시도가 또 실패하면 유스케이스가 {@code retry_count} 를 늘리고 백오프로
  * 다음 시각을 재예약하며, 상한({@link Refund#MAX_RETRIES})에 도달하면 {@code next_retry_at} 이 비워져
  * 이 스케줄러의 대상에서 빠지고 관리자 개입 대상(/admin/refunds?status=FAILED)으로 남는다.
+ *
+ * <h2>원장에는 "일한 주기" 만 남긴다</h2>
+ * 이 배치는 <b>60초마다</b> 돈다. 매 주기를 적으면 하루 1,440 행이 쌓여 원장이 노이즈가 되고,
+ * 정작 하루 한 번 도는 만료 배치들의 행이 그 안에 묻힌다. 그래서 <b>대상이 0건이면 기록하지 않는다</b>
+ * — 원장이 답해야 하는 질문은 "언제 폴링했나" 가 아니라 "환불 재시도가 실제로 무엇을 했나" 다.
+ *
+ * <p>재실행 경로도 두지 않았다. 대상은 {@code next_retry_at <= now} 라 누적적이고, 백오프·상한은
+ * 도메인이 관리한다. 과거 날짜로 다시 돌린다는 개념 자체가 없다.
  */
 @Component
 public class RefundRetryScheduler {
 
     private static final Logger log = LoggerFactory.getLogger(RefundRetryScheduler.class);
 
+    /** 원장 키. 재실행 대상은 아니다. */
+    public static final String BATCH_NAME = "refund-retry";
+
     private final LoadRefundPort loadRefundPort;
     private final RefundPaymentPort refundPaymentPort;
+    private final BatchRunRecorder recorder;
 
     // 필드 초기값(100)은 단위 테스트(@Value 미주입 컨텍스트)용 안전 기본값 — 런타임엔 @Value 가 덮어쓴다.
     @Value("${refund.retry.batch-limit:100}")
     private int batchLimit = 100;
 
-    public RefundRetryScheduler(LoadRefundPort loadRefundPort, RefundPaymentPort refundPaymentPort) {
+    public RefundRetryScheduler(LoadRefundPort loadRefundPort,
+                                RefundPaymentPort refundPaymentPort,
+                                BatchRunRecorder recorder) {
         this.loadRefundPort = loadRefundPort;
         this.refundPaymentPort = refundPaymentPort;
+        this.recorder = recorder;
     }
 
     @Scheduled(
@@ -45,8 +63,14 @@ public class RefundRetryScheduler {
     public void retryFailedRefunds() {
         List<Refund> due = loadRefundPort.findRetryable(LocalDateTime.now());
         if (due.isEmpty()) {
+            // 폴링만 하고 끝난 주기는 원장에 남기지 않는다 — 위 javadoc "원장에는 일한 주기만" 참고.
             return;
         }
+        recorder.recordOutcome(BATCH_NAME, BatchTargetDate.today(), BatchRunRecorder.TRIGGERED_BY_SCHEDULER,
+                () -> retry(due));
+    }
+
+    private BatchRunOutcome retry(List<Refund> due) {
         int limited = Math.min(due.size(), batchLimit);
         if (due.size() > batchLimit) {
             log.info("환불 재시도 대상 {}건 중 {}건만 이번 주기에 처리(batchLimit)", due.size(), batchLimit);
@@ -68,5 +92,10 @@ public class RefundRetryScheduler {
             }
         }
         log.info("환불 자동 재시도 종료 — 성공 {}건, 실패 {}건", succeeded, failed);
+        if (failed > 0) {
+            return BatchRunOutcome.partiallyFailed(succeeded,
+                    "재시도 실패 건 존재: succeeded=" + succeeded + ", failed=" + failed);
+        }
+        return BatchRunOutcome.succeeded(succeeded);
     }
 }

@@ -253,6 +253,11 @@ public class SecurityConfig {
                         // 미입금 만료 콘솔 — 주문 취소·재고 원복을 수동 트리거하므로 ADMIN 만.
                         // dryRun 이 기본값이라 파라미터 누락 호출은 미리보기로 떨어진다.
                         .requestMatchers("/admin/payment-expiry/**").hasRole("ADMIN")
+                        // 배치 실행 원장·재실행 콘솔 — 조회는 운영 정보지만 POST /rerun 은 포인트 소멸·
+                        // 기프트카드 소멸·주문 취소를 실제로 다시 돌린다. 조회와 실행이 같은 접두사 아래
+                        // 있으므로 낮은 쪽에 맞추지 않고 통째로 ADMIN 으로 닫는다 — 여기서 MANAGER 를
+                        // 열면 "조회만" 이 아니라 재실행까지 열린다.
+                        .requestMatchers("/admin/batch-runs/**").hasRole("ADMIN")
                         // 포인트 운영 콘솔 — 수기 지급은 없던 돈을 만들고 소멸 실행은 고객 재산을 지운다.
                         // 포괄 /admin/** 매처는 이 설정에 존재하지 않으므로(경로별 열거 방식) 반드시
                         // 명시해야 한다 — 빠뜨리면 anyRequest().authenticated() 로 새어 일반 사용자도 호출한다.
