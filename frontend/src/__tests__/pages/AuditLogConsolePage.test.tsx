@@ -66,15 +66,14 @@ describe('AuditLogConsolePage', () => {
     expect(screen.getByRole('option', { name: 'LOGIN_FAILED' })).toBeInTheDocument();
   });
 
-  it('정산 탭을 고르면 정산 감사 표면을 조회한다', async () => {
-    const user = userEvent.setup();
+  it('정산 탭은 없다 — 부르던 경로가 게이트웨이에 없어 아무 데도 닿지 않았다', async () => {
+    // 2026-09-03 회귀 가드. 이전에는 이 탭이 있었고 누르면 `/admin/audit-trail` 을 불렀는데,
+    // 그 경로는 게이트웨이 접두사 목록에도 shop 컨트롤러에도 없다. 화면은 멀쩡히 뜨고
+    // 탭을 눌러야 죽으므로, 탭이 살아 있는 한 아무도 눌러 보기 전까지 발견되지 않는다.
     render(<AuditLogConsolePage />);
     await waitFor(() => expect(mocked.search).toHaveBeenCalled());
 
-    await user.click(await screen.findByRole('tab', { name: /정산/ }));
-
-    await waitFor(() =>
-      expect(mocked.search.mock.calls.some(([scope]) => scope === 'SETTLEMENT')).toBe(true));
+    expect(screen.queryByRole('tab', { name: /정산/ })).toBeNull();
   });
 
   it('운영 탭을 고르면 운영 감사 표면을 조회한다', async () => {

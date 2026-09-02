@@ -31,7 +31,8 @@ const PAGE_SIZE = 50;
 
 const SCOPES: { key: AuditScope; label: string; hint: string }[] = [
   { key: 'COMMERCE', label: '커머스', hint: '로그인 · 권한 변경 · 환불 요청' },
-  { key: 'SETTLEMENT', label: '정산', hint: '지급 실행 · 차지백 판정 · 대사 마감' },
+  // 정산 탭은 없다. 부르던 경로 `/admin/audit-trail` 이 게이트웨이에 없어 아무 데도 닿지 않았다.
+  // 되살리는 순서는 api/auditLog.ts 주석 참조 — 라우트가 먼저다.
   { key: 'OPERATION', label: '운영', hint: '게시판 생성 · 수정 · 닫기 · 삭제' },
 ];
 

@@ -9,9 +9,21 @@ import api from './axios';
  *
  * <ul>
  *   <li><b>COMMERCE</b> (`/admin/audit-logs`) — 로그인·권한 변경·환불 요청 등 커머스 조작
- *   <li><b>SETTLEMENT</b> (`/admin/audit-trail`) — 지급 실행·차지백 판정·대사 마감 등 자금 조작
  *   <li><b>OPERATION</b> (`/api/ops/audit-logs`) — 게시판 생성·수정·닫기·삭제 등 운영 조작
  * </ul>
+ *
+ * <p><b>정산(`/admin/audit-trail`) 은 여기 없다 — 되살리기 전에 라우트를 먼저 뚫어라.</b>
+ * 2026-09-03 까지 이 모듈에는 `SETTLEMENT: '/admin/audit-trail'` 이 있었고 화면에도 탭이 있었지만,
+ * 게이트웨이 접두사 목록(`gateway-service/src/main/resources/application.yml`) 어디에도 그 경로가
+ * 없었다. shop 안에 그 경로를 받는 컨트롤러도 없다. 즉 탭을 누르면 아무 데도 닿지 않았다.
+ * 주석은 "settlement-service 가 답한다"고 적혀 있었지만 주석은 라우트가 아니다.
+ *
+ * <p>왜 아무도 몰랐나 — 하네스의 두 게이트(`gateway-route-gate`·`api-screen-gate`)는 둘 다
+ * 자바 컨트롤러 추출에서 출발한다. 컨트롤러가 없는 프론트 호출은 "빠진" 게 아니라 <b>정의역 밖</b>이라
+ * 구조적으로 검출되지 않는다. 그래서 mock 상대로 도는 단위 테스트만 초록으로 남아 있었다.
+ *
+ * <p>다시 넣으려면 순서는 이렇다: ① 게이트웨이에 settlement 로 가는 라우트를 실제로 등록하고
+ * ② 그 경로가 응답하는지 실기동으로 확인한 뒤 ③ 여기에 scope 를 되살린다. ③ 부터 하면 원상복귀다.
  *
  * <p>운영 표면만 `/api/ops` 아래에 있는 것은 게이트웨이 사정이다 — `/admin/audit-logs` 는 이미
  * 커머스로 가는 경로라 뒤에 온 서비스가 그 이름을 다시 쓸 수 없었다. 경로 모양이 다른 것이지
@@ -29,14 +41,16 @@ import api from './axios';
  */
 
 /** 어느 서비스의 감사 테이블을 볼 것인가. */
-export type AuditScope = 'COMMERCE' | 'SETTLEMENT' | 'OPERATION';
+export type AuditScope = 'COMMERCE' | 'OPERATION';
 
 const BASE: Record<AuditScope, string> = {
   // 경로는 전체 리터럴로 적는다(point.ts 와 같은 이유 — grep 으로 배선을 추적할 수 있어야 한다).
   COMMERCE: '/admin/audit-logs',
-  SETTLEMENT: '/admin/audit-trail',
   OPERATION: '/api/ops/audit-logs',
 };
+
+/** 회귀 가드용. 테스트가 "여기 실린 경로가 게이트웨이에 있는가"를 밖에서 대조할 수 있어야 한다. */
+export const AUDIT_SCOPE_PATHS: Readonly<Record<AuditScope, string>> = BASE;
 
 export interface AuditLogRow {
   id: number;

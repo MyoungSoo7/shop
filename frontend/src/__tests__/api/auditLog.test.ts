@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { auditLogApi, saveBlob } from '@/api/auditLog';
+import { auditLogApi, saveBlob, AUDIT_SCOPE_PATHS } from '@/api/auditLog';
 import api from '@/api/axios';
 
 vi.mock('@/api/axios', () => ({
@@ -34,14 +34,11 @@ describe('auditLogApi — 표면 분기', () => {
     });
   });
 
-  it('정산은 /admin/audit-trail 로 간다 — 테이블이 서비스마다 따로라 경로도 둘이다', async () => {
-    mocked.get.mockResolvedValue({ data: { content: [] } } as never);
-
-    await auditLogApi.search('SETTLEMENT', { from: '2026-03-01' });
-
-    expect(mocked.get).toHaveBeenCalledWith('/admin/audit-trail', {
-      params: { from: '2026-03-01' },
-    });
+  it('어떤 scope 도 /admin/audit-trail 로 가지 않는다 — 게이트웨이에 없는 경로다', () => {
+    // 2026-09-03 회귀 가드. 이전에는 SETTLEMENT scope 가 이 경로를 불렀고, mock 상대로 도는
+    // 단위 테스트가 그걸 정답으로 못박고 있었다. 게이트웨이 접두사 목록에도 shop 컨트롤러에도
+    // 없는 경로라 실제로는 아무 데도 닿지 않는다. 되살리려면 라우트를 먼저 뚫어라.
+    expect(Object.values(AUDIT_SCOPE_PATHS)).not.toContain('/admin/audit-trail');
   });
 
   it('운영은 /api/ops/audit-logs 로 간다 — /admin/audit-logs 는 이미 커머스가 쓰는 이름이다', async () => {
@@ -57,8 +54,8 @@ describe('auditLogApi — 표면 분기', () => {
   it('액션별 건수·액션 목록도 고른 표면을 따른다', async () => {
     mocked.get.mockResolvedValue({ data: [] } as never);
 
-    await auditLogApi.actionCounts('SETTLEMENT', {});
-    expect(mocked.get).toHaveBeenCalledWith('/admin/audit-trail/action-counts', { params: {} });
+    await auditLogApi.actionCounts('COMMERCE', {});
+    expect(mocked.get).toHaveBeenCalledWith('/admin/audit-logs/action-counts', { params: {} });
 
     await auditLogApi.actions('COMMERCE');
     expect(mocked.get).toHaveBeenCalledWith('/admin/audit-logs/actions');
@@ -131,7 +128,7 @@ describe('auditLogApi — 내보내기', () => {
   it('헤더가 없으면 기본 파일명으로 떨어지고 잘리지 않은 것으로 본다', async () => {
     mocked.get.mockResolvedValue({ data: new Blob(['x']), headers: {} } as never);
 
-    const result = await auditLogApi.export('SETTLEMENT', {});
+    const result = await auditLogApi.export('OPERATION', {});
 
     expect(result.fileName).toBe('audit-logs.csv');
     expect(result.truncated).toBe(false);
