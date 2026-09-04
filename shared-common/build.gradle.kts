@@ -35,7 +35,7 @@ dependencies {
     // Spring Boot 의 BOM 을 사용하기 위해 dependency-management 만 적용 (boot plugin 자체는 X — 라이브러리 모듈)
     // ⚠ 루트 build.gradle.kts 의 org.springframework.boot 플러그인 버전과 같은 값을 유지할 것 —
     //   composite build 로 로컬 치환되므로 여기만 뒤처지면 서비스마다 다른 BOM 이 섞인다.
-    api(platform("org.springframework.boot:spring-boot-dependencies:4.0.7"))
+    api(platform("org.springframework.boot:spring-boot-dependencies:4.0.8"))
 
     // Spring 코어
     implementation("org.springframework:spring-aop")
