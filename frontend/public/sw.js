@@ -12,7 +12,7 @@ const CACHE = 'settlement-shell-v2';
  *   · /settlements/{id} 가 캐시되면 → 정산서에 **낡은 금액**이 찍힌다.
  */
 const BACKEND_PATH =
-  /^\/(auth|api|admin|users|orders|payments|reviews|settlements|loans|categories|coupons|games|products|tags|refunds|chargebacks|ledger|actuator|swagger-ui|v3)(\/|$)/;
+  /^\/(auth|api|admin|users|orders|payments|reviews|settlements|loans|categories|coupons|games|products|tags|refunds|chargebacks|ledger|inquiries|actuator|swagger-ui|v3)(\/|$)/;
 const SHELL = ['/', '/index.html', '/manifest.webmanifest', '/icon-192.png', '/icon-512.png'];
 
 /**
